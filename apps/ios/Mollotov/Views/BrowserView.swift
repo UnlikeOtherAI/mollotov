@@ -9,6 +9,7 @@ struct BrowserView: View {
     @State private var showBookmarks = false
     @State private var showHistory = false
     @State private var showNetworkInspector = false
+    @State private var showWelcome = true
     @State private var webView: WKWebView?
     private let safariAuth = SafariAuthHelper()
 
@@ -38,6 +39,12 @@ struct BrowserView: View {
                     serverState.webView = wv
                     serverState.handlerContext.webView = wv
                 }
+            }
+
+            if showWelcome {
+                WelcomeCardView { showWelcome = false }
+                    .transition(.opacity)
+                    .zIndex(10)
             }
 
             // Floating action menu overlay

@@ -45,6 +45,7 @@ fun BrowserScreen(
     var showBookmarks by remember { mutableStateOf(false) }
     var showHistory by remember { mutableStateOf(false) }
     var showNetworkInspector by remember { mutableStateOf(false) }
+    var showWelcome by remember { mutableStateOf(true) }
     var webView by remember { mutableStateOf<WebView?>(null) }
     var lastRecordedUrl by remember { mutableStateOf("") }
 
@@ -83,6 +84,10 @@ fun BrowserScreen(
                     handlerContext.webView = wv
                 },
             )
+        }
+
+        if (showWelcome) {
+            WelcomeCard(onDismiss = { showWelcome = false })
         }
 
         // Floating action menu overlay
