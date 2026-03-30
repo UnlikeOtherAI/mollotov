@@ -13,6 +13,25 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     ) -> UIInterfaceOrientationMask {
         OrientationManager.shared.lock
     }
+
+    func application(
+        _ application: UIApplication,
+        configurationForConnecting connectingSceneSession: UISceneSession,
+        options: UIScene.ConnectionOptions
+    ) -> UISceneConfiguration {
+        if connectingSceneSession.role == .windowExternalDisplayNonInteractive {
+            let config = UISceneConfiguration(
+                name: "External Display",
+                sessionRole: connectingSceneSession.role
+            )
+            config.delegateClass = ExternalDisplaySceneDelegate.self
+            return config
+        }
+        return UISceneConfiguration(
+            name: "Default Configuration",
+            sessionRole: connectingSceneSession.role
+        )
+    }
 }
 
 @main
@@ -31,7 +50,6 @@ struct MollotovApp: App {
     private func startServices() {
         serverState.startHTTPServer()
         serverState.startMDNS()
-        ExternalDisplayManager.shared.startMonitoring()
         #if DEBUG
         AppRevealSetup.configure()
         #endif
