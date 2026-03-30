@@ -69,6 +69,11 @@ struct BrowserView: View {
             SettingsView(serverState: serverState, rendererState: rendererState)
         }
         .onAppear {
+            // Remove focus from URL bar on launch
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                NSApplication.shared.keyWindow?.makeFirstResponder(nil)
+            }
+
             if let renderer = serverState.handlerContext.renderer {
                 renderer.onStateChange = { [weak browserState] in
                     Task { @MainActor in
