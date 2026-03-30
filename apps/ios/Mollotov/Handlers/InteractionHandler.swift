@@ -31,6 +31,7 @@ struct InteractionHandler {
         do {
             let result = try await context.evaluateJSReturningJSON(js)
             if result.isEmpty { return errorResponse(code: "ELEMENT_NOT_FOUND", message: "Element not found: \(selector)") }
+            await context.showTouchIndicatorForElement(selector)
             return successResponse(["element": result])
         } catch {
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
@@ -42,6 +43,7 @@ struct InteractionHandler {
         guard let x = body["x"] as? Double, let y = body["y"] as? Double else {
             return errorResponse(code: "MISSING_PARAM", message: "x and y are required")
         }
+        await context.showTouchIndicator(x: x, y: y)
         let js = """
         (function() {
             var el = document.elementFromPoint(\(x), \(y));
@@ -79,6 +81,7 @@ struct InteractionHandler {
         do {
             let result = try await context.evaluateJSReturningJSON(js)
             if result.isEmpty { return errorResponse(code: "ELEMENT_NOT_FOUND", message: "Element not found: \(selector)") }
+            await context.showTouchIndicatorForElement(selector)
             return successResponse(result)
         } catch {
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)

@@ -3,6 +3,7 @@ import SwiftUI
 /// URL bar with text input, navigation buttons, and loading indicator.
 struct URLBarView: View {
     @ObservedObject var browserState: BrowserState
+    @Binding var showSettings: Bool
     let onNavigate: (String) -> Void
     let onBack: () -> Void
     let onForward: () -> Void
@@ -37,6 +38,10 @@ struct URLBarView: View {
                 Button(action: onReload) {
                     Image(systemName: "arrow.clockwise")
                 }
+            }
+
+            Button(action: { showSettings = true }) {
+                Image(systemName: "gear")
             }
         }
         .padding(.horizontal, 12)

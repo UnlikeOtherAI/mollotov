@@ -19,6 +19,7 @@ struct BrowserView: View {
             // URL bar
             URLBarView(
                 browserState: browserState,
+                showSettings: $showSettings,
                 onNavigate: { url in
                     guard let webView, let urlObj = URL(string: url) else { return }
                     webView.load(URLRequest(url: urlObj))
@@ -34,17 +35,8 @@ struct BrowserView: View {
                 serverState.webView = wv
                 serverState.handlerContext.webView = wv
             }
-
-            // Bottom toolbar
-            HStack {
-                Spacer()
-                Button(action: { showSettings = true }) {
-                    Image(systemName: "gear")
-                        .font(.title2)
-                }
-                .padding()
-            }
         }
+        .ignoresSafeArea(.container, edges: .bottom)
         .sheet(isPresented: $showSettings) {
             SettingsView(serverState: serverState)
         }

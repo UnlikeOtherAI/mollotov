@@ -1,4 +1,4 @@
-import Bonjour, { type Service } from "bonjour-service";
+import { Bonjour, type Service } from "bonjour-service";
 import { MDNS_SERVICE_TYPE } from "@unlikeotherai/mollotov-shared";
 import type { DiscoveredDevice } from "../types.js";
 
