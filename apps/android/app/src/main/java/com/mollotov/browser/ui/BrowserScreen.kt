@@ -4,15 +4,9 @@ import android.webkit.WebView
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -45,47 +39,38 @@ fun BrowserScreen(
     var showSettings by remember { mutableStateOf(false) }
     var webView by remember { mutableStateOf<WebView?>(null) }
 
-    Scaffold(
-        floatingActionButton = {
-            FloatingActionButton(onClick = { showSettings = true }) {
-                Icon(Icons.Filled.Settings, contentDescription = "Settings")
-            }
-        },
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues),
-        ) {
-            if (isLoading) {
-                LinearProgressIndicator(
-                    progress = { progress / 100f },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-
-            URLBar(
-                currentUrl = currentUrl,
-                canGoBack = canGoBack,
-                canGoForward = canGoForward,
-                onNavigate = { url -> webView?.loadUrl(url) },
-                onBack = { webView?.goBack() },
-                onForward = { webView?.goForward() },
-                onReload = { webView?.reload() },
-            )
-
-            WebViewContainer(
-                browserState = browserState,
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                onWebViewCreated = { wv ->
-                    webView = wv
-                    router.webView = wv
-                    handlerContext.webView = wv
-                },
+    Column(modifier = Modifier.fillMaxSize()) {
+        if (isLoading) {
+            LinearProgressIndicator(
+                progress = { progress / 100f },
+                modifier = Modifier.fillMaxWidth(),
             )
         }
+
+        URLBar(
+            currentUrl = currentUrl,
+            isLoading = isLoading,
+            canGoBack = canGoBack,
+            canGoForward = canGoForward,
+            onNavigate = { url -> webView?.loadUrl(url) },
+            onBack = { webView?.goBack() },
+            onForward = { webView?.goForward() },
+            onReload = { webView?.reload() },
+            onStop = { webView?.stopLoading() },
+            onSettingsClick = { showSettings = true },
+        )
+
+        WebViewContainer(
+            browserState = browserState,
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            onWebViewCreated = { wv ->
+                webView = wv
+                router.webView = wv
+                handlerContext.webView = wv
+            },
+        )
     }
 
     if (showSettings) {
