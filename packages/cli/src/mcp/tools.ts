@@ -43,7 +43,7 @@ function filterBody(args: Record<string, unknown>): Record<string, unknown> {
   return rest;
 }
 
-// --- Browser tool definitions (79 tools) ---
+// --- Browser tool definitions (82 tools) ---
 
 export const browserTools: BrowserToolDef[] = [
   // Navigation
@@ -181,6 +181,10 @@ export const browserTools: BrowserToolDef[] = [
   { name: "mollotov_resize_viewport", description: "Resize the browser viewport", method: "resizeViewport", schema: { device, width: z.number().optional().describe("Viewport width"), height: z.number().optional().describe("Viewport height") }, bodyFromArgs: passthrough },
   { name: "mollotov_reset_viewport", description: "Reset viewport to device default", method: "resetViewport", schema: { device }, bodyFromArgs: passthrough },
   { name: "mollotov_is_element_obscured", description: "Check if an element is obscured by keyboard or other elements", method: "isElementObscured", schema: { device, selector }, bodyFromArgs: passthrough },
+
+  // Orientation
+  { name: "mollotov_set_orientation", description: "Force the device into portrait, landscape, or auto orientation. Useful for testing responsive layouts and orientation-dependent features.", method: "setOrientation", schema: { device, orientation: z.enum(["portrait", "landscape", "auto"]).describe("Target orientation. 'auto' unlocks rotation.") }, bodyFromArgs: passthrough },
+  { name: "mollotov_get_orientation", description: "Get the current device orientation and lock state", method: "getOrientation", schema: { device }, bodyFromArgs: passthrough },
 ];
 
 // --- CLI tool definitions (20 tools) ---

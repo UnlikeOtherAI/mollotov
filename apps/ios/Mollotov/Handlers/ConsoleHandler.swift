@@ -49,9 +49,25 @@ struct ConsoleHandler {
     }
 
     /// Returns the user script to inject at document start for console capture.
+    /// Saves a private reference to postMessage, then masks window.webkit.messageHandlers
+    /// so Google OAuth and similar services don't detect WKWebView.
     static var bridgeScript: WKUserScript {
         let js = """
         (function() {
+            // Save private reference before masking — Google OAuth detects messageHandlers
+            var _post = window.webkit.messageHandlers.mollotovConsole.postMessage.bind(
+                window.webkit.messageHandlers.mollotovConsole
+            );
+            // Mask webkit.messageHandlers from page scripts
+            try {
+                Object.defineProperty(window.webkit, 'messageHandlers', {
+                    get: function() { return undefined; },
+                    configurable: false
+                });
+            } catch(e) {
+                try { delete window.webkit.messageHandlers; } catch(e2) {}
+            }
+
             var _origConsole = {};
             ['log','warn','error','info','debug'].forEach(function(level) {
                 _origConsole[level] = console[level];
@@ -82,12 +98,12 @@ struct ConsoleHandler {
                             msg.stackTrace = lines.slice(2).join('\\n');
                         }
                     } catch(e) {}
-                    window.webkit.messageHandlers.mollotovConsole.postMessage(msg);
+                    _post(msg);
                     _origConsole[level].apply(console, arguments);
                 };
             });
             window.addEventListener('error', function(e) {
-                window.webkit.messageHandlers.mollotovConsole.postMessage({
+                _post({
                     level: 'error',
                     text: e.message || String(e),
                     source: e.filename || '',
@@ -98,7 +114,7 @@ struct ConsoleHandler {
                 });
             });
             window.addEventListener('unhandledrejection', function(e) {
-                window.webkit.messageHandlers.mollotovConsole.postMessage({
+                _post({
                     level: 'error',
                     text: 'Unhandled Promise rejection: ' + (e.reason ? (e.reason.message || String(e.reason)) : 'unknown'),
                     source: '',

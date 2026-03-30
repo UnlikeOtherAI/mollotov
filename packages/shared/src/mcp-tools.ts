@@ -80,6 +80,8 @@ export const BrowserMcpTools = [
   "mollotov_resize_viewport",
   "mollotov_reset_viewport",
   "mollotov_is_element_obscured",
+  "mollotov_set_orientation",
+  "mollotov_get_orientation",
 ] as const;
 
 export type BrowserMcpTool = (typeof BrowserMcpTools)[number];
@@ -194,4 +196,6 @@ export const httpToMcp: Record<string, BrowserMcpTool> = {
   "resize-viewport": "mollotov_resize_viewport",
   "reset-viewport": "mollotov_reset_viewport",
   "is-element-obscured": "mollotov_is_element_obscured",
+  "set-orientation": "mollotov_set_orientation",
+  "get-orientation": "mollotov_get_orientation",
 };

@@ -1,15 +1,23 @@
 package com.mollotov.browser.handlers
 
+import android.app.Activity
+import android.content.pm.ActivityInfo
 import com.mollotov.browser.device.DeviceInfo
 import com.mollotov.browser.network.Router
 import com.mollotov.browser.network.errorResponse
 import com.mollotov.browser.network.successResponse
 
-class DeviceHandler(private val ctx: HandlerContext, private val deviceInfo: DeviceInfo) {
+class DeviceHandler(
+    private val ctx: HandlerContext,
+    private val deviceInfo: DeviceInfo,
+    private val activity: Activity? = null,
+) {
     fun register(router: Router) {
         router.register("get-viewport") { getViewport() }
         router.register("get-device-info") { getDeviceInfo() }
         router.register("get-capabilities") { getCapabilities() }
+        router.register("set-orientation") { body -> setOrientation(body) }
+        router.register("get-orientation") { getOrientation() }
     }
 
     private suspend fun getViewport(): Map<String, Any?> {
@@ -32,6 +40,37 @@ class DeviceHandler(private val ctx: HandlerContext, private val deviceInfo: Dev
         "app" to mapOf("version" to deviceInfo.version, "build" to "1"),
         "system" to mapOf("os" to "Android", "osVersion" to android.os.Build.VERSION.RELEASE),
     )
+
+    private fun getOrientation(): Map<String, Any?> {
+        val wv = ctx.webView
+        val isLandscape = if (wv != null) wv.width > wv.height else false
+        val locked = when (activity?.requestedOrientation) {
+            ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE,
+            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,
+            ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE -> "landscape"
+            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT,
+            ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT,
+            ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT -> "portrait"
+            else -> null
+        }
+        return successResponse(mapOf(
+            "orientation" to if (isLandscape) "landscape" else "portrait",
+            "locked" to locked,
+        ))
+    }
+
+    private fun setOrientation(body: Map<String, Any?>): Map<String, Any?> {
+        val orientation = body["orientation"] as? String
+            ?: return errorResponse("MISSING_PARAM", "orientation is required (portrait|landscape|auto)")
+        val act = activity ?: return errorResponse("NO_ACTIVITY", "Activity reference not available")
+        when (orientation.lowercase()) {
+            "landscape" -> act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            "portrait" -> act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+            "auto" -> act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            else -> return errorResponse("INVALID_PARAM", "orientation must be portrait, landscape, or auto")
+        }
+        return successResponse(mapOf("orientation" to orientation))
+    }
 
     private fun getCapabilities(): Map<String, Any?> = mapOf(
         "cdp" to true,

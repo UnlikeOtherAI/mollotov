@@ -60,7 +60,7 @@ class MainActivity : ComponentActivity() {
         DOMHandler(handlerContext).register(router)
         InteractionHandler(handlerContext).register(router)
         ScrollHandler(handlerContext).register(router)
-        DeviceHandler(handlerContext, deviceInfo).register(router)
+        DeviceHandler(handlerContext, deviceInfo, this).register(router)
         EvaluateHandler(handlerContext).register(router)
         ConsoleHandler(handlerContext).register(router)
         NetworkLogHandler(handlerContext).register(router)

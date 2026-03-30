@@ -24,6 +24,7 @@ fun WebViewContainer(
                 settings.useWideViewPort = true
                 settings.setSupportMultipleWindows(false)
                 settings.mediaPlaybackRequiresUserGesture = false
+                settings.userAgentString = "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Version/131.0.0.0 Mobile Safari/537.36"
 
                 webViewClient = object : WebViewClient() {
                     override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {

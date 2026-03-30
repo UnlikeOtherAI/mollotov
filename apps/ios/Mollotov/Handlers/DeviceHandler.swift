@@ -10,6 +10,8 @@ struct DeviceHandler {
         router.register("get-viewport") { _ in await getViewport() }
         router.register("get-device-info") { _ in await getDeviceInfoResponse() }
         router.register("get-capabilities") { _ in getCapabilities() }
+        router.register("set-orientation") { body in await setOrientation(body) }
+        router.register("get-orientation") { _ in await getOrientation() }
     }
 
     @MainActor
@@ -48,6 +50,52 @@ struct DeviceHandler {
             "app": ["version": deviceInfo.version, "build": "1"],
             "system": ["os": "iOS", "osVersion": device.systemVersion],
         ]
+    }
+
+    @MainActor
+    private func getOrientation() async -> [String: Any] {
+        let isLandscape = UIDevice.current.orientation.isLandscape
+        let lock = OrientationManager.shared.lock
+        let locked: String? = switch lock {
+        case .landscape, .landscapeLeft, .landscapeRight: "landscape"
+        case .portrait, .portraitUpsideDown: "portrait"
+        default: nil
+        }
+        return successResponse([
+            "orientation": isLandscape ? "landscape" : "portrait",
+            "locked": locked as Any,
+        ])
+    }
+
+    @MainActor
+    private func setOrientation(_ body: [String: Any]) async -> [String: Any] {
+        guard let orientation = body["orientation"] as? String else {
+            return errorResponse(code: "MISSING_PARAM", message: "orientation is required (portrait|landscape|auto)")
+        }
+        let manager = OrientationManager.shared
+        switch orientation.lowercased() {
+        case "landscape":
+            manager.lock = .landscape
+            // Request geometry update on the window scene
+            if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+                scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscape))
+                scene.keyWindow?.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+            }
+        case "portrait":
+            manager.lock = .portrait
+            if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+                scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+                scene.keyWindow?.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+            }
+        case "auto":
+            manager.lock = .all
+            if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+                scene.keyWindow?.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+            }
+        default:
+            return errorResponse(code: "INVALID_PARAM", message: "orientation must be portrait, landscape, or auto")
+        }
+        return successResponse(["orientation": orientation])
     }
 
     private func getCapabilities() -> [String: Any] {
