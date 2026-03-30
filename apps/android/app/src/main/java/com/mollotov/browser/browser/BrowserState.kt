@@ -6,7 +6,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 class BrowserState {
-    private val _currentUrl = MutableStateFlow("https://www.google.com")
+    private val _currentUrl = MutableStateFlow(HomeStore.url)
     val currentUrl: StateFlow<String> = _currentUrl.asStateFlow()
 
     private val _pageTitle = MutableStateFlow("")

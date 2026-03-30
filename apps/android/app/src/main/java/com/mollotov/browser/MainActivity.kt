@@ -23,6 +23,7 @@ import com.mollotov.browser.handlers.NetworkInspectorHandler
 import com.mollotov.browser.llm.LLMHandler
 import com.mollotov.browser.browser.BookmarkStore
 import com.mollotov.browser.browser.HistoryStore
+import com.mollotov.browser.browser.HomeStore
 import com.mollotov.browser.network.HTTPServer
 import com.mollotov.browser.network.MDNSAdvertiser
 import com.mollotov.browser.network.Router
@@ -40,6 +41,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         val deviceInfo = DeviceInfo.collect(this)
+        HomeStore.init(this)
         BookmarkStore.init(this)
         HistoryStore.init(this)
 

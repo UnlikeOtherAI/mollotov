@@ -32,6 +32,7 @@ import { registerFind } from "./find.js";
 import { registerGroup } from "./group.js";
 import { registerMcp } from "./mcp.js";
 import { registerExplain } from "./explain.js";
+import { registerHome } from "./home.js";
 
 export function registerAllCommands(program: Command): void {
   // Discovery
@@ -41,6 +42,7 @@ export function registerAllCommands(program: Command): void {
 
   // Core: Navigation
   registerNavigate(program);
+  registerHome(program);
   registerScreenshot(program);
   registerDOM(program);
 

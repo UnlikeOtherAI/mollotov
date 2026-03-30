@@ -16,6 +16,8 @@ class NavigationHandler(private val ctx: HandlerContext) {
         router.register("forward") { forward() }
         router.register("reload") { reload() }
         router.register("get-current-url") { getCurrentUrl() }
+        router.register("set-home") { setHome(it) }
+        router.register("get-home") { getHome() }
     }
 
     private suspend fun navigate(body: Map<String, Any?>): Map<String, Any?> {
@@ -66,5 +68,16 @@ class NavigationHandler(private val ctx: HandlerContext) {
     private suspend fun getCurrentUrl(): Map<String, Any?> {
         val result = ctx.evaluateJSReturningJSON("({url: location.href, title: document.title})")
         return successResponse(result)
+    }
+
+    private fun setHome(body: Map<String, Any?>): Map<String, Any?> {
+        val url = body["url"] as? String
+        if (url.isNullOrEmpty()) return errorResponse("MISSING_PARAM", "url is required")
+        com.mollotov.browser.browser.HomeStore.setUrl(url)
+        return successResponse(mapOf("url" to url))
+    }
+
+    private fun getHome(): Map<String, Any?> {
+        return successResponse(mapOf("url" to com.mollotov.browser.browser.HomeStore.url))
     }
 }

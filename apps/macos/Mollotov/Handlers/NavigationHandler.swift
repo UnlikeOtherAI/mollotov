@@ -10,6 +10,8 @@ struct NavigationHandler {
         router.register("forward") { _ in await forward() }
         router.register("reload") { _ in await reload() }
         router.register("get-current-url") { _ in await getCurrentUrl() }
+        router.register("set-home") { body in setHome(body) }
+        router.register("get-home") { _ in getHome() }
     }
 
     @MainActor
@@ -68,5 +70,18 @@ struct NavigationHandler {
     private func getCurrentUrl() async -> [String: Any] {
         guard context.renderer != nil else { return errorResponse(code: "NO_WEBVIEW", message: "No WebView") }
         return ["url": context.currentURL?.absoluteString ?? "", "title": context.currentTitle]
+    }
+
+    private func setHome(_ body: [String: Any]) -> [String: Any] {
+        guard let url = body["url"] as? String, !url.isEmpty else {
+            return errorResponse(code: "MISSING_PARAM", message: "url is required")
+        }
+        UserDefaults.standard.set(url, forKey: "homeURL")
+        return successResponse(["url": url])
+    }
+
+    private func getHome() -> [String: Any] {
+        let url = UserDefaults.standard.string(forKey: "homeURL") ?? defaultHomeURL
+        return successResponse(["url": url])
     }
 }

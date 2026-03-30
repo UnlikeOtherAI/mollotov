@@ -1,9 +1,12 @@
 import Foundation
 import Combine
 
+/// Default home page — Mollotov GitHub Pages site.
+let defaultHomeURL = "https://unlikeotherai.github.io/mollotov"
+
 /// Observable state shared between the browser UI and WebView coordinator.
 final class BrowserState: ObservableObject {
-    @Published var currentURL: String = "https://apple.com"
+    @Published var currentURL: String = UserDefaults.standard.string(forKey: "homeURL") ?? defaultHomeURL
     @Published var pageTitle: String = ""
     @Published var isLoading: Bool = false
     @Published var canGoBack: Bool = false
