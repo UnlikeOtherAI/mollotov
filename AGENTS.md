@@ -8,6 +8,7 @@
 - Product brief: [docs/brief.md](docs/brief.md) — what, why, how, MVP scope
 - System architecture: [docs/architecture.md](docs/architecture.md) — components, data flow, protocols
 - Tech stack: [docs/tech-stack.md](docs/tech-stack.md) — platform choices, dependencies, repo structure
+- Feature catalogue: [docs/functionality.md](docs/functionality.md) — description of every user-facing feature
 - API reference: [docs/api/](docs/api/) — all HTTP/MCP methods (core, LLM-optimized, devtools, browser management)
 - CLI reference: [docs/cli.md](docs/cli.md) — commands, flags, group operations, LLM help system
 - UI documentation: [docs/ui/](docs/ui/) — browser app screens, settings panel, platform specifics
@@ -59,7 +60,7 @@ Never manually fix state to work around a bug. Fix the code so the system self-h
 
 ### Documentation Alignment (CRITICAL)
 
-Feature work is incomplete until docs are updated. When adding or changing API endpoints, CLI commands, or MCP tools, update the relevant docs in the same commit.
+Feature work is incomplete until docs are updated. When adding or changing API endpoints, CLI commands, or MCP tools, update the relevant docs in the same commit. Every user-facing feature must be described in [docs/functionality.md](docs/functionality.md) — update it when adding or changing features.
 
 ### Architecture and Quality
 
