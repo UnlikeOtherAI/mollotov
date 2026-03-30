@@ -17,6 +17,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import com.mollotov.browser.browser.BrowserState
 import com.mollotov.browser.browser.HistoryStore
 import com.mollotov.browser.browser.WebViewContainer
@@ -45,7 +46,8 @@ fun BrowserScreen(
     var showBookmarks by remember { mutableStateOf(false) }
     var showHistory by remember { mutableStateOf(false) }
     var showNetworkInspector by remember { mutableStateOf(false) }
-    var showWelcome by remember { mutableStateOf(true) }
+    val context = LocalContext.current
+    var showWelcome by remember { mutableStateOf(shouldShowWelcome(context)) }
     var webView by remember { mutableStateOf<WebView?>(null) }
     var lastRecordedUrl by remember { mutableStateOf("") }
 

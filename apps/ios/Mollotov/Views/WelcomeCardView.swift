@@ -5,12 +5,14 @@ private let mollotovOrange = Color(red: 244 / 255, green: 176 / 255, blue: 120 /
 
 struct WelcomeCardView: View {
     let onDismiss: () -> Void
+    @AppStorage("hideWelcomeCard") private var hideWelcome = false
+    @State private var dontShowAgain = false
 
     var body: some View {
         ZStack {
             Color.black.opacity(0.4)
                 .ignoresSafeArea()
-                .onTapGesture { onDismiss() }
+                .onTapGesture { dismiss() }
 
             VStack(spacing: 20) {
                 appIcon
@@ -38,7 +40,11 @@ struct WelcomeCardView: View {
                         .multilineTextAlignment(.center)
                 }
 
-                Button(action: onDismiss) {
+                Toggle("Don't show this again", isOn: $dontShowAgain)
+                    .font(.subheadline)
+                    .tint(mollotovOrange)
+
+                Button(action: dismiss) {
                     Text("Get Started")
                         .font(.headline)
                         .frame(maxWidth: .infinity)
@@ -54,6 +60,11 @@ struct WelcomeCardView: View {
             .shadow(color: .black.opacity(0.15), radius: 20, y: 10)
             .padding(.horizontal, 32)
         }
+    }
+
+    private func dismiss() {
+        if dontShowAgain { hideWelcome = true }
+        onDismiss()
     }
 
     @ViewBuilder

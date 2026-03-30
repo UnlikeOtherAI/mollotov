@@ -9,6 +9,7 @@ struct BrowserView: View {
     @State private var showBookmarks = false
     @State private var showHistory = false
     @State private var showNetworkInspector = false
+    @AppStorage("hideWelcomeCard") private var hideWelcome = false
     @State private var showWelcome = true
     @State private var webView: WKWebView?
     private let safariAuth = SafariAuthHelper()
@@ -41,7 +42,7 @@ struct BrowserView: View {
                 }
             }
 
-            if showWelcome {
+            if showWelcome && !hideWelcome {
                 WelcomeCardView { showWelcome = false }
                     .transition(.opacity)
                     .zIndex(10)
