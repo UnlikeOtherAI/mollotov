@@ -1,0 +1,86 @@
+#import <AppKit/AppKit.h>
+
+/// Objective-C wrapper around CEF's C API for Swift interop.
+/// This is intentionally thin — only the functionality we need.
+@interface CEFBridge : NSObject
+
+/// Initialize CEF. Must be called once at app startup.
+/// Returns YES if this process should continue as the main app,
+/// NO if this is a helper subprocess (caller should exit).
++ (BOOL)initializeCEF;
+
+/// Shut down CEF. Call before app termination.
++ (void)shutdownCEF;
+
+/// Pump the CEF message loop. Call periodically from a timer.
++ (void)doMessageLoopWork;
+
+/// Create a new browser instance.
+/// @param parentView The NSView to host the browser.
+/// @param url The initial URL to load.
+/// @param identifier A unique identifier for this browser instance.
+- (instancetype)initWithParentView:(NSView *)parentView
+                               url:(NSString *)url
+                        identifier:(NSString *)identifier;
+
+/// Navigate to a URL.
+- (void)loadURL:(NSString *)url;
+
+/// Go back in history.
+- (void)goBack;
+
+/// Go forward in history.
+- (void)goForward;
+
+/// Reload the current page.
+- (void)reload;
+
+/// Get the current URL.
+- (NSString *)currentURL;
+
+/// Get the current page title.
+- (NSString *)currentTitle;
+
+/// Whether the browser is loading.
+- (BOOL)isLoading;
+
+/// Whether the browser can go back.
+- (BOOL)canGoBack;
+
+/// Whether the browser can go forward.
+- (BOOL)canGoForward;
+
+/// Evaluate JavaScript and return the result via callback.
+/// The callback receives the result as a JSON string, or nil on error.
+- (void)evaluateJavaScript:(NSString *)script
+                completion:(void (^)(NSString * _Nullable result, NSError * _Nullable error))completion;
+
+/// Get all cookies as an array of dictionaries.
+- (void)getAllCookiesWithCompletion:(void (^)(NSArray<NSDictionary *> *cookies))completion;
+
+/// Set a cookie.
+- (void)setCookieName:(NSString *)name
+                value:(NSString *)value
+               domain:(NSString *)domain
+                 path:(NSString *)path
+             httpOnly:(BOOL)httpOnly
+               secure:(BOOL)secure
+              expires:(NSDate * _Nullable)expires
+           completion:(void (^)(BOOL success))completion;
+
+/// Delete all cookies.
+- (void)deleteAllCookiesWithCompletion:(void (^)(NSInteger deleted))completion;
+
+/// Take a screenshot. Returns PNG data via callback.
+- (void)takeScreenshotWithCompletion:(void (^)(NSData * _Nullable pngData))completion;
+
+/// Resize the browser view.
+- (void)resizeTo:(NSSize)size;
+
+/// Set callback for navigation state changes.
+@property (nonatomic, copy, nullable) void (^onStateChange)(void);
+
+/// Set callback for console messages from the page.
+@property (nonatomic, copy, nullable) void (^onConsoleMessage)(NSDictionary *message);
+
+@end
