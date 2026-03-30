@@ -137,6 +137,41 @@ final class HandlerContext {
         """
         try? await evaluateJS(js)
     }
+
+    func load(url: URL) {
+        renderer?.load(url: url)
+    }
+
+    var currentURL: URL? { renderer?.currentURL }
+    var currentTitle: String { renderer?.currentTitle ?? "" }
+    var isLoadingPage: Bool { renderer?.isLoading ?? false }
+    var pageCanGoBack: Bool { renderer?.canGoBack ?? false }
+    var pageCanGoForward: Bool { renderer?.canGoForward ?? false }
+
+    func goBack() { renderer?.goBack() }
+    func goForward() { renderer?.goForward() }
+    func reloadPage() { renderer?.reload() }
+
+    func takeSnapshot() async throws -> NSImage {
+        guard let renderer else { throw HandlerError.noWebView }
+        return try await renderer.takeSnapshot()
+    }
+
+    func allCookies() async -> [HTTPCookie] {
+        await renderer?.allCookies() ?? []
+    }
+
+    func setCookie(_ cookie: HTTPCookie) async {
+        await renderer?.setCookies([cookie])
+    }
+
+    func deleteCookie(_ cookie: HTTPCookie) async {
+        await renderer?.deleteCookie(cookie)
+    }
+
+    func deleteAllCookies() async {
+        await renderer?.deleteAllCookies()
+    }
 }
 
 enum HandlerError: Error {

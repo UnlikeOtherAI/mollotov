@@ -1,0 +1,98 @@
+import SwiftUI
+
+/// Main browser window: toolbar + renderer view.
+struct BrowserView: View {
+    @ObservedObject var browserState: BrowserState
+    @ObservedObject var serverState: ServerState
+    @ObservedObject var rendererState: RendererState
+    @State private var showSettings = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Loading progress bar
+            if browserState.isLoading {
+                ProgressView(value: browserState.progress)
+                    .progressViewStyle(.linear)
+            }
+
+            // URL bar with renderer toggle
+            URLBarView(
+                browserState: browserState,
+                rendererState: rendererState,
+                onNavigate: { url in
+                    guard let urlObj = URL(string: url) else { return }
+                    serverState.handlerContext.load(url: urlObj)
+                },
+                onBack: { serverState.handlerContext.goBack() },
+                onForward: { serverState.handlerContext.goForward() },
+                onReload: { serverState.handlerContext.reloadPage() },
+                onSwitchRenderer: { engine in
+                    Task {
+                        await serverState.switchRenderer(to: engine)
+                    }
+                },
+                onSettings: { showSettings = true }
+            )
+
+            // Renderer view — swaps between WKWebView and CEF
+            if rendererState.isSwitching {
+                VStack {
+                    Spacer()
+                    ProgressView("Switching renderer...")
+                    Spacer()
+                }
+            } else {
+                RendererContainerView(serverState: serverState, rendererState: rendererState)
+            }
+        }
+        .onChange(of: browserState.currentURL) { _, newURL in
+            HistoryStore.shared.record(url: newURL, title: browserState.pageTitle)
+        }
+        .sheet(isPresented: $showSettings) {
+            SettingsView(serverState: serverState, rendererState: rendererState)
+        }
+        .onAppear {
+            // Sync browser state from active renderer
+            if let renderer = serverState.handlerContext.renderer {
+                renderer.onStateChange = { [weak browserState] in
+                    Task { @MainActor in
+                        guard let renderer = serverState.handlerContext.renderer else { return }
+                        browserState?.currentURL = renderer.currentURL?.absoluteString ?? ""
+                        browserState?.pageTitle = renderer.currentTitle
+                        browserState?.isLoading = renderer.isLoading
+                        browserState?.canGoBack = renderer.canGoBack
+                        browserState?.canGoForward = renderer.canGoForward
+                        browserState?.progress = renderer.estimatedProgress
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Wraps the active renderer's NSView in SwiftUI.
+struct RendererContainerView: NSViewRepresentable {
+    @ObservedObject var serverState: ServerState
+    @ObservedObject var rendererState: RendererState
+
+    func makeNSView(context: Context) -> NSView {
+        let container = NSView()
+        if let view = serverState.handlerContext.renderer?.makeView() {
+            view.frame = container.bounds
+            view.autoresizingMask = [.width, .height]
+            container.addSubview(view)
+        }
+        return container
+    }
+
+    func updateNSView(_ container: NSView, context: Context) {
+        // Remove old subviews
+        container.subviews.forEach { $0.removeFromSuperview() }
+        // Add current renderer's view
+        if let view = serverState.handlerContext.renderer?.makeView() {
+            view.frame = container.bounds
+            view.autoresizingMask = [.width, .height]
+            container.addSubview(view)
+        }
+    }
+}
