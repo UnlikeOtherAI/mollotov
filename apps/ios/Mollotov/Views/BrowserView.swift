@@ -29,9 +29,10 @@ struct BrowserView: View {
             )
 
             // WebView
-            WebViewContainer(browserState: browserState) { wv in
+            WebViewContainer(browserState: browserState, handlerContext: serverState.handlerContext) { wv in
                 webView = wv
                 serverState.webView = wv
+                serverState.handlerContext.webView = wv
             }
 
             // Bottom toolbar

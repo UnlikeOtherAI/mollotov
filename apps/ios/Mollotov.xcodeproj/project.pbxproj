@@ -21,6 +21,20 @@
 		A100000012 /* DeviceInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000012; };
 		A100000013 /* AppRevealSetup.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000013; };
 		A100000014 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B100000014; };
+		A100000020 /* HandlerContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000020; };
+		A100000021 /* NavigationHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000021; };
+		A100000022 /* ScreenshotHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000022; };
+		A100000023 /* DOMHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000023; };
+		A100000024 /* InteractionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000024; };
+		A100000025 /* ScrollHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000025; };
+		A100000026 /* DeviceHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000026; };
+		A100000027 /* EvaluateHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000027; };
+		A100000028 /* ConsoleHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000028; };
+		A100000029 /* NetworkHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000029; };
+		A100000030 /* MutationHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000030; };
+		A100000031 /* ShadowDOMHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000031; };
+		A100000032 /* BrowserManagementHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000032; };
+		A100000033 /* LLMHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000033; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -39,6 +53,20 @@
 		B100000013 /* AppRevealSetup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRevealSetup.swift; sourceTree = "<group>"; };
 		B100000014 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B100000015 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		B100000020 /* HandlerContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandlerContext.swift; sourceTree = "<group>"; };
+		B100000021 /* NavigationHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationHandler.swift; sourceTree = "<group>"; };
+		B100000022 /* ScreenshotHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotHandler.swift; sourceTree = "<group>"; };
+		B100000023 /* DOMHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DOMHandler.swift; sourceTree = "<group>"; };
+		B100000024 /* InteractionHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InteractionHandler.swift; sourceTree = "<group>"; };
+		B100000025 /* ScrollHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollHandler.swift; sourceTree = "<group>"; };
+		B100000026 /* DeviceHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceHandler.swift; sourceTree = "<group>"; };
+		B100000027 /* EvaluateHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EvaluateHandler.swift; sourceTree = "<group>"; };
+		B100000028 /* ConsoleHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsoleHandler.swift; sourceTree = "<group>"; };
+		B100000029 /* NetworkHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkHandler.swift; sourceTree = "<group>"; };
+		B100000030 /* MutationHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MutationHandler.swift; sourceTree = "<group>"; };
+		B100000031 /* ShadowDOMHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShadowDOMHandler.swift; sourceTree = "<group>"; };
+		B100000032 /* BrowserManagementHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserManagementHandler.swift; sourceTree = "<group>"; };
+		B100000033 /* LLMHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMHandler.swift; sourceTree = "<group>"; };
 		B100000099 /* Mollotov.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Mollotov.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -72,6 +100,8 @@
 				D100000005 /* Network */,
 				D100000006 /* Device */,
 				D100000007 /* Debug */,
+				D100000008 /* Handlers */,
+				D100000009 /* LLM */,
 			);
 			path = Mollotov;
 			sourceTree = "<group>";
@@ -121,6 +151,34 @@
 				B100000013 /* AppRevealSetup.swift */,
 			);
 			path = Debug;
+			sourceTree = "<group>";
+		};
+		D100000008 /* Handlers */ = {
+			isa = PBXGroup;
+			children = (
+				B100000020 /* HandlerContext.swift */,
+				B100000021 /* NavigationHandler.swift */,
+				B100000022 /* ScreenshotHandler.swift */,
+				B100000023 /* DOMHandler.swift */,
+				B100000024 /* InteractionHandler.swift */,
+				B100000025 /* ScrollHandler.swift */,
+				B100000026 /* DeviceHandler.swift */,
+				B100000027 /* EvaluateHandler.swift */,
+				B100000028 /* ConsoleHandler.swift */,
+				B100000029 /* NetworkHandler.swift */,
+				B100000030 /* MutationHandler.swift */,
+				B100000031 /* ShadowDOMHandler.swift */,
+				B100000032 /* BrowserManagementHandler.swift */,
+			);
+			path = Handlers;
+			sourceTree = "<group>";
+		};
+		D100000009 /* LLM */ = {
+			isa = PBXGroup;
+			children = (
+				B100000033 /* LLMHandler.swift */,
+			);
+			path = LLM;
 			sourceTree = "<group>";
 		};
 		D100000099 /* Products */ = {
@@ -217,6 +275,20 @@
 				A100000011 /* DeviceIdentity.swift in Sources */,
 				A100000012 /* DeviceInfo.swift in Sources */,
 				A100000013 /* AppRevealSetup.swift in Sources */,
+				A100000020 /* HandlerContext.swift in Sources */,
+				A100000021 /* NavigationHandler.swift in Sources */,
+				A100000022 /* ScreenshotHandler.swift in Sources */,
+				A100000023 /* DOMHandler.swift in Sources */,
+				A100000024 /* InteractionHandler.swift in Sources */,
+				A100000025 /* ScrollHandler.swift in Sources */,
+				A100000026 /* DeviceHandler.swift in Sources */,
+				A100000027 /* EvaluateHandler.swift in Sources */,
+				A100000028 /* ConsoleHandler.swift in Sources */,
+				A100000029 /* NetworkHandler.swift in Sources */,
+				A100000030 /* MutationHandler.swift in Sources */,
+				A100000031 /* ShadowDOMHandler.swift in Sources */,
+				A100000032 /* BrowserManagementHandler.swift in Sources */,
+				A100000033 /* LLMHandler.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

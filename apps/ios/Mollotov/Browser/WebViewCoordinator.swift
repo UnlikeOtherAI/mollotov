@@ -4,6 +4,7 @@ import WebKit
 /// Wraps WKWebView in a UIViewRepresentable for SwiftUI.
 struct WebViewContainer: UIViewRepresentable {
     @ObservedObject var browserState: BrowserState
+    let handlerContext: HandlerContext?
     let onWebView: (WKWebView) -> Void
 
     func makeCoordinator() -> Coordinator {
@@ -13,6 +14,13 @@ struct WebViewContainer: UIViewRepresentable {
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
+
+        // Inject console capture bridge script
+        if let handlerContext {
+            let ucc = config.userContentController
+            ucc.addUserScript(ConsoleHandler.bridgeScript)
+            ucc.add(handlerContext, name: "mollotovConsole")
+        }
 
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator

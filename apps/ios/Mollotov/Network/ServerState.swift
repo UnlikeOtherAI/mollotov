@@ -9,6 +9,7 @@ final class ServerState: ObservableObject {
 
     let deviceInfo: DeviceInfo
     let router = Router()
+    let handlerContext = HandlerContext()
     weak var webView: WKWebView?
 
     private var httpServer: HTTPServer?
@@ -19,11 +20,32 @@ final class ServerState: ObservableObject {
         self.ipAddress = Self.getLocalIPAddress()
     }
 
+    @MainActor
     func startHTTPServer() {
-        router.registerStubs()
+        registerHandlers()
+        router.registerStubs() // Fill remaining unimplemented methods
         httpServer = HTTPServer(port: UInt16(deviceInfo.port), router: router)
         httpServer?.start()
         DispatchQueue.main.async { self.isServerRunning = true }
+    }
+
+    @MainActor
+    private func registerHandlers() {
+        let ctx = handlerContext
+
+        NavigationHandler(context: ctx).register(on: router)
+        ScreenshotHandler(context: ctx).register(on: router)
+        DOMHandler(context: ctx).register(on: router)
+        InteractionHandler(context: ctx).register(on: router)
+        ScrollHandler(context: ctx).register(on: router)
+        DeviceHandler(context: ctx, deviceInfo: deviceInfo).register(on: router)
+        EvaluateHandler(context: ctx).register(on: router)
+        ConsoleHandler(context: ctx).register(on: router)
+        NetworkHandler(context: ctx).register(on: router)
+        MutationHandler(context: ctx).register(on: router)
+        ShadowDOMHandler(context: ctx).register(on: router)
+        BrowserManagementHandler(context: ctx).register(on: router)
+        LLMHandler(context: ctx).register(on: router)
     }
 
     func startMDNS() {
