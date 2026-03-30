@@ -29,6 +29,7 @@ import { registerVisible } from "./visible.js";
 import { registerPageText } from "./page-text.js";
 import { registerFormState } from "./form-state.js";
 import { registerFind } from "./find.js";
+import { registerGroup } from "./group.js";
 
 export function registerAllCommands(program: Command): void {
   // Discovery
@@ -72,4 +73,7 @@ export function registerAllCommands(program: Command): void {
   registerPageText(program);
   registerFormState(program);
   registerFind(program);
+
+  // Group Commands
+  registerGroup(program);
 }
