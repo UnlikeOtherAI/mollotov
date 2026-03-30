@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// URL bar with navigation buttons, URL field, renderer toggle, and settings.
+/// URL bar with navigation buttons, URL field, and renderer toggle.
 struct URLBarView: View {
     @ObservedObject var browserState: BrowserState
     @ObservedObject var rendererState: RendererState
@@ -9,7 +9,6 @@ struct URLBarView: View {
     let onForward: () -> Void
     let onReload: () -> Void
     let onSwitchRenderer: (RendererState.Engine) -> Void
-    let onSettings: () -> Void
 
     @State private var urlText: String = ""
 
@@ -38,23 +37,15 @@ struct URLBarView: View {
                 .textFieldStyle(.roundedBorder)
                 .onSubmit { navigate() }
 
-            // Renderer toggle
-            Picker("", selection: Binding(
-                get: { rendererState.activeEngine },
-                set: { onSwitchRenderer($0) }
-            )) {
-                Image(systemName: "safari").tag(RendererState.Engine.webkit)
-                Image(systemName: "globe").tag(RendererState.Engine.chromium)
+            // Renderer toggle — Font Awesome brand icons
+            HStack(spacing: 0) {
+                rendererButton(engine: .webkit, icon: FontAwesome.safari)
+                rendererButton(engine: .chromium, icon: FontAwesome.chrome)
             }
-            .pickerStyle(.segmented)
-            .frame(width: 80)
+            .background(Color(nsColor: .controlBackgroundColor))
+            .cornerRadius(6)
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(nsColor: .separatorColor), lineWidth: 0.5))
             .disabled(rendererState.isSwitching)
-
-            // Settings
-            Button(action: onSettings) {
-                Image(systemName: "gear")
-            }
-            .buttonStyle(.borderless)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
@@ -62,6 +53,22 @@ struct URLBarView: View {
         .onChange(of: browserState.currentURL) { _, newURL in
             urlText = newURL
         }
+    }
+
+    @ViewBuilder
+    private func rendererButton(engine: RendererState.Engine, icon: String) -> some View {
+        let isActive = rendererState.activeEngine == engine
+        Button {
+            onSwitchRenderer(engine)
+        } label: {
+            FAIcon(icon: icon, size: 14)
+                .frame(width: 36, height: 24)
+                .foregroundColor(isActive ? .white : .primary)
+                .background(isActive ? Color.accentColor : Color.clear)
+                .cornerRadius(5)
+        }
+        .buttonStyle(.plain)
+        .padding(2)
     }
 
     private func navigate() {

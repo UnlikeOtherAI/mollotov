@@ -35,6 +35,7 @@
 		7D2A8BF2E3A83FF76E052EF7 /* BookmarkStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 445AA6C28445CBA942E6BEF0 /* BookmarkStore.swift */; };
 		8882FD2F27FE96A3F5F42AF8 /* DOMHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53D3DCAD6C6B3FDA9D44E7E1 /* DOMHandler.swift */; };
 		8A8B7EF10041EF851F7AAA2D /* HistoryHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E98BF1291FC4D3F61C4FA60 /* HistoryHandler.swift */; };
+		91B530F2E22FA6BF9E4CF395 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7FA104E8D04E745182A19899 /* Assets.xcassets */; };
 		9682541DA04399AA9B5D6E6F /* NetworkHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63A8E784B0595FFB37EFB3AB /* NetworkHandler.swift */; };
 		98ECBDAA13AB0E99D6D60C1B /* ToolbarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 436A6AEA38D754ACEFE7DD71 /* ToolbarView.swift */; };
 		9ABB36F814C7683FC7872121 /* NetworkBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C431FE8672453FA02398A35 /* NetworkBridge.swift */; };
@@ -52,6 +53,7 @@
 		D5A592B57370DE31F56E2989 /* LLMHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DA139A3CF468F423C529E96 /* LLMHandler.swift */; };
 		DBD1B5EC65CAC78C7DC5DFEC /* MDNSAdvertiser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5700A0FAD36439D6FEB2D758 /* MDNSAdvertiser.swift */; };
 		F0288C63BFECEC5F21C7362E /* BrowserState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BA0199ABF8A784789BDC239 /* BrowserState.swift */; };
+		F2B3429AE5A07A7A2FDA5F3A /* FontAwesome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19F290067E390E0CB0B9E6B3 /* FontAwesome.swift */; };
 		F448A8B2E1B3A561B2C60C92 /* ScreenshotHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 852B4917F01094DFDF3771CC /* ScreenshotHandler.swift */; };
 /* End PBXBuildFile section */
 
@@ -59,6 +61,7 @@
 		10C625D56E93B41DC885E496 /* BrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserView.swift; sourceTree = "<group>"; };
 		162978C8F601CE6E2D0F6240 /* HandlerContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandlerContext.swift; sourceTree = "<group>"; };
 		17FB3F895B63A2FD9435A5E8 /* MollotovHelper */ = {isa = PBXFileReference; includeInIndex = 0; path = MollotovHelper; sourceTree = BUILT_PRODUCTS_DIR; };
+		19F290067E390E0CB0B9E6B3 /* FontAwesome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FontAwesome.swift; sourceTree = "<group>"; };
 		1C431FE8672453FA02398A35 /* NetworkBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkBridge.swift; sourceTree = "<group>"; };
 		1DA139A3CF468F423C529E96 /* LLMHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMHandler.swift; sourceTree = "<group>"; };
 		281B211E466DC23877A0CFAA /* Chromium Embedded Framework.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = "Chromium Embedded Framework.framework"; path = "Frameworks/Chromium Embedded Framework.framework"; sourceTree = "<group>"; };
@@ -81,6 +84,7 @@
 		7214F2ECA9672C277FEA029F /* CEFBridgeSupport.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CEFBridgeSupport.h; sourceTree = "<group>"; };
 		76E5AABD4653BD12BB4E2123 /* MollotovApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MollotovApp.swift; sourceTree = "<group>"; };
 		78906A0BAF9128FDE0823BE4 /* ConsoleHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsoleHandler.swift; sourceTree = "<group>"; };
+		7FA104E8D04E745182A19899 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		7FE84F648BDB15E85E794E70 /* HistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryStore.swift; sourceTree = "<group>"; };
 		8162809E474528D24E3E9B7C /* ServerState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerState.swift; sourceTree = "<group>"; };
 		852B4917F01094DFDF3771CC /* ScreenshotHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotHandler.swift; sourceTree = "<group>"; };
@@ -150,6 +154,7 @@
 		2BE81C370766F0DD05C3F5B7 /* Mollotov */ = {
 			isa = PBXGroup;
 			children = (
+				7FA104E8D04E745182A19899 /* Assets.xcassets */,
 				89C861F192A9A3ACE2F8938D /* Mollotov-Bridging-Header.h */,
 				C2D650BD3262369BC889CF36 /* Mollotov.entitlements */,
 				76E5AABD4653BD12BB4E2123 /* MollotovApp.swift */,
@@ -203,6 +208,7 @@
 			children = (
 				10C625D56E93B41DC885E496 /* BrowserView.swift */,
 				AF87ABB3FE3E6A86205ACC2C /* FloatingMenuView.swift */,
+				19F290067E390E0CB0B9E6B3 /* FontAwesome.swift */,
 				4AAD0796D10DE23B652F3F43 /* SettingsView.swift */,
 				436A6AEA38D754ACEFE7DD71 /* ToolbarView.swift */,
 				F7CB1B02A9B2992B1E4D0688 /* URLBarView.swift */,
@@ -283,6 +289,7 @@
 			buildPhases = (
 				964C7525F2EA2B440ED6545F /* Fix CEF Framework Structure */,
 				1D201D0A82B0B720EB6ED69A /* Sources */,
+				CD6F1B8461C05258D15BAA4D /* Resources */,
 				DCD02691F673967519F5DDAC /* Frameworks */,
 				1D04DF0D46620C8E549FAB02 /* Embed CEF Framework */,
 			);
@@ -343,6 +350,17 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		CD6F1B8461C05258D15BAA4D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				91B530F2E22FA6BF9E4CF395 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
 		1D04DF0D46620C8E549FAB02 /* Embed CEF Framework */ = {
@@ -406,6 +424,7 @@
 				C1BF7ADBB60F48EE5D437D69 /* DeviceInfo.swift in Sources */,
 				0AFB883945F27BD2A657FFD4 /* EvaluateHandler.swift in Sources */,
 				B9418B2ED3FC60A43675184F /* FloatingMenuView.swift in Sources */,
+				F2B3429AE5A07A7A2FDA5F3A /* FontAwesome.swift in Sources */,
 				6D42EAD618FDD491D799513A /* HTTPServer.swift in Sources */,
 				CAF0411C9D6561E176B982B7 /* HandlerContext.swift in Sources */,
 				8A8B7EF10041EF851F7AAA2D /* HistoryHandler.swift in Sources */,

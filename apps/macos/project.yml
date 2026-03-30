@@ -13,6 +13,10 @@ targets:
       - path: Mollotov
         excludes:
           - "**/*.plist"
+          - "**/*.otf"
+    resources:
+      - path: Mollotov/Resources
+        buildPhase: resources
     dependencies:
       - framework: Frameworks/Chromium Embedded Framework.framework
         embed: false
@@ -50,6 +54,7 @@ targets:
         CODE_SIGN_ENTITLEMENTS: Mollotov/Mollotov.entitlements
         INFOPLIST_FILE: Mollotov/Info.plist
         PRODUCT_BUNDLE_IDENTIFIER: com.mollotov.browser.macos
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_APP_SANDBOX: false
         VALIDATE_PRODUCT: false
     entitlements:

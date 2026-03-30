@@ -16,7 +16,7 @@ struct BrowserView: View {
                         .progressViewStyle(.linear)
                 }
 
-                // URL bar with renderer toggle
+                // URL bar with renderer toggle (no settings button — use floating menu)
                 URLBarView(
                     browserState: browserState,
                     rendererState: rendererState,
@@ -31,8 +31,7 @@ struct BrowserView: View {
                         Task {
                             await serverState.switchRenderer(to: engine)
                         }
-                    },
-                    onSettings: { showSettings = true }
+                    }
                 )
 
                 // Renderer view — swaps between WKWebView and CEF
@@ -51,7 +50,6 @@ struct BrowserView: View {
             FloatingMenuView(
                 onReload: { serverState.handlerContext.reloadPage() },
                 onSafariAuth: {
-                    // Trigger Safari auth for current URL
                     if let url = serverState.handlerContext.currentURL {
                         let helper = SafariAuthHelper()
                         helper.handlerContext = serverState.handlerContext
@@ -71,7 +69,6 @@ struct BrowserView: View {
             SettingsView(serverState: serverState, rendererState: rendererState)
         }
         .onAppear {
-            // Sync browser state from active renderer
             if let renderer = serverState.handlerContext.renderer {
                 renderer.onStateChange = { [weak browserState] in
                     Task { @MainActor in
@@ -105,9 +102,7 @@ struct RendererContainerView: NSViewRepresentable {
     }
 
     func updateNSView(_ container: NSView, context: Context) {
-        // Remove old subviews
         container.subviews.forEach { $0.removeFromSuperview() }
-        // Add current renderer's view
         if let view = serverState.handlerContext.renderer?.makeView() {
             view.frame = container.bounds
             view.autoresizingMask = [.width, .height]
