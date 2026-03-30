@@ -20,6 +20,11 @@ final class ServerState: ObservableObject {
         self.ipAddress = Self.getLocalIPAddress()
     }
 
+    init(deviceInfo: DeviceInfo) {
+        self.deviceInfo = deviceInfo
+        self.ipAddress = Self.getLocalIPAddress()
+    }
+
     @MainActor
     func startHTTPServer() {
         registerHandlers()

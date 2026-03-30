@@ -40,6 +40,8 @@
 		A100000034 /* SafariAuthHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000034; };
 		A100000035 /* FloatingMenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000035; };
 		A100000041 /* WelcomeCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000041; };
+		A100000042 /* ExternalBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000042; };
+		A100000043 /* ExternalDisplayManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000043; };
 		DFDB1F217CF14213A9FB5CCE /* BookmarkStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4372587B096643C1AE55184F /* BookmarkStore.swift */; };
 		557BEEFEC864450EB89DE351 /* HistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FF936A1AD0C457183D75A46 /* HistoryStore.swift */; };
 		D2474B135EE9443A9A60289B /* NetworkTrafficStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E8CCB2224B44E128F3A4D13 /* NetworkTrafficStore.swift */; };
@@ -85,6 +87,8 @@
 		B100000034 /* SafariAuthHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariAuthHelper.swift; sourceTree = "<group>"; };
 		B100000035 /* FloatingMenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingMenuView.swift; sourceTree = "<group>"; };
 		B100000041 /* WelcomeCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeCardView.swift; sourceTree = "<group>"; };
+		B100000042 /* ExternalBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExternalBrowserView.swift; sourceTree = "<group>"; };
+		B100000043 /* ExternalDisplayManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExternalDisplayManager.swift; sourceTree = "<group>"; };
 		B100000099 /* Mollotov.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Mollotov.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4372587B096643C1AE55184F /* BookmarkStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookmarkStore.swift; sourceTree = "<group>"; };
 		2FF936A1AD0C457183D75A46 /* HistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryStore.swift; sourceTree = "<group>"; };
@@ -145,6 +149,7 @@
 				97A9457AB5504B3B83606F95 /* HistoryView.swift */,
 				D43743BF12FB4153846B26F0 /* NetworkInspectorView.swift */,
 				B100000041 /* WelcomeCardView.swift */,
+				B100000042 /* ExternalBrowserView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -158,6 +163,7 @@
 				4372587B096643C1AE55184F /* BookmarkStore.swift */,
 				2FF936A1AD0C457183D75A46 /* HistoryStore.swift */,
 				7E8CCB2224B44E128F3A4D13 /* NetworkTrafficStore.swift */,
+				B100000043 /* ExternalDisplayManager.swift */,
 			);
 			path = Browser;
 			sourceTree = "<group>";
@@ -336,6 +342,8 @@
 				A100000034 /* SafariAuthHelper.swift in Sources */,
 				A100000035 /* FloatingMenuView.swift in Sources */,
 				A100000041 /* WelcomeCardView.swift in Sources */,
+				A100000042 /* ExternalBrowserView.swift in Sources */,
+				A100000043 /* ExternalDisplayManager.swift in Sources */,
 			
 				DFDB1F217CF14213A9FB5CCE /* BookmarkStore.swift in Sources */,
 				557BEEFEC864450EB89DE351 /* HistoryStore.swift in Sources */,

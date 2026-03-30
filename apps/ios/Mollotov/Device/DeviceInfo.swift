@@ -11,6 +11,19 @@ struct DeviceInfo {
     let port: Int
     let version: String
 
+    static func externalDisplay(port: Int, screenSize: CGSize, scale: CGFloat) -> DeviceInfo {
+        let device = UIDevice.current
+        return DeviceInfo(
+            id: DeviceIdentity.id + "-tv",
+            name: device.name + " (TV)",
+            model: modelIdentifier(),
+            width: Int(screenSize.width * scale),
+            height: Int(screenSize.height * scale),
+            port: port,
+            version: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0"
+        )
+    }
+
     static func current(port: Int) -> DeviceInfo {
         let device = UIDevice.current
         let screen = UIScreen.main

@@ -31,6 +31,7 @@ struct MollotovApp: App {
     private func startServices() {
         serverState.startHTTPServer()
         serverState.startMDNS()
+        ExternalDisplayManager.shared.startMonitoring()
         #if DEBUG
         AppRevealSetup.configure()
         #endif

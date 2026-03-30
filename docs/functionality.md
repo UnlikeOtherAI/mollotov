@@ -28,6 +28,10 @@ One-tap login using the device's saved passwords. On iOS, opens an ASWebAuthenti
 
 Switch between Safari (WebKit) and Chrome (Chromium/CEF) rendering engines at runtime. Available via the UI segmented control and the `set-renderer` / `get-renderer` HTTP endpoints. Cookies are migrated automatically when switching to preserve login sessions.
 
+## External Display — Apple TV (iOS)
+
+When an iPhone or iPad running Mollotov connects to an Apple TV via AirPlay, the app automatically detects the external screen and displays a fullscreen WKWebView on it. This external browser appears as a separate device in mDNS discovery with the name "{device} (TV)" on port 8421, fully controllable from the CLI independently of the main device. No UI chrome — just the web content, controlled entirely via the API. When the AirPlay connection drops, the external server and window are torn down automatically.
+
 ## Screenshots
 
 Capture viewport or full-page screenshots on demand in PNG or JPEG. Full-page mode stitches together the entire scrollable page. Quality is adjustable for JPEG.
