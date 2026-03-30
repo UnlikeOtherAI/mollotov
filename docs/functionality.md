@@ -6,7 +6,7 @@ Every user-facing feature is described here. When adding or changing a feature, 
 
 ## How It Works
 
-Mollotov has two parts: **native browser apps** (iOS and Android) and a **Node.js CLI**. The apps run real mobile browsers with embedded HTTP and MCP servers. The CLI discovers them on the local network via mDNS and sends commands. An LLM can control everything through the CLI's MCP server — or talk to device MCP servers directly.
+Mollotov has two parts: **native browser apps** (iOS, Android, and macOS) and a **Node.js CLI**. The apps run real browsers with embedded HTTP and MCP servers. The CLI discovers them on the local network via mDNS and sends commands. An LLM can control everything through the CLI's MCP server — or talk to device MCP servers directly.
 
 No emulators, no cloud, no persistent scripts. Real browsers on real devices, fully controllable by language models.
 
@@ -18,11 +18,15 @@ Works identically with real devices, iOS Simulators, and Android Emulators — a
 
 ## Browser Control
 
-Full navigation control: go to any URL, go back/forward, reload, get the current page URL and title. The browser uses Safari's user agent on iOS and Chrome's on Android so sites behave normally — Google OAuth, banking sites, and similar services work without being blocked as a WebView.
+Full navigation control: go to any URL, go back/forward, reload, get the current page URL and title. The browser uses Safari's user agent on iOS, Chrome's on Android, and on macOS can switch between Safari/WebKit and Chrome/Chromium behavior so sites behave normally — Google OAuth, banking sites, and similar services work without being blocked as a WebView.
 
 ### Safari / Chrome Authentication
 
 One-tap login using the device's saved passwords. On iOS, opens an ASWebAuthenticationSession (Safari's login sheet) that shares Safari's saved passwords and cookies. On Android, uses Chrome Custom Tabs. After login, cookies are synced back into the browser automatically.
+
+## Renderer Switching (macOS)
+
+Switch between Safari (WebKit) and Chrome (Chromium/CEF) rendering engines at runtime. Available via the UI segmented control and the `set-renderer` / `get-renderer` HTTP endpoints. Cookies are migrated automatically when switching to preserve login sessions.
 
 ## Screenshots
 

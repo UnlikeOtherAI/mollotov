@@ -2,7 +2,7 @@
 
 ## Overview
 
-Mollotov is a two-component system: native browser apps on mobile devices and a CLI orchestrator on the developer's machine. All components communicate over the local network via HTTP/JSON. Discovery is automatic via mDNS.
+Mollotov is a two-component system: native browser apps on iOS, Android, and macOS devices and a CLI orchestrator on the developer's machine. All components communicate over the local network via HTTP/JSON. Discovery is automatic via mDNS.
 
 ```
                         ┌─────────────┐
@@ -29,24 +29,24 @@ Mollotov is a two-component system: native browser apps on mobile devices and a 
                         │ └─────────┘ │
                         └──────┬──────┘
                                │ HTTP/JSON
-              ┌────────────────┼────────────────┐
-              │                │                │
-     ┌────────┴───────┐ ┌─────┴────────┐ ┌─────┴────────┐
-     │  iPhone         │ │  iPad         │ │  Pixel        │
-     │                 │ │               │ │               │
-     │ ┌─────────────┐ │ │ ┌───────────┐ │ │ ┌───────────┐ │
-     │ │  WKWebView  │ │ │ │ WKWebView │ │ │ │  WebView  │ │
-     │ └─────────────┘ │ │ └───────────┘ │ │ └───────────┘ │
-     │ ┌─────────────┐ │ │ ┌───────────┐ │ │ ┌───────────┐ │
-     │ │ HTTP Server │ │ │ │HTTP Server│ │ │ │HTTP Server│ │
-     │ └─────────────┘ │ │ └───────────┘ │ │ └───────────┘ │
-     │ ┌─────────────┐ │ │ ┌───────────┐ │ │ ┌───────────┐ │
-     │ │ MCP Server  │ │ │ │MCP Server │ │ │ │MCP Server │ │
-     │ └─────────────┘ │ │ └───────────┘ │ │ └───────────┘ │
-     │ ┌─────────────┐ │ │ ┌───────────┐ │ │ ┌───────────┐ │
-     │ │ mDNS Advert │ │ │ │mDNS Advert│ │ │ │mDNS Advert│ │
-     │ └─────────────┘ │ │ └───────────┘ │ │ └───────────┘ │
-     └─────────────────┘ └───────────────┘ └───────────────┘
+        ┌──────────────────────┼──────────────────────┬──────────────────────┐
+        │                      │                      │                      │
+┌───────┴────────┐    ┌────────┴───────┐    ┌────────┴───────┐    ┌────────┴────────┐
+│  iPhone        │    │  iPad          │    │  Pixel         │    │  Mac            │
+│                │    │                │    │                │    │                 │
+│ ┌────────────┐ │    │ ┌────────────┐ │    │ ┌────────────┐ │    │ ┌─────────────┐ │
+│ │ WKWebView  │ │    │ │ WKWebView  │ │    │ │  WebView   │ │    │ │ WKWebView / │ │
+│ └────────────┘ │    │ └────────────┘ │    │ └────────────┘ │    │ │    CEF      │ │
+│ ┌────────────┐ │    │ ┌────────────┐ │    │ ┌────────────┐ │    │ └─────────────┘ │
+│ │HTTP Server │ │    │ │HTTP Server │ │    │ │HTTP Server │ │    │ ┌─────────────┐ │
+│ └────────────┘ │    │ └────────────┘ │    │ └────────────┘ │    │ │ HTTP Server │ │
+│ ┌────────────┐ │    │ ┌────────────┐ │    │ ┌────────────┐ │    │ └─────────────┘ │
+│ │ MCP Server │ │    │ │ MCP Server │ │    │ │ MCP Server │ │    │ ┌─────────────┐ │
+│ └────────────┘ │    │ └────────────┘ │    │ └────────────┘ │    │ │ MCP Server  │ │
+│ ┌────────────┐ │    │ ┌────────────┐ │    │ ┌────────────┐ │    │ └─────────────┘ │
+│ │mDNS Advert │ │    │ │mDNS Advert │ │    │ │mDNS Advert │ │    │ ┌─────────────┐ │
+│ └────────────┘ │    │ └────────────┘ │    │ └────────────┘ │    │ │ mDNS Advert │ │
+└────────────────┘    └────────────────┘    └────────────────┘    └───────────────┘
 ```
 
 For full tech stack details, see [tech-stack.md](tech-stack.md).
@@ -55,36 +55,38 @@ For full tech stack details, see [tech-stack.md](tech-stack.md).
 
 ## Component Architecture
 
-### 1. Browser App (iOS / Android)
+### 1. Browser App (iOS / Android / macOS)
 
 Each browser app has four internal layers:
 
 ```
 ┌──────────────────────────────────┐
 │           UI Layer               │
-│  URL bar │ WebView │ Settings    │
+│ URL bar │ Browser │ Settings/UI  │
 ├──────────────────────────────────┤
 │        Browser Engine            │
-│  WKWebView (iOS) / WebView (And)│
+│ WKWebView / WebView / WKWebView │
+│ + CEF (macOS)                   │
 ├──────────────────────────────────┤
 │        Command Handler           │
-│  Receives HTTP → executes on     │
-│  WebView via native APIs         │
+│ Receives HTTP → executes on the  │
+│ active renderer via native APIs  │
 ├──────────────────────────────────┤
 │        Network Layer             │
 │  HTTP Server │ MCP │ mDNS        │
 └──────────────────────────────────┘
 ```
 
-**UI Layer** — Minimal chrome. URL bar on the left, settings icon on the right. Settings panel slides in from the right showing IP address, port, device name, mDNS status, and connection instructions. For details, see [ui/mobile.md](ui/mobile.md).
+**UI Layer** — Minimal chrome on mobile, with the URL bar and settings access always visible. On macOS, the browser window adds desktop toolbar controls and a segmented renderer switcher for Safari/WebKit vs Chrome/Chromium. Settings still expose IP address, port, device name, mDNS status, and connection instructions. For details, see [ui/mobile.md](ui/mobile.md).
 
 **Browser Engine** — Platform WebView. All page interaction goes through native APIs:
 - iOS: `WKWebView` native methods — `evaluateJavaScript`, `takeSnapshot`, scroll via `scrollView`
 - Android: `WebView` + CDP — `DOM.getDocument`, `Page.captureScreenshot`, `Runtime.evaluate`
+- macOS: dual renderer stack — `WKWebView` for Safari/WebKit parity and CEF for Chromium/Chrome parity. Both conform to a shared renderer interface so the HTTP and MCP surface stays the same while the active engine changes.
 
-**Command Handler** — Translates incoming HTTP requests into native WebView calls. Android uses CDP for most operations (no scripts enter the page). iOS uses native `evaluateJavaScript` calls and, for features WebKit doesn't expose natively, ephemeral bridge scripts that are cleared on navigation (see [iOS bridge scripts](#ios--no-injection-dom-access)).
+**Command Handler** — Translates incoming HTTP requests into native browser calls. Android uses CDP for most operations (no scripts enter the page). iOS uses native `evaluateJavaScript` calls and, for features WebKit doesn't expose natively, ephemeral bridge scripts that are cleared on navigation (see [iOS bridge scripts](#ios--no-injection-dom-access)). macOS routes the same handlers through the active renderer and adds `set-renderer` / `get-renderer` so the UI and API can switch engines at runtime.
 
-**Network Layer** — Embedded HTTP server (Swifter/Telegraph on iOS, Ktor on Android), MCP server over the same transport, and mDNS service advertisement.
+**Network Layer** — Embedded HTTP server (Swifter/Telegraph on iOS, Ktor on Android, Network.framework-based server on macOS), MCP server over the same transport, and mDNS service advertisement.
 
 ### 2. CLI
 
@@ -198,7 +200,8 @@ TXT Records:
   id       = "a1b2c3d4-..."        # Stable unique device ID (UUID)
   name     = "My iPhone"           # User-friendly device name
   model    = "iPhone 15 Pro"       # Device model
-  platform = "ios" | "android"     # Platform identifier
+  platform = "ios" | "android" | "macos"   # Platform identifier
+  engine   = "webkit" | "chromium"         # Active renderer on macOS
   width    = "390"                  # CSS viewport width
   height   = "844"                  # CSS viewport height
   port     = "8420"                 # HTTP server port
@@ -211,6 +214,7 @@ Every Mollotov browser instance has a **stable unique device ID** used for relia
 
 - **iOS**: Uses `identifierForVendor` (UUID that persists across app launches, resets only on full app reinstall). Stored in Keychain for extra persistence.
 - **Android**: Uses a self-generated UUIDv4, stored in SharedPreferences on first launch. Persists across app restarts. Falls back to `Settings.Secure.ANDROID_ID` as a secondary identifier.
+- **macOS**: Uses the machine's stable hardware UUID (`IOPlatformUUID`) as the base identity and persists it for app-level reuse.
 - **Simulators/Emulators**: Generate a UUIDv4 on first launch, stored locally. Each simulator instance gets its own unique ID.
 
 The device ID is:
@@ -261,6 +265,17 @@ Mollotov's HTTP API has **no authentication**. Any device on the same network ca
 
 ## Platform-Specific Architecture Details
 
+### macOS — Dual Renderer Architecture
+
+The macOS app exposes the same HTTP and MCP surface as the mobile apps, but its browser layer is runtime-switchable. It keeps both renderers available:
+
+- `WKWebView` for Safari/WebKit behavior
+- CEF for Chromium/Chrome behavior
+
+Both renderers conform to a shared abstraction, so navigation, JavaScript evaluation, screenshots, cookies, and state reads go through one handler interface. The toolbar segmented control and the `/v1/set-renderer` / `/v1/get-renderer` endpoints switch the active engine without changing the API contract.
+
+When the renderer changes, Mollotov migrates cookies from the previous engine into the new one before resuming automation. That preserves authenticated sessions while letting the user or LLM switch between Safari and Chrome rendering behavior.
+
 ### iOS — No-Injection DOM Access
 
 WKWebView's `evaluateJavaScript` executes in the page's JS context via the native bridge. It is not a persistent content script — it runs on demand and doesn't survive navigation. The page can theoretically detect these calls (e.g., by overriding DOM prototype methods), but this is true of all browser automation tools including Playwright.
@@ -276,7 +291,7 @@ These scripts are lightweight, non-persistent, and do not modify page content or
 
 ### Simulator & Emulator Support
 
-Both platforms support simulators/emulators alongside real devices. iOS Simulators are zero-setup; Android Emulators require `adb forward` for port mapping:
+Both mobile platforms support simulators/emulators alongside real devices. iOS Simulators are zero-setup; Android Emulators require `adb forward` for port mapping:
 
 **iOS Simulator**
 - Each Simulator instance runs its own app process

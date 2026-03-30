@@ -12,7 +12,7 @@ All methods are available via three interfaces:
 | [core.md](core.md) | Navigation, screenshots, DOM access, interaction, scrolling, viewport/device info, wait/sync |
 | [llm.md](llm.md) | LLM-optimized methods — accessibility tree, annotated screenshots, visible elements, page text, form state, smart queries |
 | [devtools.md](devtools.md) | Console/JS errors, network log, resource timeline, mutation observation, shadow DOM, request interception |
-| [browser.md](browser.md) | Dialogs/alerts, tabs, iframes, cookies/storage, clipboard, geolocation, JS evaluation |
+| [browser.md](browser.md) | Dialogs/alerts, tabs, iframes, cookies/storage, clipboard, geolocation, JS evaluation, renderer management |
 
 ---
 
@@ -28,32 +28,33 @@ All methods are available via three interfaces:
 
 ## Platform Support Matrix
 
-Not all methods have identical implementations on iOS and Android. Android has CDP (Chrome DevTools Protocol) which gives deep access. iOS relies on WKWebView native APIs + ephemeral bridge scripts for features WebKit doesn't expose.
+Not all methods have identical implementations on Android, iOS, and macOS. Android has CDP (Chrome DevTools Protocol) which gives deep access. iOS relies on WKWebView native APIs + ephemeral bridge scripts for features WebKit doesn't expose. macOS uses the same handler surface over two renderers: WKWebView for Safari/WebKit behavior and CEF for Chrome/Chromium behavior.
 
-| Method | Android | iOS | iOS Notes |
-|---|---|---|---|
-| Navigation, click, fill, type, scroll | Native | Native | |
-| Screenshots (viewport) | Native | Native | `WKWebView.takeSnapshot` |
-| Screenshots (full page) | CDP | Bridge | iOS requires scroll-and-stitch via bridge script |
-| DOM access | CDP | Native | `evaluateJavaScript` via native bridge |
-| Console messages | CDP `Runtime.consoleAPICalled` | Bridge | iOS requires `console.*` override bridge script |
-| Network log | CDP `Network.*` | Partial | iOS: only top-level nav via `WKNavigationDelegate`; XHR/fetch tracking requires bridge script wrapping `fetch`/`XMLHttpRequest` |
-| Resource timeline | CDP `Performance.*` | Partial | iOS: limited to `WKNavigationDelegate` events + `PerformanceObserver` bridge |
-| Request interception | CDP `Fetch.*` | Not supported | iOS `WKURLSchemeHandler` only works for custom schemes, not HTTP/HTTPS |
-| Mutation observation | CDP `DOM.*` | Bridge | iOS requires `MutationObserver` bridge script |
-| Accessibility tree | CDP `Accessibility.*` | Bridge | iOS requires DOM traversal bridge script querying ARIA attributes |
-| Page text extraction | CDP + Readability | Bridge | Both platforms need a Readability-style algorithm (bridge script or native port) |
-| Shadow DOM traversal | CDP `DOM.*` | Bridge | Limited on both platforms for `mode: "closed"` shadow roots |
-| Tabs | App-managed | App-managed | Both platforms must manage multiple WebView instances — no native tab API |
-| Iframes (same-origin) | CDP | Native | |
-| Iframes (cross-origin) | CDP (limited) | Not supported | iOS cannot evaluate JS in cross-origin iframes; Android CDP can with `contextId` |
-| Cookies | CDP `Network.getCookies` | Native | `WKHTTPCookieStore` |
-| Storage (local/session) | CDP/evaluate | Bridge | Both use `evaluateJavaScript` |
-| Clipboard read | Native | Restricted | iOS shows system paste permission banner; Android 10+ restricts background access |
-| Clipboard write | Native | Native | |
-| Geolocation override | CDP `Emulation.*` | Not supported | No public WKWebView API; would require `navigator.geolocation` bridge override |
-| Dialog handling | Native | Native | Both platforms have native dialog delegation APIs |
-| Keyboard simulation | Native | Native | Both can programmatically focus/blur inputs |
+| Method | Android | iOS | macOS | Notes |
+|---|---|---|---|---|
+| Navigation, click, fill, type, scroll | Native | Native | Native | macOS routes commands through the active WebKit or CEF renderer |
+| Screenshots (viewport) | Native | Native | Native | iOS uses `WKWebView.takeSnapshot`; macOS uses renderer-specific snapshot APIs |
+| Screenshots (full page) | CDP | Bridge | App-managed | iOS requires scroll-and-stitch via bridge script; macOS captures through the active renderer pipeline |
+| DOM access | CDP | Native | Native | iOS uses `evaluateJavaScript` via native bridge; macOS uses the active renderer's JS bridge |
+| Console messages | CDP `Runtime.consoleAPICalled` | Bridge | Renderer-dependent | macOS uses a WebKit bridge on the WKWebView path and native callbacks on the CEF path |
+| Network log | CDP `Network.*` | Partial | Partial | iOS: top-level nav via `WKNavigationDelegate`; macOS support depends on the active renderer, but the API surface stays the same |
+| Resource timeline | CDP `Performance.*` | Partial | Partial | iOS is limited to `WKNavigationDelegate` events + `PerformanceObserver`; macOS mirrors the active renderer's capabilities |
+| Request interception | CDP `Fetch.*` | Not supported | Not supported | iOS `WKURLSchemeHandler` only works for custom schemes, not HTTP/HTTPS |
+| Mutation observation | CDP `DOM.*` | Bridge | Renderer-dependent | iOS requires `MutationObserver` bridge script |
+| Accessibility tree | CDP `Accessibility.*` | Bridge | Renderer-dependent | iOS requires DOM traversal bridge script querying ARIA attributes |
+| Page text extraction | CDP + Readability | Bridge | Bridge | Both Apple-platform WebKit implementations rely on a Readability-style extraction path |
+| Shadow DOM traversal | CDP `DOM.*` | Bridge | Renderer-dependent | Limited on all platforms for `mode: "closed"` shadow roots |
+| Tabs | App-managed | App-managed | App-managed | All platforms manage multiple browser instances in app code |
+| Iframes (same-origin) | CDP | Native | Native | |
+| Iframes (cross-origin) | CDP (limited) | Not supported | Renderer-dependent | WebKit cannot evaluate JS in cross-origin iframes; Chromium-backed paths can expose more context |
+| Cookies | CDP `Network.getCookies` | Native | Native | iOS uses `WKHTTPCookieStore`; macOS migrates cookies automatically on renderer switch |
+| Storage (local/session) | CDP/evaluate | Bridge | Native | macOS storage access goes through the active renderer |
+| Clipboard read | Native | Restricted | Native | iOS shows a system paste permission banner; Android 10+ restricts background access |
+| Clipboard write | Native | Native | Native | |
+| Geolocation override | CDP `Emulation.*` | Not supported | Not supported | No public WKWebView API; macOS does not expose a supported override path |
+| Dialog handling | Native | Native | Native | All platforms have native dialog delegation APIs |
+| Keyboard simulation | Native | Native | Not supported | macOS has no soft keyboard equivalent to show or hide |
+| Renderer switching (`set-renderer`, `get-renderer`) | Not supported | Not supported | Native | macOS switches between WebKit and Chromium/CEF at runtime and migrates cookies automatically |
 
 **Legend:**
 - **Native** — uses platform SDK APIs, no scripts needed
@@ -62,6 +63,8 @@ Not all methods have identical implementations on iOS and Android. Android has C
 - **Partial** — works but with reduced data compared to Android
 - **Not supported** — no feasible implementation path; endpoint returns `PLATFORM_NOT_SUPPORTED` error
 - **Restricted** — works but triggers OS-level permission UI the user must accept on-device
+- **App-managed** — implemented in the app layer rather than by a single browser-engine API
+- **Renderer-dependent** — behavior depends on whether macOS is using WKWebView or CEF, but the endpoint contract remains the same
 
 ---
 
@@ -158,6 +161,8 @@ When exposed via MCP, methods use the `mollotov_` prefix:
 | `/v1/forward` | `mollotov_forward` |
 | `/v1/reload` | `mollotov_reload` |
 | `/v1/get-current-url` | `mollotov_get_current_url` |
+| `/v1/set-renderer` | `mollotov_set_renderer` |
+| `/v1/get-renderer` | `mollotov_get_renderer` |
 | `/v1/screenshot` | `mollotov_screenshot` |
 | `/v1/get-dom` | `mollotov_get_dom` |
 | `/v1/query-selector` | `mollotov_query_selector` |

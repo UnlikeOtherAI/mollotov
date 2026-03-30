@@ -6,6 +6,7 @@
 |---|---|---|---|
 | **iOS App** | SwiftUI + WKWebView | Swift | Native WebKit browser, Bonjour for mDNS |
 | **Android App** | Jetpack Compose + WebView | Kotlin | Chrome DevTools Protocol for DOM access |
+| **macOS App** | SwiftUI + WKWebView + CEF | Swift | Dual Safari/WebKit and Chrome/Chromium renderers, macOS 14+ |
 | **CLI** | Node.js | TypeScript | Published as `@unlikeotherai/mollotov` |
 | **MCP Servers** | MCP SDK | Per-platform | Browser-embedded + CLI standalone |
 
@@ -88,6 +89,27 @@ Both paths are available. CDP is preferred for DOM operations because:
 
 ---
 
+## macOS App
+
+| Concern | Choice | Why |
+|---|---|---|
+| **UI Framework** | SwiftUI | Matches Apple platform architecture and keeps macOS UI native |
+| **Browser Engines** | `WKWebView` + CEF | Runtime switching between Safari/WebKit and Chrome/Chromium behavior |
+| **Renderer Abstraction** | Shared Swift protocol over both engines | Keeps one handler surface for navigation, JS, screenshots, and cookies |
+| **CEF Integration** | Objective-C++ bridge over the CEF C API | Exposes Chromium safely to Swift code |
+| **HTTP Server / mDNS** | Network.framework | Reuses Apple-native local networking primitives on macOS |
+| **Min Target** | macOS 14+ | Required for the native app baseline and SwiftUI app lifecycle |
+
+### macOS — Key APIs
+
+- `WKWebView.evaluateJavaScript(_:)` — WebKit DOM queries and reads
+- `WKHTTPCookieStore` — WebKit cookie access and migration
+- CEF C API via Objective-C++ bridge — Chromium navigation, JS, cookies, screenshots
+- `NSViewRepresentable` / `NSWindow` integration — embeds the active renderer in SwiftUI
+- `NWListener` / `NWBrowser` (Network framework) — local HTTP serving and mDNS advertisement
+
+---
+
 ## CLI
 
 | Concern | Choice | Why |
@@ -146,6 +168,7 @@ mollotov/
   apps/
     ios/                  # Xcode project — Mollotov Browser
     android/              # Android Studio project — Mollotov Browser
+    macos/                # Xcode project — Mollotov Browser for macOS
   docs/                   # This documentation
 ```
 
@@ -192,3 +215,4 @@ WebView, NsdManager, PixelCopy are all Android SDK built-ins.
 | CLI | `pnpm build` | `mollotov` (global) or `pnpm dev` |
 | iOS | Xcode build | Run on device/simulator |
 | Android | `./gradlew assembleDebug` | Run on device/emulator |
+| macOS | Xcode build | Run on Mac |
