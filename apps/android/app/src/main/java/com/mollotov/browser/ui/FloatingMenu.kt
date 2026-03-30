@@ -4,7 +4,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,7 +17,6 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -26,23 +24,28 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.mollotov.browser.R
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
+import androidx.compose.foundation.gestures.awaitEachGesture
 
 /** App icon background color — warm peach/orange */
 private val MollotovOrange = Color(244f / 255f, 176f / 255f, 120f / 255f)
@@ -52,6 +55,7 @@ private val MollotovOrange = Color(244f / 255f, 176f / 255f, 120f / 255f)
  * - 44dp circular FAB with flame icon, vertically centered on the right edge.
  * - Horizontally draggable between left and right sides of the screen.
  * - Opens a blur overlay + fan-out menu items (no labels, wider spread).
+ * - Menu items are clamped to stay within screen bounds.
  */
 @Composable
 fun FloatingMenu(
@@ -73,7 +77,9 @@ fun FloatingMenu(
     val fabSizeDp = 44.dp
     val fabSizePx = with(density) { fabSizeDp.toPx() }
     val edgePaddingPx = with(density) { 16.dp.toPx() }
+    val menuItemSizePx = fabSizePx
     val spreadRadius = 120f
+    val dragThreshold = 10f
 
     data class MenuItem(val angle: Double, val action: () -> Unit, val iconName: String)
 
@@ -130,7 +136,7 @@ fun FloatingMenu(
             MenuItem(fanAngle(5), onSettings, "settings"),
         )
 
-        // Fan-out items (no labels)
+        // Fan-out items with screen-bound clamping
         items.forEach { item ->
             val scale by animateFloatAsState(
                 targetValue = if (isOpen) 1f else 0.3f,
@@ -143,22 +149,32 @@ fun FloatingMenu(
                 label = "alpha",
             )
             val angleRad = Math.toRadians(item.angle)
-            val dx = if (isOpen) (cos(angleRad) * spreadRadius).roundToInt() else 0
-            val dy = if (isOpen) (sin(angleRad) * spreadRadius).roundToInt() else 0
+            val rawDx = if (isOpen) (cos(angleRad) * spreadRadius).toFloat() else 0f
+            val rawDy = if (isOpen) (sin(angleRad) * spreadRadius).toFloat() else 0f
 
-            FloatingActionButton(
-                onClick = {
-                    item.action()
-                    isOpen = false
-                },
-                containerColor = MollotovOrange,
-                contentColor = Color.White,
-                shape = CircleShape,
+            // Clamp so items never leave the screen
+            val margin = menuItemSizePx / 2 + edgePaddingPx
+            val minDx = margin - clampedX
+            val maxDx = containerWidthPx - margin - clampedX
+            val minDy = margin - midY
+            val maxDy = containerHeightPx - margin - midY
+            val dx = rawDx.coerceIn(minDx, maxDx).roundToInt()
+            val dy = rawDy.coerceIn(minDy, maxDy).roundToInt()
+
+            Box(
+                contentAlignment = Alignment.Center,
                 modifier = Modifier
                     .size(44.dp)
                     .offset { IntOffset(fabOffsetX + dx, fabOffsetY + dy) }
                     .scale(scale)
-                    .alpha(alpha),
+                    .alpha(alpha)
+                    .shadow(3.dp, CircleShape)
+                    .clip(CircleShape)
+                    .background(MollotovOrange)
+                    .clickable {
+                        item.action()
+                        isOpen = false
+                    },
             ) {
                 val icon: ImageVector = when (item.iconName) {
                     "refresh" -> Icons.Filled.Refresh
@@ -169,38 +185,58 @@ fun FloatingMenu(
                     "settings" -> Icons.Filled.Settings
                     else -> Icons.Filled.Settings
                 }
-                Icon(imageVector = icon, contentDescription = item.iconName, modifier = Modifier.size(20.dp))
+                Icon(imageVector = icon, contentDescription = item.iconName, modifier = Modifier.size(20.dp), tint = Color.White)
             }
         }
 
-        // Main FAB — flame icon, draggable horizontally
-        FloatingActionButton(
-            onClick = { isOpen = !isOpen },
-            containerColor = MollotovOrange,
-            contentColor = Color.White,
-            shape = CircleShape,
+        // Main FAB — flame icon, custom gesture handles both tap and drag
+        Box(
+            contentAlignment = Alignment.Center,
             modifier = Modifier
                 .size(fabSizeDp)
                 .offset { IntOffset(fabOffsetX, fabOffsetY) }
                 .shadow(4.dp, CircleShape)
+                .clip(CircleShape)
+                .background(MollotovOrange)
                 .pointerInput(Unit) {
-                    detectHorizontalDragGestures(
-                        onHorizontalDrag = { _, dragAmount ->
-                            dragOffsetPx += dragAmount
-                        },
-                        onDragEnd = {
-                            val finalX = (baseX + dragOffsetPx).coerceIn(leftX, rightX)
-                            val screenMid = containerWidthPx / 2
-                            side = if (finalX < screenMid) -1f else 1f
-                            dragOffsetPx = 0f
-                        },
-                    )
+                    awaitEachGesture {
+                        // Wait for the initial down event
+                        val downEvent = awaitPointerEvent()
+                        val downChange = downEvent.changes.firstOrNull() ?: return@awaitEachGesture
+                        val startX = downChange.position.x
+                        var dragging = false
+
+                        do {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull() ?: break
+                            if (!change.pressed) {
+                                // Finger lifted
+                                change.consume()
+                                if (dragging) {
+                                    val finalX = (baseX + dragOffsetPx).coerceIn(leftX, rightX)
+                                    val screenMid = containerWidthPx / 2
+                                    side = if (finalX < screenMid) -1f else 1f
+                                    dragOffsetPx = 0f
+                                } else {
+                                    isOpen = !isOpen
+                                }
+                                break
+                            }
+                            val dx = change.position.x - startX
+                            if (abs(dx) > dragThreshold) {
+                                dragging = true
+                                dragOffsetPx = dx
+                                change.consume()
+                            }
+                        } while (true)
+                    }
                 },
         ) {
             Icon(
                 painter = painterResource(id = R.drawable.ic_launcher_foreground),
                 contentDescription = "Menu",
                 modifier = Modifier.size(36.dp),
+                tint = Color.White,
             )
         }
     }
