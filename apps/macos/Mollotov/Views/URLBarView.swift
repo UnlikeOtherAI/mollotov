@@ -49,6 +49,7 @@ struct URLBarView: View {
     @State private var selectedPreset: DevicePreset = .laptop
     @State private var isNarrow = false
     @State private var windowResizeObserver: Any?
+    @State private var isAnimatingResize = false
 
     var body: some View {
         VStack(spacing: 4) {
@@ -177,7 +178,9 @@ struct URLBarView: View {
             window.minSize = NSSize(width: 320, height: 480)
             window.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         } else if let size = preset.size {
-            // Unlock first so the window can actually resize
+            // Suppress the resize observer during programmatic animation
+            isAnimatingResize = true
+
             window.minSize = NSSize(width: 1, height: 1)
             window.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
 
@@ -190,11 +193,12 @@ struct URLBarView: View {
             )
             window.setFrame(newFrame, display: true, animate: true)
 
-            // Lock to exact size after animation completes
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            // Lock to exact size and re-enable observer after animation
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 guard let window = NSApplication.shared.keyWindow else { return }
                 window.minSize = size
                 window.maxSize = size
+                isAnimatingResize = false
             }
         }
     }
@@ -206,9 +210,9 @@ struct URLBarView: View {
             object: nil,
             queue: .main
         ) { _ in
+            guard !isAnimatingResize else { return }
             guard selectedPreset != .custom else { return }
             guard let window = NSApplication.shared.keyWindow else { return }
-            // If the window size no longer matches the preset, user is dragging — go to custom
             if let expected = selectedPreset.size,
                abs(window.frame.width - expected.width) > 2 || abs(window.frame.height - expected.height) > 2 {
                 selectedPreset = .custom
