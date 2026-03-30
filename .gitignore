@@ -22,3 +22,5 @@ local.properties
 # Test
 coverage/
 vendor/
+.ninja/
+apps/macos/Frameworks/
