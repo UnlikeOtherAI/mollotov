@@ -22,8 +22,14 @@ import androidx.compose.ui.unit.dp
 import com.mollotov.browser.browser.BookmarkStore
 
 @Composable
-fun BookmarksSheet(onNavigate: (String) -> Unit, onDismiss: () -> Unit) {
+fun BookmarksSheet(
+    currentTitle: String,
+    currentUrl: String,
+    onNavigate: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
     val bookmarks by BookmarkStore.bookmarks.collectAsState()
+    val isCurrentPageBookmarked = bookmarks.any { it.url == currentUrl }
 
     Column(modifier = Modifier.padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -31,10 +37,16 @@ fun BookmarksSheet(onNavigate: (String) -> Unit, onDismiss: () -> Unit) {
             if (bookmarks.isNotEmpty()) {
                 TextButton(onClick = { BookmarkStore.clear() }) { Text("Clear All") }
             }
+            if (currentUrl.isNotEmpty() && !isCurrentPageBookmarked) {
+                TextButton(onClick = {
+                    val title = currentTitle.ifEmpty { currentUrl }
+                    BookmarkStore.add(title, currentUrl)
+                }) { Text("Add") }
+            }
         }
         Spacer(Modifier.height(8.dp))
         if (bookmarks.isEmpty()) {
-            Text("No bookmarks. Add via CLI or MCP.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("No bookmarks yet. Tap Add to bookmark this page.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
             LazyColumn {
                 items(bookmarks, key = { it.id }) { bookmark ->

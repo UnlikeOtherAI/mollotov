@@ -45,7 +45,7 @@ struct BrowserView: View {
                 onReload: { webView?.reload() },
                 onSafariAuth: {
                     guard let webView, let url = webView.url else { return }
-                    safariAuth.authenticate(url: url, webView: webView, from: webView.window) {}
+                    safariAuth.authenticate(url: url, webView: webView)
                 },
                 onSettings: { showSettings = true },
                 onBookmarks: { showBookmarks = true },
@@ -61,10 +61,14 @@ struct BrowserView: View {
             SettingsView(serverState: serverState)
         }
         .sheet(isPresented: $showBookmarks) {
-            BookmarksView(onNavigate: { url in
-                guard let webView, let urlObj = URL(string: url) else { return }
-                webView.load(URLRequest(url: urlObj))
-            })
+            BookmarksView(
+                currentTitle: browserState.pageTitle,
+                currentURL: browserState.currentURL,
+                onNavigate: { url in
+                    guard let webView, let urlObj = URL(string: url) else { return }
+                    webView.load(URLRequest(url: urlObj))
+                }
+            )
         }
         .sheet(isPresented: $showHistory) {
             HistoryView(onNavigate: { url in
@@ -74,6 +78,9 @@ struct BrowserView: View {
         }
         .sheet(isPresented: $showNetworkInspector) {
             NetworkInspectorView()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+            safariAuth.onAppDidBecomeActive()
         }
     }
 }

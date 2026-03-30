@@ -3,8 +3,14 @@ import SwiftUI
 /// Full-screen bookmarks list. Tap a bookmark to navigate.
 struct BookmarksView: View {
     @ObservedObject var store = BookmarkStore.shared
+    let currentTitle: String
+    let currentURL: String
     let onNavigate: (String) -> Void
     @Environment(\.dismiss) private var dismiss
+
+    private var isCurrentPageBookmarked: Bool {
+        store.bookmarks.contains { $0.url == currentURL }
+    }
 
     var body: some View {
         NavigationStack {
@@ -17,7 +23,7 @@ struct BookmarksView: View {
                             .foregroundColor(.secondary)
                         Text("No Bookmarks")
                             .font(.headline)
-                        Text("Add bookmarks via the CLI or MCP.")
+                        Text("Tap + to bookmark this page.")
                             .font(.subheadline)
                             .foregroundColor(.secondary)
                         Spacer()
@@ -54,9 +60,19 @@ struct BookmarksView: View {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Done") { dismiss() }
                 }
-                if !store.bookmarks.isEmpty {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button("Clear All", role: .destructive) { store.removeAll() }
+                ToolbarItem(placement: .topBarTrailing) {
+                    HStack(spacing: 12) {
+                        if !store.bookmarks.isEmpty {
+                            Button("Clear All", role: .destructive) { store.removeAll() }
+                        }
+                        if !currentURL.isEmpty && !isCurrentPageBookmarked {
+                            Button {
+                                let title = currentTitle.isEmpty ? currentURL : currentTitle
+                                store.add(title: title, url: currentURL)
+                            } label: {
+                                Image(systemName: "plus")
+                            }
+                        }
                     }
                 }
             }

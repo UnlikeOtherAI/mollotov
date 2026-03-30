@@ -44,7 +44,7 @@ final class ServerState: ObservableObject {
                 guard let url = urlStr.flatMap({ URL(string: $0) }) ?? webView.url else {
                     return errorResponse(code: "NO_URL", message: "No URL to authenticate")
                 }
-                ctx.safariAuth.authenticate(url: url, webView: webView, from: webView.window) {}
+                ctx.safariAuth.authenticate(url: url, webView: webView)
                 return successResponse(["started": true, "url": url.absoluteString])
             }
             return result

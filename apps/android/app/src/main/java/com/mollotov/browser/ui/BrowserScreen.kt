@@ -119,6 +119,8 @@ fun BrowserScreen(
             sheetState = rememberModalBottomSheetState(),
         ) {
             BookmarksSheet(
+                currentTitle = pageTitle,
+                currentUrl = currentUrl,
                 onNavigate = { url -> webView?.loadUrl(url) },
                 onDismiss = { showBookmarks = false },
             )
