@@ -13,7 +13,7 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.28.0
         version: 1.28.0(zod@4.3.6)
-      '@unlike-other-ai/mollotov-shared':
+      '@unlikeotherai/mollotov-shared':
         specifier: workspace:*
         version: link:../shared
       bonjour-service:

@@ -6,7 +6,7 @@
 |---|---|---|---|
 | **iOS App** | SwiftUI + WKWebView | Swift | Native WebKit browser, Bonjour for mDNS |
 | **Android App** | Jetpack Compose + WebView | Kotlin | Chrome DevTools Protocol for DOM access |
-| **CLI** | Node.js | TypeScript | Published as `@unlike-other-ai/mollotov` |
+| **CLI** | Node.js | TypeScript | Published as `@unlikeotherai/mollotov` |
 | **MCP Servers** | MCP SDK | Per-platform | Browser-embedded + CLI standalone |
 
 ---
@@ -101,13 +101,13 @@ Both paths are available. CDP is preferred for DOM operations because:
 | **Output Formatting** | [chalk](https://www.npmjs.com/package/chalk) + [cli-table3](https://www.npmjs.com/package/cli-table3) | Terminal colors + table formatting |
 | **Build** | [tsup](https://github.com/egoist/tsup) | Fast bundler for CLI distribution |
 | **Package Manager** | pnpm | Workspace-aware, fast, disk-efficient |
-| **Publishing** | npm as `@unlike-other-ai/mollotov` | Scoped under org |
+| **Publishing** | npm as `@unlikeotherai/mollotov` | Scoped under org |
 
 ### CLI — Project Structure
 
 ```
 packages/
-  cli/                    # @unlike-other-ai/mollotov
+  cli/                    # @unlikeotherai/mollotov
     src/
       commands/           # Commander command definitions
       discovery/          # mDNS browser discovery
@@ -141,7 +141,7 @@ packages/
 ```
 mollotov/
   packages/
-    cli/                  # Node.js CLI — @unlike-other-ai/mollotov
+    cli/                  # Node.js CLI — @unlikeotherai/mollotov
     shared/               # Shared TypeScript types and constants
   apps/
     ios/                  # Xcode project — Mollotov Browser

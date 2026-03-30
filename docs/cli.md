@@ -3,9 +3,9 @@
 ## Installation
 
 ```bash
-npm install -g @unlike-other-ai/mollotov
+npm install -g @unlikeotherai/mollotov
 # or
-pnpm add -g @unlike-other-ai/mollotov
+pnpm add -g @unlikeotherai/mollotov
 ```
 
 ## Usage

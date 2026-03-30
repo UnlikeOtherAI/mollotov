@@ -41,7 +41,7 @@ Get a second opinion from a different provider **before implementation** for: ne
 - Default port: `8420`.
 - Package manager: pnpm.
 - CLI: TypeScript, native apps: Swift (iOS) / Kotlin (Android).
-- npm scope: `@unlike-other-ai/mollotov`.
+- npm scope: `@unlikeotherai/mollotov`.
 
 ## Agent Behavior Rules
 

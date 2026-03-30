@@ -1,5 +1,5 @@
 import type { Command } from "commander";
-import { CLI_MCP_PORT } from "@unlike-other-ai/mollotov-shared";
+import { CLI_MCP_PORT } from "@unlikeotherai/mollotov-shared";
 
 export function registerMcp(program: Command): void {
   program

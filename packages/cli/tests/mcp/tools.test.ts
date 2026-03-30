@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { browserTools, cliTools } from "../../src/mcp/tools.js";
-import { BrowserMcpTools, CliMcpTools } from "@unlike-other-ai/mollotov-shared";
+import { BrowserMcpTools, CliMcpTools } from "@unlikeotherai/mollotov-shared";
 
 describe("MCP tool definitions", () => {
   it("has correct number of browser tools", () => {

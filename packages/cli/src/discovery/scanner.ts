@@ -1,5 +1,5 @@
 import Bonjour, { type Service } from "bonjour-service";
-import { MDNS_SERVICE_TYPE } from "@unlike-other-ai/mollotov-shared";
+import { MDNS_SERVICE_TYPE } from "@unlikeotherai/mollotov-shared";
 import type { DiscoveredDevice } from "../types.js";
 
 export async function scanForDevices(

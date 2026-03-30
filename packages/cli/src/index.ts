@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { Command } from "commander";
-import { DEFAULT_PORT } from "@unlike-other-ai/mollotov-shared";
+import { DEFAULT_PORT } from "@unlikeotherai/mollotov-shared";
 import { registerAllCommands } from "./commands/index.js";
 
 const program = new Command();

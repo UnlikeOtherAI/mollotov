@@ -29,7 +29,7 @@ A minimal native browser built on each platform's WebView engine (WKWebView / An
 - Takes screenshots, reads DOM, navigates, clicks, fills forms, scrolls — all via native bridge
 - Provides a minimal UI: URL bar + settings panel with connection info
 
-### 2. Mollotov CLI (`@unlike-other-ai/mollotov`)
+### 2. Mollotov CLI (`@unlikeotherai/mollotov`)
 
 A Node.js CLI published on npm that:
 
@@ -110,7 +110,7 @@ For CLI command reference, see [cli.md](cli.md).
 ### Phase 3 — Polish
 - CLI MCP server for direct LLM integration
 - Built-in LLM help system
-- npm publish `@unlike-other-ai/mollotov`
+- npm publish `@unlikeotherai/mollotov`
 - Settings panel with connection info and QR code
 
 ## Simulator & Emulator Support
@@ -133,7 +133,7 @@ The `getDeviceInfo` endpoint (see [api/core.md](api/core.md)) includes an `isSim
 
 ## Publishing
 
-- **npm**: `@unlike-other-ai/mollotov`
+- **npm**: `@unlikeotherai/mollotov`
 - **App Store**: Mollotov Browser
 - **Play Store**: Mollotov Browser
 - **Icon/branding**: Mollotov (two Ls)

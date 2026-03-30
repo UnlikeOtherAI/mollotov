@@ -1,4 +1,4 @@
-import type { Platform } from "@unlike-other-ai/mollotov-shared";
+import type { Platform } from "@unlikeotherai/mollotov-shared";
 
 export interface DiscoveredDevice {
   id: string;
