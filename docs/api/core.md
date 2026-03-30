@@ -81,6 +81,35 @@ Response:
 }
 ```
 
+### `setHome`
+Set the device's home page URL. Persisted across app restarts.
+
+```json
+POST /v1/set-home
+{
+  "url": "https://example.com"
+}
+
+Response:
+{
+  "success": true,
+  "url": "https://example.com"
+}
+```
+
+### `getHome`
+Get the current home page URL.
+
+```json
+POST /v1/get-home
+
+Response:
+{
+  "success": true,
+  "url": "https://example.com"
+}
+```
+
 ---
 
 ## Screenshots

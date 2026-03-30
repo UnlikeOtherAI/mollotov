@@ -14,6 +14,8 @@ export const commandMetadata: Record<string, CommandHelp> = {
   forward: { purpose: "Go forward in browser history", when: "Returning to a page after going back", explanation: "Navigates one step forward in the browser's session history.", errors: ["NAVIGATION_ERROR"], related: ["back", "navigate"] },
   reload: { purpose: "Reload the current page", when: "Page content may have changed or you need a fresh state", explanation: "Reloads the current page and waits for load to complete.", errors: ["NAVIGATION_ERROR", "TIMEOUT"], related: ["navigate"] },
   "get-current-url": { purpose: "Get the current URL and title", when: "Checking which page the browser is on", explanation: "Returns the current page URL and title without performing any navigation.", related: ["navigate"] },
+  "set-home": { purpose: "Set the device home page", when: "Configuring which URL loads on app start", explanation: "Sets a persistent home page URL on the device. The browser will load this URL on next launch instead of the default.", related: ["get-home", "navigate"] },
+  "get-home": { purpose: "Get the device home page", when: "Checking what URL loads on app start", explanation: "Returns the currently configured home page URL.", related: ["set-home", "navigate"] },
 
   // --- Screenshots ---
   screenshot: { purpose: "Capture a screenshot", when: "Verifying visual state, debugging layout, or saving a snapshot", explanation: "Takes a PNG or JPEG screenshot of the visible viewport or full page. By default saves to a file (never returns base64 to LLMs). Use --output to control the save directory.", errors: ["TIMEOUT"], related: ["screenshot-annotated"] },

@@ -52,6 +52,8 @@ export const browserTools: BrowserToolDef[] = [
   { name: "mollotov_forward", description: "Go forward in browser history", method: "forward", schema: { device }, bodyFromArgs: passthrough },
   { name: "mollotov_reload", description: "Reload the current page", method: "reload", schema: { device }, bodyFromArgs: passthrough },
   { name: "mollotov_get_current_url", description: "Get the current URL and page title", method: "getCurrentUrl", schema: { device }, bodyFromArgs: passthrough },
+  { name: "mollotov_set_home", description: "Set the device home page URL. Persisted across app restarts.", method: "setHome", schema: { device, url: url.describe("Home page URL") }, bodyFromArgs: passthrough },
+  { name: "mollotov_get_home", description: "Get the device home page URL", method: "getHome", schema: { device }, bodyFromArgs: passthrough },
 
   // Screenshots
   { name: "mollotov_screenshot", description: "Take a screenshot of the device browser", method: "screenshot", schema: { device, fullPage: z.boolean().optional().describe("Capture full page"), format: z.enum(["png", "jpeg"]).optional().describe("Image format"), quality: z.number().optional().describe("JPEG quality 0-100") }, bodyFromArgs: passthrough },

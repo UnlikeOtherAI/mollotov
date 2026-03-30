@@ -100,6 +100,20 @@ Get current URL and title.
 mollotov url --device "My iPhone"
 ```
 
+### `mollotov home set <url>`
+Set the device's home page. Persisted across app restarts.
+
+```bash
+mollotov home set "https://example.com" --device "My iPhone"
+```
+
+### `mollotov home get`
+Get the current home page URL.
+
+```bash
+mollotov home get --device "My iPhone"
+```
+
 ---
 
 ## Screenshot Commands
