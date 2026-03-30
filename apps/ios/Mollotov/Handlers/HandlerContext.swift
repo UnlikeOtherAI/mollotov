@@ -32,14 +32,14 @@ final class HandlerContext: NSObject, WKScriptMessageHandler {
             var dot = document.createElement('div');
             dot.style.cssText = 'position:fixed;left:\(x)px;top:\(y)px;width:36px;height:36px;' +
                 'margin-left:-18px;margin-top:-18px;border-radius:50%;' +
-                'background:rgba(59,130,246,0.3);pointer-events:none;z-index:2147483647;' +
-                'transition:transform 0.4s ease-out, opacity 0.4s ease-out;transform:scale(1);opacity:1;';
+                'background:rgba(59,130,246,0.7);pointer-events:none;z-index:2147483647;' +
+                'transition:transform 0.5s ease-out, opacity 0.5s ease-out;transform:scale(1);opacity:1;';
             document.body.appendChild(dot);
             var ripple = document.createElement('div');
             ripple.style.cssText = 'position:fixed;left:\(x)px;top:\(y)px;width:36px;height:36px;' +
                 'margin-left:-18px;margin-top:-18px;border-radius:50%;' +
-                'border:2px solid rgba(59,130,246,0.3);pointer-events:none;z-index:2147483647;' +
-                'transition:transform 0.5s ease-out, opacity 0.5s ease-out;transform:scale(1);opacity:1;';
+                'border:2px solid rgba(59,130,246,0.7);pointer-events:none;z-index:2147483647;' +
+                'transition:transform 0.6s ease-out, opacity 0.6s ease-out;transform:scale(1);opacity:1;';
             document.body.appendChild(ripple);
             requestAnimationFrame(function() {
                 ripple.style.transform = 'scale(3)';
@@ -48,11 +48,11 @@ final class HandlerContext: NSObject, WKScriptMessageHandler {
             setTimeout(function() {
                 dot.style.transform = 'scale(0.5)';
                 dot.style.opacity = '0';
-            }, 300);
+            }, 550);
             setTimeout(function() {
                 dot.remove();
                 ripple.remove();
-            }, 600);
+            }, 1100);
         })();
         """
         try? await evaluateJS(js)
@@ -74,6 +74,36 @@ final class HandlerContext: NSObject, WKScriptMessageHandler {
            let x = pos["x"], let y = pos["y"] {
             await showTouchIndicator(x: x, y: y)
         }
+    }
+
+    /// Show a toast message overlay at the bottom of the viewport.
+    func showToast(_ message: String) async {
+        let escaped = message
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "'", with: "\\'")
+            .replacingOccurrences(of: "\n", with: "\\n")
+        let js = """
+        (function() {
+            var existing = document.getElementById('__mollotov_toast');
+            if (existing) existing.remove();
+            var toast = document.createElement('div');
+            toast.id = '__mollotov_toast';
+            toast.textContent = '\(escaped)';
+            toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);' +
+                'max-width:390px;width:calc(100% - 32px);padding:14px 22px;border-radius:16px;' +
+                'background:rgba(0,0,0,0.5);color:#fff;font:15px/1.4 -apple-system,system-ui,sans-serif;' +
+                'text-align:center;pointer-events:none;z-index:2147483647;' +
+                'backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);' +
+                'transition:opacity 0.3s ease-out;opacity:0;';
+            document.body.appendChild(toast);
+            requestAnimationFrame(function() { toast.style.opacity = '1'; });
+            setTimeout(function() {
+                toast.style.opacity = '0';
+                setTimeout(function() { toast.remove(); }, 300);
+            }, 3000);
+        })();
+        """
+        try? await evaluateJS(js)
     }
 
     func evaluateJSReturningJSON(_ script: String) async throws -> [String: Any] {

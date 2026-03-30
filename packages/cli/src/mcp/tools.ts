@@ -6,6 +6,7 @@ const device = z.string().describe("Device ID, name, or IP address");
 const selector = z.string().describe("CSS selector");
 const url = z.string().describe("URL");
 const timeout = z.number().optional().describe("Timeout in milliseconds");
+const message = z.string().optional().describe("Optional message to show on device screen as a toast overlay while this action runs. Use this to narrate what you are doing, e.g. 'Clicking the login button' or 'Scrolling to pricing section'. The toast appears at the bottom of the viewport with a semi-transparent background.");
 
 const filterProps = {
   platform: z.enum(["ios", "android"]).optional().describe("Filter by platform"),
@@ -46,7 +47,7 @@ function filterBody(args: Record<string, unknown>): Record<string, unknown> {
 
 export const browserTools: BrowserToolDef[] = [
   // Navigation
-  { name: "mollotov_navigate", description: "Navigate device browser to a URL", method: "navigate", schema: { device, url: url.describe("URL to navigate to") }, bodyFromArgs: passthrough },
+  { name: "mollotov_navigate", description: "Navigate device browser to a URL", method: "navigate", schema: { device, url: url.describe("URL to navigate to"), message }, bodyFromArgs: passthrough },
   { name: "mollotov_back", description: "Go back in browser history", method: "back", schema: { device }, bodyFromArgs: passthrough },
   { name: "mollotov_forward", description: "Go forward in browser history", method: "forward", schema: { device }, bodyFromArgs: passthrough },
   { name: "mollotov_reload", description: "Reload the current page", method: "reload", schema: { device }, bodyFromArgs: passthrough },
@@ -63,17 +64,17 @@ export const browserTools: BrowserToolDef[] = [
   { name: "mollotov_get_attributes", description: "Get all attributes of an element", method: "getAttributes", schema: { device, selector }, bodyFromArgs: passthrough },
 
   // Interaction
-  { name: "mollotov_click", description: "Click an element", method: "click", schema: { device, selector, timeout }, bodyFromArgs: passthrough },
-  { name: "mollotov_tap", description: "Tap at specific coordinates", method: "tap", schema: { device, x: z.number().describe("X coordinate"), y: z.number().describe("Y coordinate") }, bodyFromArgs: passthrough },
-  { name: "mollotov_fill", description: "Fill a form field with a value", method: "fill", schema: { device, selector, value: z.string().describe("Value to fill"), timeout }, bodyFromArgs: passthrough },
+  { name: "mollotov_click", description: "Click an element. Shows a blue touch indicator at the element location.", method: "click", schema: { device, selector, timeout, message }, bodyFromArgs: passthrough },
+  { name: "mollotov_tap", description: "Tap at specific coordinates. Shows a blue touch indicator at the tap point.", method: "tap", schema: { device, x: z.number().describe("X coordinate"), y: z.number().describe("Y coordinate"), message }, bodyFromArgs: passthrough },
+  { name: "mollotov_fill", description: "Fill a form field with a value. Shows a touch indicator at the field.", method: "fill", schema: { device, selector, value: z.string().describe("Value to fill"), timeout, message }, bodyFromArgs: passthrough },
   { name: "mollotov_type", description: "Type text character by character", method: "type", schema: { device, selector: selector.optional(), text: z.string().describe("Text to type"), delay: z.number().optional().describe("Delay between keystrokes in ms") }, bodyFromArgs: passthrough },
   { name: "mollotov_select_option", description: "Select an option from a dropdown", method: "selectOption", schema: { device, selector, value: z.string().describe("Option value to select") }, bodyFromArgs: passthrough },
   { name: "mollotov_check", description: "Check a checkbox", method: "check", schema: { device, selector }, bodyFromArgs: passthrough },
   { name: "mollotov_uncheck", description: "Uncheck a checkbox", method: "uncheck", schema: { device, selector }, bodyFromArgs: passthrough },
 
   // Scrolling
-  { name: "mollotov_scroll", description: "Scroll by pixel delta", method: "scroll", schema: { device, deltaX: z.number().describe("Horizontal pixels"), deltaY: z.number().describe("Vertical pixels") }, bodyFromArgs: passthrough },
-  { name: "mollotov_scroll2", description: "Scroll to make an element visible (resolution-aware)", method: "scroll2", schema: { device, selector, position: z.enum(["top", "center", "bottom"]).optional().describe("Target position in viewport"), maxScrolls: z.number().optional().describe("Max scroll attempts") }, bodyFromArgs: passthrough },
+  { name: "mollotov_scroll", description: "Scroll by pixel delta", method: "scroll", schema: { device, deltaX: z.number().describe("Horizontal pixels"), deltaY: z.number().describe("Vertical pixels"), message }, bodyFromArgs: passthrough },
+  { name: "mollotov_scroll2", description: "Scroll to make an element visible (resolution-aware). Shows a touch indicator at the target element.", method: "scroll2", schema: { device, selector, position: z.enum(["top", "center", "bottom"]).optional().describe("Target position in viewport"), maxScrolls: z.number().optional().describe("Max scroll attempts"), message }, bodyFromArgs: passthrough },
   { name: "mollotov_scroll_to_top", description: "Scroll to the top of the page", method: "scrollToTop", schema: { device }, bodyFromArgs: passthrough },
   { name: "mollotov_scroll_to_bottom", description: "Scroll to the bottom of the page", method: "scrollToBottom", schema: { device }, bodyFromArgs: passthrough },
 
@@ -93,7 +94,10 @@ export const browserTools: BrowserToolDef[] = [
   { name: "mollotov_find_input", description: "Find an input field by label, placeholder, or name", method: "findInput", schema: { device, label: z.string().optional().describe("Input label"), placeholder: z.string().optional().describe("Input placeholder"), name: z.string().optional().describe("Input name attribute") }, bodyFromArgs: passthrough },
 
   // Evaluate
-  { name: "mollotov_evaluate", description: "Evaluate JavaScript in the page context", method: "evaluate", schema: { device, expression: z.string().describe("JavaScript expression to evaluate") }, bodyFromArgs: passthrough },
+  { name: "mollotov_evaluate", description: "Evaluate JavaScript in the page context", method: "evaluate", schema: { device, expression: z.string().describe("JavaScript expression to evaluate"), message }, bodyFromArgs: passthrough },
+
+  // Toast
+  { name: "mollotov_toast", description: "Show a toast message overlay on the device screen. Use this to narrate actions, explain what you are doing, or communicate status to anyone watching the device. The message appears in a semi-transparent card at the bottom of the viewport for 3 seconds.", method: "toast", schema: { device, message: z.string().describe("Message to display on the device screen") }, bodyFromArgs: passthrough },
 
   // Console
   { name: "mollotov_get_console_messages", description: "Get browser console messages", method: "getConsoleMessages", schema: { device, level: z.enum(["log", "warn", "error", "info", "debug"]).optional().describe("Filter by level"), since: z.string().optional().describe("ISO timestamp cutoff"), limit: z.number().optional().describe("Max messages") }, bodyFromArgs: passthrough },

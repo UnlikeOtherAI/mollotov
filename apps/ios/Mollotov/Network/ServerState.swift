@@ -32,6 +32,16 @@ final class ServerState: ObservableObject {
     @MainActor
     private func registerHandlers() {
         let ctx = handlerContext
+        router.handlerContext = ctx
+
+        // Toast endpoint — show a message overlay on the device
+        router.register("toast") { body in
+            guard let message = body["message"] as? String else {
+                return errorResponse(code: "MISSING_PARAM", message: "message is required")
+            }
+            await ctx.showToast(message)
+            return successResponse(["message": message])
+        }
 
         NavigationHandler(context: ctx).register(on: router)
         ScreenshotHandler(context: ctx).register(on: router)

@@ -7,7 +7,7 @@ import com.mollotov.browser.network.successResponse
 class InteractionHandler(private val ctx: HandlerContext) {
     fun register(router: Router) {
         router.register("click") { click(it) }
-        router.register("tap") { click(it) } // tap is alias for click on mobile
+        router.register("tap") { tap(it) }
         router.register("fill") { fill(it) }
         router.register("type") { type(it) }
         router.register("select-option") { selectOption(it) }
@@ -18,6 +18,25 @@ class InteractionHandler(private val ctx: HandlerContext) {
     private suspend fun click(body: Map<String, Any?>): Map<String, Any?> {
         val selector = body["selector"] as? String ?: return errorResponse("MISSING_PARAM", "selector is required")
         val safe = selector.replace("'", "\\'")
+        val js = "(function(){var el=document.querySelector('$safe');if(!el)return null;el.scrollIntoView({block:'center'});el.click();var r=el.getBoundingClientRect();return{tag:el.tagName.toLowerCase(),text:(el.textContent||'').trim().substring(0,100),rect:{x:r.x,y:r.y,width:r.width,height:r.height}};})()"
+        return try {
+            val result = ctx.evaluateJSReturningJSON(js)
+            if (result.isEmpty()) {
+                errorResponse("ELEMENT_NOT_FOUND", "No element matches: $selector")
+            } else {
+                ctx.showTouchIndicatorForElement(selector)
+                successResponse(mapOf("element" to result))
+            }
+        } catch (e: Exception) {
+            errorResponse("EVAL_ERROR", e.message ?: "Unknown error")
+        }
+    }
+
+    private suspend fun tap(body: Map<String, Any?>): Map<String, Any?> {
+        val selector = body["selector"] as? String ?: return errorResponse("MISSING_PARAM", "selector is required")
+        val safe = selector.replace("'", "\\'")
+        // Show touch indicator before performing the tap
+        ctx.showTouchIndicatorForElement(selector)
         val js = "(function(){var el=document.querySelector('$safe');if(!el)return null;el.scrollIntoView({block:'center'});el.click();var r=el.getBoundingClientRect();return{tag:el.tagName.toLowerCase(),text:(el.textContent||'').trim().substring(0,100),rect:{x:r.x,y:r.y,width:r.width,height:r.height}};})()"
         return try {
             val result = ctx.evaluateJSReturningJSON(js)
@@ -35,7 +54,12 @@ class InteractionHandler(private val ctx: HandlerContext) {
         val js = "(function(){var el=document.querySelector('$safe');if(!el)return null;el.focus();var nativeSetter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value')||Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype,'value');if(nativeSetter&&nativeSetter.set){nativeSetter.set.call(el,'$safeVal');}else{el.value='$safeVal';}el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));return{tag:el.tagName.toLowerCase(),name:el.name||'',value:el.value};})()"
         return try {
             val result = ctx.evaluateJSReturningJSON(js)
-            if (result.isEmpty()) errorResponse("ELEMENT_NOT_FOUND", "No element matches: $selector") else successResponse(mapOf("element" to result))
+            if (result.isEmpty()) {
+                errorResponse("ELEMENT_NOT_FOUND", "No element matches: $selector")
+            } else {
+                ctx.showTouchIndicatorForElement(selector)
+                successResponse(mapOf("element" to result))
+            }
         } catch (e: Exception) {
             errorResponse("EVAL_ERROR", e.message ?: "Unknown error")
         }

@@ -6,6 +6,7 @@ typealias RouteHandler = @Sendable ([String: Any]) async -> [String: Any]
 /// Maps POST /v1/{method} paths to handler functions.
 final class Router: @unchecked Sendable {
     private var routes: [String: RouteHandler] = [:]
+    var handlerContext: HandlerContext?
 
     func register(_ method: String, handler: @escaping RouteHandler) {
         routes[method] = handler
@@ -21,6 +22,12 @@ final class Router: @unchecked Sendable {
         let result = await handler(body)
         let success = result["success"] as? Bool ?? false
         let status = success ? 200 : (result["error"] != nil ? 400 : 200)
+
+        // Auto-show toast if the request includes a "message" param
+        if let message = body["message"] as? String, !message.isEmpty, let ctx = handlerContext {
+            await ctx.showToast(message)
+        }
+
         return (status, result)
     }
 
@@ -49,6 +56,7 @@ final class Router: @unchecked Sendable {
             "get-intercepted-requests", "clear-request-interception",
             "show-keyboard", "hide-keyboard", "get-keyboard-state",
             "resize-viewport", "reset-viewport", "is-element-obscured",
+            "toast",
         ]
         for method in methods {
             if routes[method] == nil {

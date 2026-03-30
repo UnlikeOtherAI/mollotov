@@ -73,6 +73,85 @@ class HandlerContext {
         return element.jsonObject.entries.associate { (k, v) -> k to jsonElementToAny(v) }
     }
 
+    suspend fun showTouchIndicator(x: Double, y: Double) {
+        val js = """
+        (function() {
+            var dot = document.createElement('div');
+            dot.style.cssText = 'position:fixed;left:${x}px;top:${y}px;width:36px;height:36px;' +
+                'margin-left:-18px;margin-top:-18px;border-radius:50%;' +
+                'background:rgba(59,130,246,0.7);pointer-events:none;z-index:2147483647;' +
+                'transition:transform 0.5s ease-out, opacity 0.5s ease-out;transform:scale(1);opacity:1;';
+            document.body.appendChild(dot);
+            var ripple = document.createElement('div');
+            ripple.style.cssText = 'position:fixed;left:${x}px;top:${y}px;width:36px;height:36px;' +
+                'margin-left:-18px;margin-top:-18px;border-radius:50%;' +
+                'border:2px solid rgba(59,130,246,0.7);pointer-events:none;z-index:2147483647;' +
+                'transition:transform 0.6s ease-out, opacity 0.6s ease-out;transform:scale(1);opacity:1;';
+            document.body.appendChild(ripple);
+            requestAnimationFrame(function() {
+                ripple.style.transform = 'scale(3)';
+                ripple.style.opacity = '0';
+            });
+            setTimeout(function() {
+                dot.style.transform = 'scale(0.5)';
+                dot.style.opacity = '0';
+            }, 550);
+            setTimeout(function() { dot.remove(); ripple.remove(); }, 1100);
+        })();
+        """.trimIndent()
+        try { evaluateJS(js) } catch (_: Exception) {}
+    }
+
+    suspend fun showTouchIndicatorForElement(selector: String) {
+        val escaped = selector.replace("'", "\\'")
+        val js = """
+        (function() {
+            var el = document.querySelector('$escaped');
+            if (!el) return JSON.stringify(null);
+            var r = el.getBoundingClientRect();
+            return JSON.stringify({x: r.left + r.width/2, y: r.top + r.height/2});
+        })()
+        """.trimIndent()
+        try {
+            val raw = evaluateJS(js)
+            val unescaped = if (raw.startsWith("\"") && raw.endsWith("\"")) {
+                json.decodeFromString<String>(raw)
+            } else raw
+            if (unescaped != "null") {
+                val pos = json.parseToJsonElement(unescaped).jsonObject
+                val px = pos["x"]?.toString()?.toDoubleOrNull()
+                val py = pos["y"]?.toString()?.toDoubleOrNull()
+                if (px != null && py != null) showTouchIndicator(px, py)
+            }
+        } catch (_: Exception) {}
+    }
+
+    suspend fun showToast(message: String) {
+        val escaped = message.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n")
+        val js = """
+        (function() {
+            var existing = document.getElementById('__mollotov_toast');
+            if (existing) existing.remove();
+            var toast = document.createElement('div');
+            toast.id = '__mollotov_toast';
+            toast.textContent = '$escaped';
+            toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);' +
+                'max-width:390px;width:calc(100% - 32px);padding:14px 22px;border-radius:16px;' +
+                'background:rgba(0,0,0,0.5);color:#fff;font:15px/1.4 -apple-system,system-ui,sans-serif;' +
+                'text-align:center;pointer-events:none;z-index:2147483647;' +
+                'backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);' +
+                'transition:opacity 0.3s ease-out;opacity:0;';
+            document.body.appendChild(toast);
+            requestAnimationFrame(function() { toast.style.opacity = '1'; });
+            setTimeout(function() {
+                toast.style.opacity = '0';
+                setTimeout(function() { toast.remove(); }, 300);
+            }, 3000);
+        })();
+        """.trimIndent()
+        try { evaluateJS(js) } catch (_: Exception) {}
+    }
+
     private fun jsonElementToAny(element: JsonElement): Any? = when (element) {
         is kotlinx.serialization.json.JsonNull -> null
         is kotlinx.serialization.json.JsonPrimitive -> {

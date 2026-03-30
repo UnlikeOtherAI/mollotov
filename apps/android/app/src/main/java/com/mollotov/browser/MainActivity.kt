@@ -53,6 +53,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun registerHandlers(deviceInfo: DeviceInfo) {
+        router.handlerContext = handlerContext
+
         NavigationHandler(handlerContext).register(router)
         ScreenshotHandler(handlerContext).register(router)
         DOMHandler(handlerContext).register(router)
@@ -65,6 +67,12 @@ class MainActivity : ComponentActivity() {
         MutationHandler(handlerContext).register(router)
         BrowserManagementHandler(handlerContext, applicationContext).register(router)
         LLMHandler(handlerContext).register(router)
+
+        router.register("toast") { body ->
+            val message = body["message"] as? String ?: "No message"
+            handlerContext.showToast(message)
+            mapOf("success" to true)
+        }
 
         router.registerStubs() // Fill remaining unimplemented methods
     }

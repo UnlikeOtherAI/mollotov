@@ -30,7 +30,12 @@ class ScrollHandler(private val ctx: HandlerContext) {
         val js = "(function(){var el=document.querySelector('$safe');if(!el)return null;el.scrollIntoView({block:'$position',behavior:'smooth'});var r=el.getBoundingClientRect();return{element:{tag:el.tagName.toLowerCase(),visible:r.top>=0&&r.bottom<=window.innerHeight,rect:{x:r.x,y:r.y,width:r.width,height:r.height}},scrollsPerformed:1,viewport:{width:window.innerWidth,height:window.innerHeight}};})()"
         return try {
             val result = ctx.evaluateJSReturningJSON(js)
-            if (result.isEmpty()) errorResponse("ELEMENT_NOT_FOUND", "Element not found: $selector") else successResponse(result)
+            if (result.isEmpty()) {
+                errorResponse("ELEMENT_NOT_FOUND", "Element not found: $selector")
+            } else {
+                ctx.showTouchIndicatorForElement(selector)
+                successResponse(result)
+            }
         } catch (e: Exception) {
             errorResponse("EVAL_ERROR", e.message ?: "Unknown error")
         }

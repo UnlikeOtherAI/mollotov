@@ -1,12 +1,14 @@
 package com.mollotov.browser.network
 
 import android.webkit.WebView
+import com.mollotov.browser.handlers.HandlerContext
 
 typealias RouteHandler = suspend (body: Map<String, Any?>) -> Map<String, Any?>
 
 class Router {
     private val routes = mutableMapOf<String, RouteHandler>()
     var webView: WebView? = null
+    var handlerContext: HandlerContext? = null
 
     fun register(method: String, handler: RouteHandler) {
         routes[method] = handler
@@ -21,6 +23,12 @@ class Router {
         val result = handler(body)
         val success = result["success"] as? Boolean ?: false
         val status = if (success) 200 else if (result.containsKey("error")) 400 else 200
+
+        val message = body["message"] as? String
+        if (message != null) {
+            handlerContext?.showToast(message)
+        }
+
         return status to result
     }
 
