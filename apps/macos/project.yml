@@ -1,0 +1,40 @@
+name: Mollotov
+options:
+  bundleIdPrefix: com.mollotov
+  deploymentTarget:
+    macOS: "14.0"
+  xcodeVersion: "16.0"
+
+targets:
+  Mollotov:
+    type: application
+    platform: macOS
+    sources:
+      - path: Mollotov
+        excludes:
+          - "**/*.plist"
+    settings:
+      base:
+        SWIFT_OBJC_BRIDGING_HEADER: Mollotov/Mollotov-Bridging-Header.h
+        FRAMEWORK_SEARCH_PATHS: $(PROJECT_DIR)/Frameworks
+        HEADER_SEARCH_PATHS: $(PROJECT_DIR)/Frameworks/cef_include
+        CODE_SIGN_ENTITLEMENTS: Mollotov/Mollotov.entitlements
+        INFOPLIST_FILE: Mollotov/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.mollotov.browser.macos
+        ENABLE_APP_SANDBOX: false
+    entitlements:
+      path: Mollotov/Mollotov.entitlements
+
+  MollotovHelper:
+    type: tool
+    platform: macOS
+    sources:
+      - path: MollotovHelper
+        excludes:
+          - "**/*.plist"
+    settings:
+      base:
+        FRAMEWORK_SEARCH_PATHS: $(PROJECT_DIR)/Frameworks
+        HEADER_SEARCH_PATHS: $(PROJECT_DIR)/Frameworks/cef_include
+        INFOPLIST_FILE: MollotovHelper/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.mollotov.browser.helper
