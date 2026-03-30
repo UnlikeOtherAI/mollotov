@@ -43,11 +43,11 @@ struct URLBarView: View {
                 get: { rendererState.activeEngine },
                 set: { onSwitchRenderer($0) }
             )) {
-                Text("Safari").tag(RendererState.Engine.webkit)
-                Text("Chrome").tag(RendererState.Engine.chromium)
+                Image(systemName: "safari").tag(RendererState.Engine.webkit)
+                Image(systemName: "globe").tag(RendererState.Engine.chromium)
             }
             .pickerStyle(.segmented)
-            .frame(width: 160)
+            .frame(width: 80)
             .disabled(rendererState.isSwitching)
 
             // Settings

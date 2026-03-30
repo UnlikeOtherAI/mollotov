@@ -46,6 +46,7 @@
 		AC654CA845B3F41AF6D45CB5 /* CEFRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 516AA2CAF4E775E3EC89BF80 /* CEFRenderer.swift */; };
 		ADD06DFD9092FE2E691350CD /* InteractionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 662BA4F09CBAA5588D63C01C /* InteractionHandler.swift */; };
 		AFF490F9BBDA0CCCC5DEB31C /* ScrollHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8EF32C2FF0EEDCEF69F7500 /* ScrollHandler.swift */; };
+		B9418B2ED3FC60A43675184F /* FloatingMenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF87ABB3FE3E6A86205ACC2C /* FloatingMenuView.swift */; };
 		C1BF7ADBB60F48EE5D437D69 /* DeviceInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0EFFB873E2A0A306CA0D95F /* DeviceInfo.swift */; };
 		CAF0411C9D6561E176B982B7 /* HandlerContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = 162978C8F601CE6E2D0F6240 /* HandlerContext.swift */; };
 		D5A592B57370DE31F56E2989 /* LLMHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DA139A3CF468F423C529E96 /* LLMHandler.swift */; };
@@ -90,6 +91,7 @@
 		9EEE4C649FA0D9CDB87D5CAE /* DeviceIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceIdentity.swift; sourceTree = "<group>"; };
 		A3E8E0DA5886C252FE1BCE75 /* NetworkTrafficStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkTrafficStore.swift; sourceTree = "<group>"; };
 		A8EF32C2FF0EEDCEF69F7500 /* ScrollHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollHandler.swift; sourceTree = "<group>"; };
+		AF87ABB3FE3E6A86205ACC2C /* FloatingMenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingMenuView.swift; sourceTree = "<group>"; };
 		B97D4B03D93C21B9D3C35336 /* SafariAuthHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariAuthHelper.swift; sourceTree = "<group>"; };
 		C075E2F2B42D9EDE4C214300 /* CEFBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CEFBridge.h; sourceTree = "<group>"; };
 		C2D650BD3262369BC889CF36 /* Mollotov.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Mollotov.entitlements; sourceTree = "<group>"; };
@@ -200,6 +202,7 @@
 			isa = PBXGroup;
 			children = (
 				10C625D56E93B41DC885E496 /* BrowserView.swift */,
+				AF87ABB3FE3E6A86205ACC2C /* FloatingMenuView.swift */,
 				4AAD0796D10DE23B652F3F43 /* SettingsView.swift */,
 				436A6AEA38D754ACEFE7DD71 /* ToolbarView.swift */,
 				F7CB1B02A9B2992B1E4D0688 /* URLBarView.swift */,
@@ -402,6 +405,7 @@
 				4090904368938EA7C8174FD9 /* DeviceIdentity.swift in Sources */,
 				C1BF7ADBB60F48EE5D437D69 /* DeviceInfo.swift in Sources */,
 				0AFB883945F27BD2A657FFD4 /* EvaluateHandler.swift in Sources */,
+				B9418B2ED3FC60A43675184F /* FloatingMenuView.swift in Sources */,
 				6D42EAD618FDD491D799513A /* HTTPServer.swift in Sources */,
 				CAF0411C9D6561E176B982B7 /* HandlerContext.swift in Sources */,
 				8A8B7EF10041EF851F7AAA2D /* HistoryHandler.swift in Sources */,

@@ -41,8 +41,10 @@ final class ServerState: ObservableObject {
             self?.handlerContext.handleScriptMessage(name: name, body: body)
         }
 
-        // Start with WebKit
+        // Start with WebKit and load home page
         handlerContext.renderer = wk
+        let homeURL = URL(string: UserDefaults.standard.string(forKey: "homeURL") ?? defaultHomeURL)!
+        wk.load(url: homeURL)
 
         registerHandlers()
         router.registerStubs()

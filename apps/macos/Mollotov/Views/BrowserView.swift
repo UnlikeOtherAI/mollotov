@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Main browser window: toolbar + renderer view.
+/// Main browser window: toolbar + renderer view + floating menu overlay.
 struct BrowserView: View {
     @ObservedObject var browserState: BrowserState
     @ObservedObject var serverState: ServerState
@@ -8,42 +8,61 @@ struct BrowserView: View {
     @State private var showSettings = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Loading progress bar
-            if browserState.isLoading {
-                ProgressView(value: browserState.progress)
-                    .progressViewStyle(.linear)
+        ZStack {
+            VStack(spacing: 0) {
+                // Loading progress bar
+                if browserState.isLoading {
+                    ProgressView(value: browserState.progress)
+                        .progressViewStyle(.linear)
+                }
+
+                // URL bar with renderer toggle
+                URLBarView(
+                    browserState: browserState,
+                    rendererState: rendererState,
+                    onNavigate: { url in
+                        guard let urlObj = URL(string: url) else { return }
+                        serverState.handlerContext.load(url: urlObj)
+                    },
+                    onBack: { serverState.handlerContext.goBack() },
+                    onForward: { serverState.handlerContext.goForward() },
+                    onReload: { serverState.handlerContext.reloadPage() },
+                    onSwitchRenderer: { engine in
+                        Task {
+                            await serverState.switchRenderer(to: engine)
+                        }
+                    },
+                    onSettings: { showSettings = true }
+                )
+
+                // Renderer view — swaps between WKWebView and CEF
+                if rendererState.isSwitching {
+                    VStack {
+                        Spacer()
+                        ProgressView("Switching renderer...")
+                        Spacer()
+                    }
+                } else {
+                    RendererContainerView(serverState: serverState, rendererState: rendererState)
+                }
             }
 
-            // URL bar with renderer toggle
-            URLBarView(
-                browserState: browserState,
-                rendererState: rendererState,
-                onNavigate: { url in
-                    guard let urlObj = URL(string: url) else { return }
-                    serverState.handlerContext.load(url: urlObj)
-                },
-                onBack: { serverState.handlerContext.goBack() },
-                onForward: { serverState.handlerContext.goForward() },
+            // Floating action menu overlay
+            FloatingMenuView(
                 onReload: { serverState.handlerContext.reloadPage() },
-                onSwitchRenderer: { engine in
-                    Task {
-                        await serverState.switchRenderer(to: engine)
+                onSafariAuth: {
+                    // Trigger Safari auth for current URL
+                    if let url = serverState.handlerContext.currentURL {
+                        let helper = SafariAuthHelper()
+                        helper.handlerContext = serverState.handlerContext
+                        helper.authenticate(url: url)
                     }
                 },
-                onSettings: { showSettings = true }
+                onSettings: { showSettings = true },
+                onBookmarks: { /* TODO: show bookmarks panel */ },
+                onHistory: { /* TODO: show history panel */ },
+                onNetworkInspector: { /* TODO: show network inspector */ }
             )
-
-            // Renderer view — swaps between WKWebView and CEF
-            if rendererState.isSwitching {
-                VStack {
-                    Spacer()
-                    ProgressView("Switching renderer...")
-                    Spacer()
-                }
-            } else {
-                RendererContainerView(serverState: serverState, rendererState: rendererState)
-            }
         }
         .onChange(of: browserState.currentURL) { _, newURL in
             HistoryStore.shared.record(url: newURL, title: browserState.pageTitle)
