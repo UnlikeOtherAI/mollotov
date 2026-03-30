@@ -17,4 +17,14 @@ program
 
 registerAllCommands(program);
 
+// Handle --llm-help before commander parses
+const llmHelpIdx = process.argv.indexOf("--llm-help");
+if (llmHelpIdx !== -1) {
+  const { generateLlmHelp } = await import("./help/llm-help.js");
+  // Check if there's a command before --llm-help
+  const commandArg = process.argv.slice(2).find((a) => !a.startsWith("-") && a !== "--llm-help");
+  console.log(generateLlmHelp(commandArg));
+  process.exit(0);
+}
+
 program.parseAsync(process.argv);

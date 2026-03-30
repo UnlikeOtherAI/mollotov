@@ -31,6 +31,7 @@ import { registerFormState } from "./form-state.js";
 import { registerFind } from "./find.js";
 import { registerGroup } from "./group.js";
 import { registerMcp } from "./mcp.js";
+import { registerExplain } from "./explain.js";
 
 export function registerAllCommands(program: Command): void {
   // Discovery
@@ -80,4 +81,7 @@ export function registerAllCommands(program: Command): void {
 
   // MCP Server
   registerMcp(program);
+
+  // Help
+  registerExplain(program);
 }
