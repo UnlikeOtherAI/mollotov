@@ -17,23 +17,23 @@
 |---|---|---|
 | **UI Framework** | SwiftUI | Modern declarative UI, native performance |
 | **Browser Engine** | WKWebView | Only allowed engine on iOS; native screenshot + DOM APIs |
-| **DOM Access** | WebKit Message Handlers + `evaluateJavaScript` via native bridge | No injected scripts — all calls go through WKWebView's native API |
+| **DOM Access** | WebKit Message Handlers + `evaluateJavaScript` via native bridge | Calls go through WKWebView's native API; some features require ephemeral bridge scripts |
 | **Screenshots** | `WKWebView.takeSnapshot(with:)` | Native API, no JS required |
 | **HTTP Server** | [Swifter](https://github.com/httpswift/swifter) or [Telegraph](https://github.com/nicklama/Telegraph) | Lightweight embedded HTTP server for receiving commands |
-| **mDNS** | `NetService` (Bonjour) | Built into iOS — zero dependencies |
+| **mDNS** | `NWListener` + `NWBrowser` (Network framework) | Built into iOS — zero dependencies. Replaces deprecated `NetService` (iOS 16+) |
 | **MCP Server** | Custom implementation over HTTP transport | MCP protocol over the same HTTP server |
 | **Networking** | URLSession | Standard iOS networking |
 | **Min Target** | iOS 16+ | WKWebView snapshot API stability |
 
 ### iOS — Key APIs
 
-- `WKWebView.evaluateJavaScript(_:)` — DOM queries and reads (native bridge, not injection)
+- `WKWebView.evaluateJavaScript(_:)` — DOM queries and reads via native bridge
 - `WKWebView.takeSnapshot(with:completionHandler:)` — viewport screenshots
 - `WKNavigationDelegate` — navigation lifecycle
 - `WKUIDelegate` — dialogs, new windows
 - `WKWebView.scrollView` — native scroll control
 - `UIView.drawHierarchy(in:afterScreenUpdates:)` — full-page screenshots
-- `NetService` / `NWBrowser` — Bonjour mDNS advertisement
+- `NWListener` / `NWBrowser` (Network framework) — mDNS advertisement and discovery
 
 ---
 
@@ -43,7 +43,7 @@
 |---|---|---|
 | **UI Framework** | Jetpack Compose | Modern declarative UI, Material 3 |
 | **Browser Engine** | Android WebView (Chromium-based) | Full CDP support for DOM access |
-| **DOM Access** | Chrome DevTools Protocol (CDP) via `WebView.setWebContentsDebuggingEnabled` | Full DOM tree without JS injection into page context |
+| **DOM Access** | Chrome DevTools Protocol (CDP) via `WebView.setWebContentsDebuggingEnabled` | Full DOM tree via protocol — no scripts enter the page context |
 | **Screenshots** | `PixelCopy.request()` or `View.drawToBitmap()` | Hardware-accelerated capture |
 | **HTTP Server** | [Ktor](https://ktor.io/) (embedded server) or [NanoHTTPD](https://github.com/NanoHttpd/nanohttpd) | Ktor preferred — Kotlin-native, coroutine-based |
 | **mDNS** | `NsdManager` (Network Service Discovery) | Built into Android — zero dependencies |
@@ -54,7 +54,7 @@
 
 - `WebView.evaluateJavascript()` — DOM queries via native bridge
 - `WebView.setWebContentsDebuggingEnabled(true)` — enables CDP
-- CDP `DOM.getDocument` / `DOM.querySelectorAll` — full DOM without injection
+- CDP `DOM.getDocument` / `DOM.querySelectorAll` — full DOM via protocol
 - CDP `Page.captureScreenshot` — screenshots via protocol
 - `PixelCopy.request()` — hardware screenshot fallback
 - `NsdManager.registerService()` — mDNS advertisement
@@ -113,7 +113,7 @@ packages/
 | **Protocol** | HTTP/JSON | All browser-CLI communication over REST |
 | **MCP Transport** | Streamable HTTP (SSE) | Standard MCP transport for both browser and CLI servers |
 | **mDNS Service Type** | `_mollotov._tcp` | Service discovery identifier |
-| **mDNS TXT Records** | `name`, `platform`, `resolution`, `version`, `port` | Device metadata for discovery |
+| **mDNS TXT Records** | `id`, `name`, `model`, `platform`, `width`, `height`, `port`, `version` | Device metadata for discovery |
 | **API Versioning** | URL prefix `/v1/` | Forward-compatible |
 | **Image Format** | PNG (screenshots) | Lossless, LLM-friendly |
 | **Monorepo** | pnpm workspaces | CLI + shared types in one repo; native apps in separate repos |

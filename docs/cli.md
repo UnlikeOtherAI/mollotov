@@ -22,7 +22,7 @@ mollotov <command> [options]
 |---|---|
 | `--device <id\|name\|ip>` | Target a specific device by ID (most reliable), name, or IP |
 | `--format <type>` | Output format: `json` (default), `table`, `text` |
-| `--timeout <ms>` | Command timeout in milliseconds (default: 10000) |
+| `--timeout <ms>` | CLI-level command timeout in milliseconds (default: 10000). Overrides per-method API defaults (typically 5000ms). |
 | `--port <port>` | Override default port 8420 |
 | `--help` | Show help for any command |
 | `--version` | Show CLI version |
@@ -521,6 +521,54 @@ mollotov shadow-query "my-component" ".inner-button" --device "My iPhone" --pier
 
 ---
 
+## Keyboard & Viewport Commands
+
+### `mollotov keyboard show`
+Show the soft keyboard by focusing an element.
+
+```bash
+mollotov keyboard show --device "My iPhone"
+mollotov keyboard show --device "My iPhone" --selector "#email"
+mollotov keyboard show --device "My iPhone" --type number
+```
+
+### `mollotov keyboard hide`
+Dismiss the soft keyboard.
+
+```bash
+mollotov keyboard hide --device "My iPhone"
+```
+
+### `mollotov keyboard state`
+Check keyboard visibility and viewport impact.
+
+```bash
+mollotov keyboard state --device "My iPhone"
+```
+
+### `mollotov resize <width> <height>`
+Simulate a reduced viewport (e.g., keyboard present, toolbar visible).
+
+```bash
+mollotov resize 390 500 --device "My iPhone"
+```
+
+### `mollotov resize reset`
+Restore full-screen viewport.
+
+```bash
+mollotov resize reset --device "My iPhone"
+```
+
+### `mollotov obscured <selector>`
+Check if an element is hidden by the keyboard or outside the visible viewport.
+
+```bash
+mollotov obscured "#password-input" --device "My iPhone"
+```
+
+---
+
 ## Wait Commands
 
 ### `mollotov wait <selector>`
@@ -601,6 +649,12 @@ mollotov group find-button "Submit"
 
 ```bash
 mollotov group find-element "Sign Up" --role link
+```
+
+### `mollotov group find-link <text>`
+
+```bash
+mollotov group find-link "Sign Up"
 ```
 
 ### `mollotov group find-input <label>`

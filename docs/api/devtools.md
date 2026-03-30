@@ -2,6 +2,8 @@
 
 Console/JS errors, network log, resource timeline, mutation observation, shadow DOM, request interception.
 
+> **iOS parity note:** Many DevTools features on iOS use ephemeral bridge scripts since WKWebView lacks CDP. See the [Platform Support Matrix](README.md) for per-method details. Network logging and request interception are the most limited on iOS.
+
 For protocol details, errors, and MCP tool names, see [README.md](README.md).
 
 ---
@@ -353,40 +355,9 @@ Note: Closed shadow roots cannot be traversed — `childCount` is `null` for clo
 
 ---
 
-## Clipboard
-## Clipboard
-
-### `getClipboard`
-Read the current clipboard contents.
-
-```json
-POST /v1/get-clipboard
-
-Response:
-{
-  "success": true,
-  "text": "copied text content",
-  "hasImage": false
-}
-```
-
-### `setClipboard`
-Write to the clipboard.
-
-```json
-POST /v1/set-clipboard
-{
-  "text": "text to copy"
-}
-
-Response:
-{
-  "success": true
-}
-```
-
----
 ## Request Interception
+
+> **Android only.** Uses CDP `Fetch.*` domain. iOS returns `PLATFORM_NOT_SUPPORTED` — WKWebView's `WKURLSchemeHandler` only works for custom URL schemes, not HTTP/HTTPS.
 
 ### `setRequestInterception`
 Configure rules to block, modify, or mock outgoing network requests. Useful for blocking ads, mocking APIs, or testing error scenarios.

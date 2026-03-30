@@ -12,7 +12,7 @@
 - CLI reference: [docs/cli.md](docs/cli.md) — commands, flags, group operations, LLM help system
 - UI documentation: [docs/ui/](docs/ui/) — browser app screens, settings panel, platform specifics
 
-**Evolving docs — check when working on tasks (do not auto-load):**
+**Evolving docs — created as needed when work begins (do not auto-load):**
 - Design plans: `docs/plans/` (active) / `docs/done/` (completed)
 - Feature specs: `docs/specs/`
 - Task breakdowns: `docs/to-do/`
@@ -34,7 +34,7 @@ Get a second opinion from a different provider **before implementation** for: ne
 
 - 500-line file limit — split along responsibility seams, not arbitrarily. Never trim comments or blank lines to fit.
 - Documentation: 1,000-line limit — exceeding requires a dedicated folder with README.md linking sub-files.
-- No JS injection into web pages — all interaction via native WebView APIs or CDP.
+- No persistent content scripts — interaction via native WebView APIs and CDP. Some iOS features use ephemeral bridge scripts (see architecture.md).
 - All browser-CLI communication over HTTP/JSON with `/v1/` prefix.
 - MCP tools use `mollotov_` prefix.
 - mDNS service type: `_mollotov._tcp`.

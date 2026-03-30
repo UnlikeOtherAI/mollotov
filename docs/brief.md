@@ -4,7 +4,7 @@
 
 Mollotov is an **LLM-first browser** for iOS and Android (phones and tablets) paired with a **Node.js CLI** that enables large language models to discover, control, and orchestrate multiple browser instances on a local network.
 
-Think Playwright, but running natively on real mobile devices — no emulators, no JS injection, no desktop required.
+Think Playwright, but running natively on real mobile devices — no emulators, no persistent content scripts, no desktop required.
 
 ## The Problem
 
@@ -23,7 +23,7 @@ Two components that work together:
 
 A minimal native browser built on each platform's WebView engine (WKWebView / Android WebView) that:
 
-- Exposes **full Playwright-equivalent capabilities** through native WebView APIs — no JS injection
+- Exposes **full Playwright-equivalent capabilities** through native WebView APIs and platform debugging protocols
 - Advertises itself via **mDNS** on the local network (`_mollotov._tcp`)
 - Runs a local **HTTP + MCP server** accepting commands from the CLI or any MCP-compatible client
 - Takes screenshots, reads DOM, navigates, clicks, fills forms, scrolls — all via native bridge
@@ -45,13 +45,13 @@ A Node.js CLI published on npm that:
 
 | Feature | Description |
 |---|---|
-| **Zero JS injection** | All page interaction through native WebView APIs and platform debugging protocols (CDP on Android, WebKit inspection on iOS) |
+| **No persistent content scripts** | Page interaction through native WebView APIs and CDP (Android). Some iOS features use lightweight bridge scripts for capabilities WKWebView doesn't expose natively (console capture, mutation observation). No browser extension model, no content script persistence across navigations. |
 | **mDNS discovery** | Browsers advertise `_mollotov._tcp` with device metadata (name, platform, resolution, version) — CLI auto-discovers them |
 | **Individual control** | Target any single device by name/IP for precise commands |
 | **Group commands** | Send the same command to all devices — fill forms, navigate, click simultaneously |
 | **Smart queries** | `findButton("Submit")` across all devices returns which ones found it — LLM makes the decision |
 | **Resolution-aware** | Methods like `scroll2` adapt scroll distance, tap coordinates, and element visibility per device viewport |
-| **Full DOM access** | Read and query the complete DOM tree without injecting scripts into the page |
+| **Full DOM access** | Read and query the complete DOM tree via native WebView APIs (both platforms) and CDP (Android) |
 | **Screenshots** | Capture full-page or viewport screenshots on any device on demand |
 | **MCP everywhere** | Both the browser and CLI expose MCP APIs — any MCP-compatible LLM can drive them directly |
 | **Native apps** | Real native iOS and Android apps — not web wrappers, not Electron |
@@ -122,7 +122,7 @@ Mollotov works on **real devices and simulators/emulators equally**. A developer
 - **Mixed fleets** — real devices and simulators can coexist on the same network; the CLI treats them identically
 - **Zero-setup goal** — clone the repo, open in Xcode/Android Studio, run on simulator, `mollotov discover` finds it
 
-The `getDeviceInfo` endpoint (see [api.md](api.md)) includes an `isSimulator` field so the LLM knows whether it's talking to a real device or a simulated one.
+The `getDeviceInfo` endpoint (see [api/core.md](api/core.md)) includes an `isSimulator` field so the LLM knows whether it's talking to a real device or a simulated one.
 
 ## Target Users
 

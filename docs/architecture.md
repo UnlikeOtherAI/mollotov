@@ -167,15 +167,12 @@ LLM → CLI (mollotov group find-button "Submit")
 
 ```
 LLM → CLI (mollotov scroll2 --device iphone "#footer")
-  → Device Manager (iphone: 390x844 viewport)
-  → HTTP POST /v1/element-position {selector: "#footer"}
-  → Browser returns element position relative to viewport
-  → CLI calculates scroll delta for this specific resolution
-  → HTTP POST /v1/scroll {deltaY: calculated_value}
-  → Browser scrolls
-  → HTTP POST /v1/element-in-viewport {selector: "#footer"}
-  → Verify element is now visible
-  → Return result
+  → Device Manager (resolve "iphone" → 192.168.1.42:8420)
+  → HTTP POST 192.168.1.42:8420/v1/scroll2 {selector: "#footer", position: "center"}
+  → Browser calculates element position relative to its own viewport
+  → Browser scrolls iteratively until element is visible (up to maxScrolls)
+  → HTTP 200 {success: true, scrollsPerformed: 3, element: {visible: true}}
+  → CLI returns result
 ```
 
 ---
@@ -200,9 +197,11 @@ Port: 8420
 TXT Records:
   id       = "a1b2c3d4-..."        # Stable unique device ID (UUID)
   name     = "My iPhone"           # User-friendly device name
+  model    = "iPhone 15 Pro"       # Device model
   platform = "ios" | "android"     # Platform identifier
-  width    = "390"                  # Viewport width
-  height   = "844"                  # Viewport height
+  width    = "390"                  # CSS viewport width
+  height   = "844"                  # CSS viewport height
+  port     = "8420"                 # HTTP server port
   version  = "1.0.0"               # App version
 ```
 
@@ -240,7 +239,7 @@ Mollotov operates exclusively on the local network. No cloud services, no remote
 |---|---|
 | Network isolation | Devices must be on the same local network |
 | No internet exposure | HTTP servers bind to local/private IPs only |
-| No JS injection | Page content is never modified — all interaction via native APIs |
+| No persistent scripts | No browser extensions or content scripts. Some iOS features use ephemeral bridge scripts (cleared on navigation) |
 | No data collection | No telemetry, no analytics, no phone-home |
 | Port access | Default 8420, configurable per device |
 
@@ -250,7 +249,16 @@ Mollotov operates exclusively on the local network. No cloud services, no remote
 
 ### iOS — No-Injection DOM Access
 
-WKWebView's `evaluateJavaScript` executes in the page's JS context but is invoked from the native side — it's a read operation, not an injection. The page cannot detect or intercept it. Combined with `WKWebView.takeSnapshot` and `scrollView` direct manipulation, all Playwright-equivalent operations are possible without modifying the page.
+WKWebView's `evaluateJavaScript` executes in the page's JS context via the native bridge. It is not a persistent content script — it runs on demand and doesn't survive navigation. The page can theoretically detect these calls (e.g., by overriding DOM prototype methods), but this is true of all browser automation tools including Playwright.
+
+**iOS bridge scripts (honest accounting):** Features that WKWebView doesn't expose natively require ephemeral bridge scripts injected via `evaluateJavaScript` or `WKUserScript`:
+- Console capture: overrides `console.log/warn/error` to forward messages to native
+- Mutation observation: injects a `MutationObserver`
+- Accessibility tree: queries ARIA attributes via DOM traversal
+- Page text extraction: runs a Readability-style algorithm
+- Network logging: limited — WKWebView has no network interception API; only top-level navigation events via `WKNavigationDelegate`. XHR/fetch tracking requires an injected `XMLHttpRequest`/`fetch` wrapper.
+
+These scripts are lightweight, non-persistent, and do not modify page content or behavior. They are cleared on navigation.
 
 ### Simulator & Emulator Support
 
@@ -278,7 +286,7 @@ Android WebView is Chromium-based. Enabling `setWebContentsDebuggingEnabled(true
 
 - `DOM.*` — full DOM tree traversal and queries
 - `Page.captureScreenshot` — screenshots
-- `Runtime.evaluate` — JS evaluation via protocol (not injection)
+- `Runtime.evaluate` — JS evaluation via protocol
 - `Input.dispatchMouseEvent` / `Input.dispatchTouchEvent` — input simulation
 - `Emulation.*` — viewport and device metric control
 - `Network.*` — request interception (future)

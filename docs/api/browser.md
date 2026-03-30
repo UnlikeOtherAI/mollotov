@@ -68,6 +68,8 @@ When set to `"queue"`, dialogs are captured and returned by `getDialog` instead 
 
 ## Tabs
 
+> **Implementation note:** Neither WKWebView nor Android WebView has a built-in tab system. The app manages multiple WebView instances internally — creating, switching, and destroying them. This is a significant implementation effort but provides full control over tab lifecycle and memory.
+
 ### `getTabs`
 List all open tabs.
 
@@ -139,6 +141,8 @@ Response:
 ---
 
 ## Iframe Access
+
+> **Cross-origin limitation:** Same-origin iframes work on both platforms. Cross-origin iframes (Stripe, YouTube, etc.) have severe limitations: iOS cannot evaluate JS in cross-origin iframes at all; Android CDP can access them via `contextId` but only if the iframe's domain allows debugging. The `IFRAME_ACCESS_DENIED` error is returned when cross-origin access fails.
 
 ### `getIframes`
 List all iframes on the current page.
@@ -260,6 +264,46 @@ Response:
 }
 ```
 
+### `setCookie`
+Set a cookie.
+
+```json
+POST /v1/set-cookie
+{
+  "name": "session_id",
+  "value": "new_value",
+  "domain": "example.com",
+  "path": "/",
+  "httpOnly": true,
+  "secure": true,
+  "sameSite": "Lax",
+  "expires": "2026-12-31T00:00:00.000Z"
+}
+
+Response:
+{
+  "success": true
+}
+```
+
+### `deleteCookies`
+Delete cookies by name, domain, or all.
+
+```json
+POST /v1/delete-cookies
+{
+  "name": "session_id",       // optional, delete specific cookie
+  "domain": "example.com",    // optional, scope deletion
+  "deleteAll": false           // optional, delete all cookies
+}
+
+Response:
+{
+  "success": true,
+  "deleted": 1
+}
+```
+
 ### `getStorage`
 Read localStorage or sessionStorage.
 
@@ -317,7 +361,45 @@ Response:
 ```
 
 ---
+
+## Clipboard
+
+> **Platform caveat:** Reading clipboard on iOS triggers a system paste permission banner. On Android 10+, background clipboard read is restricted. `getClipboard` may return empty or trigger a visible OS prompt. `setClipboard` works reliably on both platforms.
+
+### `getClipboard`
+Read the current clipboard contents.
+
+```json
+POST /v1/get-clipboard
+
+Response:
+{
+  "success": true,
+  "text": "copied text content",
+  "hasImage": false
+}
+```
+
+### `setClipboard`
+Write to the clipboard.
+
+```json
+POST /v1/set-clipboard
+{
+  "text": "text to copy"
+}
+
+Response:
+{
+  "success": true
+}
+```
+
+---
+
 ## Geolocation
+
+> **Platform caveat:** Android supports geolocation override via CDP `Emulation.setGeolocationOverride`. iOS has no public WKWebView API for this — would require a bridge script overriding `navigator.geolocation`. Returns `PLATFORM_NOT_SUPPORTED` on iOS until a bridge implementation is added.
 
 ### `setGeolocation`
 Override the browser's geolocation. Useful for testing location-dependent content without physical movement.
@@ -352,8 +434,126 @@ Response:
 ---
 ## Page Evaluation
 
+---
+
+## Keyboard & Viewport Simulation
+
+### `showKeyboard`
+Programmatically show the soft keyboard by focusing an input element. Simulates a real user tapping a text field — the keyboard appears, the viewport shrinks, and the page reflows exactly as it would on a real device. Essential for testing that form fields remain visible and accessible when the keyboard is open.
+
+```json
+POST /v1/show-keyboard
+{
+  "selector": "#email-input",  // optional, focus this element first
+  "keyboardType": "default"    // optional, "default" | "email" | "number" | "phone" | "url"
+}
+
+Response:
+{
+  "success": true,
+  "keyboardVisible": true,
+  "keyboardHeight": 336,
+  "visibleViewport": {"width": 390, "height": 508},
+  "focusedElement": {"selector": "#email-input", "visibleInViewport": true}
+}
+```
+
+### `hideKeyboard`
+Dismiss the soft keyboard.
+
+```json
+POST /v1/hide-keyboard
+
+Response:
+{
+  "success": true,
+  "keyboardVisible": false,
+  "visibleViewport": {"width": 390, "height": 844}
+}
+```
+
+### `getKeyboardState`
+Check whether the keyboard is currently showing and how it affects the viewport.
+
+```json
+POST /v1/get-keyboard-state
+
+Response:
+{
+  "success": true,
+  "visible": true,
+  "height": 336,
+  "type": "default",
+  "visibleViewport": {"width": 390, "height": 508},
+  "focusedElement": {
+    "selector": "#email-input",
+    "rect": {"x": 20, "y": 320, "width": 350, "height": 44},
+    "visibleInViewport": true,
+    "obscuredByKeyboard": false
+  }
+}
+```
+
+### `resizeViewport`
+Simulate a reduced viewport size — shrink the visible area as if the keyboard, a toolbar, or another overlay is present. This does NOT change the actual device resolution; it constrains the WebView's visible bounds. Useful for testing responsive layouts at arbitrary viewport dimensions.
+
+```json
+POST /v1/resize-viewport
+{
+  "width": 390,               // optional, null = keep current
+  "height": 500               // optional, null = keep current
+}
+
+Response:
+{
+  "success": true,
+  "viewport": {"width": 390, "height": 500},
+  "originalViewport": {"width": 390, "height": 844}
+}
+```
+
+### `resetViewport`
+Restore the viewport to its original full-screen dimensions.
+
+```json
+POST /v1/reset-viewport
+
+Response:
+{
+  "success": true,
+  "viewport": {"width": 390, "height": 844}
+}
+```
+
+### `isElementObscured`
+Check whether a specific element is currently obscured by the keyboard or out of the visible viewport. The LLM can use this to verify that form fields are accessible before trying to interact with them.
+
+```json
+POST /v1/is-element-obscured
+{
+  "selector": "#password-input"
+}
+
+Response:
+{
+  "success": true,
+  "element": {
+    "selector": "#password-input",
+    "rect": {"x": 20, "y": 620, "width": 350, "height": 44}
+  },
+  "obscured": true,
+  "reason": "keyboard",
+  "keyboardOverlap": 128,
+  "suggestion": "scroll up 128px or hide keyboard to reveal element"
+}
+```
+
+---
+
+## Page Evaluation
+
 ### `evaluate`
-Evaluate a JavaScript expression and return the result. Executed via native bridge (not injection).
+Evaluate a JavaScript expression and return the result. Executed via native WebView bridge (iOS) or CDP `Runtime.evaluate` (Android).
 
 ```json
 POST /v1/evaluate

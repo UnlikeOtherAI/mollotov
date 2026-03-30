@@ -86,7 +86,7 @@ Response:
 ## Screenshots
 
 ### `screenshot`
-Capture a screenshot of the current viewport.
+Capture a screenshot of the current viewport. When `fullPage: true`, captures the entire scrollable page. On Android this uses CDP `Page.captureScreenshot` with `captureBeyondViewport`. On iOS, `WKWebView.takeSnapshot` only captures the visible viewport — full-page requires a scroll-and-stitch approach (slower, may have minor seam artifacts).
 
 ```json
 POST /v1/screenshot
@@ -478,6 +478,36 @@ Response:
 **Simulator-only fields:** `isSimulator: true` — the LLM should know it's not a real device
 
 All fields are best-effort — if a value is unavailable on the platform, it returns `null` rather than being omitted.
+
+### `getCapabilities`
+Get which API methods this browser instance supports. Enables capability negotiation — the CLI or LLM can check before sending commands that may not be available on a given platform/version.
+
+```json
+POST /v1/get-capabilities
+
+Response:
+{
+  "success": true,
+  "version": "1.0.0",
+  "platform": "ios",
+  "supported": [
+    "navigate", "back", "forward", "reload", "screenshot", "click", "fill",
+    "type", "scroll", "scroll2", "getDOM", "querySelector", "getDeviceInfo",
+    "getAccessibilityTree", "screenshotAnnotated", "getVisibleElements",
+    "getPageText", "getFormState", "getTabs", "getCookies", "getStorage",
+    "showKeyboard", "hideKeyboard", "evaluate", "getDialog", "handleDialog"
+  ],
+  "partial": [
+    "getConsoleMessages", "getNetworkLog", "getResourceTimeline",
+    "watchMutations", "getClipboard"
+  ],
+  "unsupported": [
+    "setRequestInterception", "setGeolocation"
+  ]
+}
+```
+
+`partial` means the feature works but with reduced data compared to Android (see Platform Support Matrix in [README.md](README.md)).
 
 ---
 
