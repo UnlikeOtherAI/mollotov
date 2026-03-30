@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mollotov — LLM-First Mobile Browser</title>
+<meta name="description" content="Control real mobile browsers with language models. Native iOS and Android apps with mDNS discovery, HTTP API, and MCP.">
+<style>
+  :root {
+    --orange: #f4b078;
+    --orange-dark: #e8944a;
+    --bg: #faf8f5;
+    --text: #1a1a1a;
+    --muted: #666;
+    --code-bg: #f0ede8;
+    --card-bg: #fff;
+    --border: #e0dcd6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1a1816;
+      --text: #e8e4df;
+      --muted: #999;
+      --code-bg: #2a2622;
+      --card-bg: #242120;
+      --border: #3a3632;
+    }
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--orange-dark); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code {
+    background: var(--code-bg);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.9em;
+    font-family: "SF Mono", "Fira Code", monospace;
+  }
+
+  /* Hero */
+  .hero {
+    text-align: center;
+    padding: 80px 24px 60px;
+    max-width: 720px;
+    margin: 0 auto;
+  }
+  .hero img {
+    width: 120px;
+    height: 120px;
+    border-radius: 28px;
+    margin-bottom: 24px;
+  }
+  .hero h1 {
+    font-size: 2.8em;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    margin-bottom: 12px;
+  }
+  .hero .tagline {
+    font-size: 1.25em;
+    color: var(--muted);
+    max-width: 520px;
+    margin: 0 auto 32px;
+  }
+  .hero-buttons {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .btn {
+    display: inline-block;
+    padding: 12px 28px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 1em;
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    text-decoration: none;
+  }
+  .btn-primary {
+    background: var(--orange-dark);
+    color: #fff;
+  }
+  .btn-secondary {
+    background: var(--card-bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  /* Install */
+  .install {
+    text-align: center;
+    padding: 0 24px 60px;
+  }
+  .install pre {
+    display: inline-block;
+    background: var(--code-bg);
+    padding: 14px 28px;
+    border-radius: 8px;
+    font-family: "SF Mono", "Fira Code", monospace;
+    font-size: 1em;
+    border: 1px solid var(--border);
+  }
+
+  /* Sections */
+  section {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 60px 24px;
+  }
+  section h2 {
+    font-size: 1.8em;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 32px;
+    text-align: center;
+  }
+
+  /* Feature grid */
+  .features {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+  }
+  .feature {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+  }
+  .feature h3 {
+    font-size: 1.1em;
+    margin-bottom: 8px;
+  }
+  .feature p {
+    color: var(--muted);
+    font-size: 0.95em;
+  }
+
+  /* Architecture diagram */
+  .arch {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 32px;
+    overflow-x: auto;
+  }
+  .arch pre {
+    font-family: "SF Mono", "Fira Code", monospace;
+    font-size: 0.85em;
+    line-height: 1.5;
+    color: var(--muted);
+  }
+
+  /* Sister projects */
+  .projects {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+  }
+  .project-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+  }
+  .project-card h3 { margin-bottom: 8px; }
+  .project-card p {
+    color: var(--muted);
+    font-size: 0.95em;
+    margin-bottom: 12px;
+  }
+
+  /* Footer */
+  footer {
+    text-align: center;
+    padding: 40px 24px;
+    color: var(--muted);
+    font-size: 0.9em;
+    border-top: 1px solid var(--border);
+  }
+
+  @media (max-width: 600px) {
+    .hero h1 { font-size: 2em; }
+    .hero .tagline { font-size: 1.05em; }
+    .features { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <img src="icon-1024.png" alt="Mollotov icon" width="120" height="120">
+  <h1>Mollotov</h1>
+  <p class="tagline">Control real mobile browsers with language models. Native iOS and Android apps, discoverable on your local network.</p>
+  <div class="hero-buttons">
+    <a href="https://github.com/UnlikeOtherAI/mollotov" class="btn btn-primary">GitHub</a>
+    <a href="https://github.com/UnlikeOtherAI/mollotov/tree/main/docs" class="btn btn-secondary">Documentation</a>
+  </div>
+</div>
+
+<div class="install">
+  <pre>npm install -g @unlikeotherai/mollotov</pre>
+</div>
+
+<section>
+  <h2>What it does</h2>
+  <div class="features">
+    <div class="feature">
+      <h3>Real mobile browsers</h3>
+      <p>Native iOS and Android apps built on WKWebView and Android WebView. No emulators, no desktop wrappers, no Electron.</p>
+    </div>
+    <div class="feature">
+      <h3>mDNS discovery</h3>
+      <p>Every running instance advertises <code>_mollotov._tcp</code> on the local network. The CLI auto-discovers all devices with metadata: name, platform, resolution, version.</p>
+    </div>
+    <div class="feature">
+      <h3>HTTP + MCP API</h3>
+      <p>Every device runs an HTTP and MCP server. Navigate, screenshot, read DOM, click, fill forms, scroll, evaluate JS — all via structured API calls.</p>
+    </div>
+    <div class="feature">
+      <h3>Group commands</h3>
+      <p>Send the same command to all devices simultaneously. Fill a form across 6 phones at once, or take screenshots of every device in one call.</p>
+    </div>
+    <div class="feature">
+      <h3>Annotated screenshots</h3>
+      <p>Capture screenshots with numbered labels on every interactive element. The LLM sees the image and a list of what each number is — visual-first automation.</p>
+    </div>
+    <div class="feature">
+      <h3>Smart queries</h3>
+      <p><code>findButton("Submit")</code> across all devices returns which ones found it. The LLM makes the decision about what to do next.</p>
+    </div>
+    <div class="feature">
+      <h3>Safari / Chrome auth</h3>
+      <p>One-tap login using the device's saved passwords. Opens Safari or Chrome Custom Tabs, syncs cookies back into the browser automatically.</p>
+    </div>
+    <div class="feature">
+      <h3>Network inspector</h3>
+      <p>Capture all XHR and fetch traffic from loaded pages. See method, URL, status, headers, request/response bodies, timing, and size.</p>
+    </div>
+    <div class="feature">
+      <h3>Console capture</h3>
+      <p>Read console output (log, warn, error) and JS errors with stack traces. Buffers up to 5,000 entries, clearable on demand.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Architecture</h2>
+  <div class="arch">
+    <pre>
+                        Local Network
+
+  +----------------+  +----------------+  +----------------+
+  |  Mollotov      |  |  Mollotov      |  |  Mollotov      |
+  |  Browser       |  |  Browser       |  |  Browser       |
+  |  (iPhone)      |  |  (iPad)        |  |  (Android)     |
+  |                |  |                |  |                |
+  |  HTTP + MCP    |  |  HTTP + MCP    |  |  HTTP + MCP    |
+  |  mDNS          |  |  mDNS          |  |  mDNS          |
+  +-------+--------+  +-------+--------+  +-------+--------+
+          |                    |                    |
+          +----------+---------+---------+----------+
+                     |                   |
+             +-------+-------------------+-------+
+             |       Mollotov CLI                |
+             |       (Node.js / MCP)             |
+             |                                   |
+             |  mDNS Discovery                   |
+             |  Individual + Group Commands      |
+             |  LLM Help System                  |
+             +----------------+------------------+
+                              |
+                         +----+----+
+                         |   LLM   |
+                         +---------+</pre>
+  </div>
+</section>
+
+<section>
+  <h2>Quick start</h2>
+  <div class="features" style="grid-template-columns: 1fr;">
+    <div class="feature">
+      <h3>1. Install the CLI</h3>
+      <p><code>npm install -g @unlikeotherai/mollotov</code></p>
+    </div>
+    <div class="feature">
+      <h3>2. Run the app</h3>
+      <p>Build and run the iOS or Android app on a device, simulator, or emulator. It starts advertising on the network automatically.</p>
+    </div>
+    <div class="feature">
+      <h3>3. Discover devices</h3>
+      <p><code>mollotov discover</code> — lists all Mollotov instances on your network with name, platform, IP, and resolution.</p>
+    </div>
+    <div class="feature">
+      <h3>4. Control</h3>
+      <p><code>mollotov navigate --url https://example.com</code> — or connect your LLM via MCP and let it drive.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Sister projects</h2>
+  <div class="projects">
+    <div class="project-card">
+      <h3><a href="https://github.com/UnlikeOtherAI/AppReveal">AppReveal</a></h3>
+      <p>Drop-in Swift package that turns any iOS app into an MCP-controllable agent. Exposes 44 tools: screenshot, tap, get DOM, fill forms, navigate, inspect view hierarchy. Discovered via mDNS, accessed over streamable HTTP. Used by Mollotov for debug integration and automated testing.</p>
+      <a href="https://github.com/UnlikeOtherAI/AppReveal" class="btn btn-secondary">View on GitHub</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <p>Built by <a href="https://github.com/UnlikeOtherAI">Unlike Other AI</a></p>
+</footer>
+
+</body>
+</html>
