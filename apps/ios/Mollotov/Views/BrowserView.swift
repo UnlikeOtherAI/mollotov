@@ -12,7 +12,10 @@ struct BrowserView: View {
     @AppStorage("hideWelcomeCard") private var hideWelcome = false
     @State private var showWelcome = true
     @State private var webView: WKWebView?
+    @AppStorage("debugOverlay") private var debugOverlayEnabled = false
+    @State private var debugText = ""
     private let safariAuth = SafariAuthHelper()
+    private let debugTimer = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
 
     var body: some View {
         ZStack {
@@ -61,6 +64,19 @@ struct BrowserView: View {
                 onNetworkInspector: { showNetworkInspector = true }
             )
         }
+        .overlay(alignment: .bottomLeading) {
+            if debugOverlayEnabled {
+                Text(debugText)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.white)
+                    .padding(6)
+                    .background(.black.opacity(0.75))
+                    .cornerRadius(6)
+                    .padding(8)
+            }
+        }
+        .onReceive(debugTimer) { _ in if debugOverlayEnabled { updateDebug() } }
+        .onChange(of: debugOverlayEnabled) { enabled in if enabled { updateDebug() } }
         .ignoresSafeArea(.container, edges: .bottom)
         .onChange(of: browserState.currentURL) { newURL in
             HistoryStore.shared.record(url: newURL, title: browserState.pageTitle)
@@ -87,5 +103,38 @@ struct BrowserView: View {
         .sheet(isPresented: $showNetworkInspector) {
             NetworkInspectorView()
         }
+    }
+
+    private func updateDebug() {
+        let screens = UIScreen.screens
+        let mgr = ExternalDisplayManager.shared
+        var lines: [String] = []
+
+        // Screens
+        for (i, s) in screens.enumerated() {
+            let o = s.bounds.origin
+            lines.append("scr[\(i)] \(Int(o.x)),\(Int(o.y)) \(Int(s.bounds.width))x\(Int(s.bounds.height)) @\(Int(s.scale))x nat=\(Int(s.nativeScale))x mir=\(s.mirrored != nil)")
+        }
+
+        // External display state
+        lines.append("ext: \(mgr.isConnected ? "ON" : "off") path=\(mgr.attachPath ?? "nil")")
+
+        // External window + webview layout
+        if let win = mgr.externalWindow {
+            let wf = win.frame
+            let wb = win.bounds
+            lines.append("win: (\(Int(wf.origin.x)),\(Int(wf.origin.y))) \(Int(wf.width))x\(Int(wf.height)) bounds=\(Int(wb.width))x\(Int(wb.height))")
+        }
+        if let wv = mgr.serverState?.handlerContext.webView {
+            let f = wv.frame
+            let b = wv.bounds
+            lines.append("wv: (\(Int(f.origin.x)),\(Int(f.origin.y))) \(Int(f.width))x\(Int(f.height)) bounds=\(Int(b.width))x\(Int(b.height))")
+            lines.append("wv: zoom=\(String(format: "%.2f", wv.pageZoom)) csf=\(String(format: "%.1f", wv.contentScaleFactor))")
+            let sv = wv.scrollView
+            lines.append("sv: content=\(Int(sv.contentSize.width))x\(Int(sv.contentSize.height)) offset=(\(Int(sv.contentOffset.x)),\(Int(sv.contentOffset.y)))")
+        }
+
+        lines.append("phone: port \(serverState.deviceInfo.port)")
+        debugText = lines.joined(separator: "\n")
     }
 }

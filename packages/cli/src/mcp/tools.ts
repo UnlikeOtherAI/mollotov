@@ -55,6 +55,11 @@ export const browserTools: BrowserToolDef[] = [
   { name: "mollotov_set_home", description: "Set the device home page URL. Persisted across app restarts.", method: "setHome", schema: { device, url: url.describe("Home page URL") }, bodyFromArgs: passthrough },
   { name: "mollotov_get_home", description: "Get the device home page URL", method: "getHome", schema: { device }, bodyFromArgs: passthrough },
 
+  // Debug
+  { name: "mollotov_debug_screens", description: "Get screen/scene/external display diagnostics. Shows UIScreen count, connected scenes, and external display manager state.", method: "debugScreens", schema: { device }, bodyFromArgs: passthrough },
+  { name: "mollotov_set_debug_overlay", description: "Enable or disable the on-screen debug overlay showing screen/scene/connection info", method: "setDebugOverlay", schema: { device, enabled: z.boolean().describe("Enable or disable the debug overlay") }, bodyFromArgs: passthrough },
+  { name: "mollotov_get_debug_overlay", description: "Get current debug overlay state", method: "getDebugOverlay", schema: { device }, bodyFromArgs: passthrough },
+
   // Screenshots
   { name: "mollotov_screenshot", description: "Take a screenshot of the device browser", method: "screenshot", schema: { device, fullPage: z.boolean().optional().describe("Capture full page"), format: z.enum(["png", "jpeg"]).optional().describe("Image format"), quality: z.number().optional().describe("JPEG quality 0-100") }, bodyFromArgs: passthrough },
 

@@ -4,6 +4,7 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var serverState: ServerState
     @Environment(\.dismiss) private var dismiss
+    @AppStorage("debugOverlay") private var debugOverlay = false
 
     var body: some View {
         NavigationView {
@@ -29,6 +30,10 @@ struct SettingsView: View {
                         .font(.system(.body, design: .monospaced))
                         .foregroundColor(.blue)
                         .textSelection(.enabled)
+                }
+
+                Section("Debug") {
+                    Toggle("Debug Overlay", isOn: $debugOverlay)
                 }
 
                 Section("App") {

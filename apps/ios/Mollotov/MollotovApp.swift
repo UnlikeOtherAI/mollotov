@@ -14,26 +14,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         OrientationManager.shared.lock
     }
 
-    func application(
-        _ application: UIApplication,
-        configurationForConnecting connectingSceneSession: UISceneSession,
-        options: UIScene.ConnectionOptions
-    ) -> UISceneConfiguration {
-        print("[AppDelegate] configurationForConnecting role=\(connectingSceneSession.role.rawValue)")
-        if connectingSceneSession.role == .windowExternalDisplayNonInteractive {
-            print("[AppDelegate] Creating external display configuration")
-            let config = UISceneConfiguration(
-                name: "External Display",
-                sessionRole: connectingSceneSession.role
-            )
-            config.delegateClass = ExternalDisplaySceneDelegate.self
-            return config
-        }
-        return UISceneConfiguration(
-            name: "Default Configuration",
-            sessionRole: connectingSceneSession.role
-        )
-    }
+
 }
 
 @main

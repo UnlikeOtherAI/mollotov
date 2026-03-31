@@ -1,139 +1,119 @@
 import UIKit
-import SwiftUI
-
-// MARK: - Scene delegate (iOS 16+ path)
-
-/// Scene delegate for the Apple TV / external display window scene.
-/// Declared in Info.plist under UIWindowSceneSessionRoleExternalDisplayNonInteractive.
-class ExternalDisplaySceneDelegate: NSObject, UIWindowSceneDelegate {
-    var window: UIWindow?
-
-    func scene(
-        _ scene: UIScene,
-        willConnectTo session: UISceneSession,
-        options connectionOptions: UIScene.ConnectionOptions
-    ) {
-        print("[ExternalDisplayScene] willConnectTo role=\(session.role.rawValue)")
-        guard let windowScene = scene as? UIWindowScene else { return }
-        Task { @MainActor in
-            ExternalDisplayManager.shared.attachViaScene(windowScene)
-        }
-    }
-
-    func sceneDidDisconnect(_ scene: UIScene) {
-        print("[ExternalDisplayScene] sceneDidDisconnect")
-        Task { @MainActor in
-            ExternalDisplayManager.shared.detach()
-        }
-    }
-}
-
-// MARK: - Manager
+import WebKit
 
 /// Manages an external display (Apple TV via AirPlay).
-/// Two detection paths: scene-based (iOS 16+) and UIScreen notifications (fallback).
-/// Whichever fires first wins; the other is a no-op.
+/// Uses UIScreen notifications to detect AirPlay, then scans connected scenes
+/// for the external display UIWindowScene and creates a fullscreen WKWebView on it.
 @MainActor
 final class ExternalDisplayManager {
     static let shared = ExternalDisplayManager()
 
-    private(set) var isConnected = false
+    var isConnected = false
     let externalPort: UInt16 = 8421
+    var attachPath: String?
 
-    private var serverState: ServerState?
-    private var browserState: BrowserState?
-    private var externalWindow: UIWindow?
+    var serverState: ServerState?
+    var browserState: BrowserState?
+    var externalWindow: UIWindow?
 
     private init() {}
 
-    /// Start listening for external displays via UIScreen notifications.
-    /// Call once from app startup.
     func startMonitoring() {
+        scanForExternalScene()
+
         NotificationCenter.default.addObserver(
             forName: UIScreen.didConnectNotification, object: nil, queue: .main
-        ) { [weak self] notification in
-            guard let screen = notification.object as? UIScreen else { return }
-            print("[ExternalDisplay] UIScreen.didConnectNotification: \(screen.bounds.size)")
-            Task { @MainActor in self?.attachViaScreen(screen) }
+        ) { [weak self] _ in
+            Task { @MainActor in self?.scanForExternalScene() }
         }
         NotificationCenter.default.addObserver(
             forName: UIScreen.didDisconnectNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            print("[ExternalDisplay] UIScreen.didDisconnectNotification")
             Task { @MainActor in self?.detach() }
         }
+    }
 
-        // Already connected at launch (e.g. AirPlay was active before app started)
-        if UIScreen.screens.count > 1, let screen = UIScreen.screens.last {
-            print("[ExternalDisplay] Screen already connected at launch: \(screen.bounds.size)")
-            attachViaScreen(screen)
-        } else {
-            print("[ExternalDisplay] Monitoring started, \(UIScreen.screens.count) screen(s)")
+    private func scanForExternalScene() {
+        guard !isConnected else { return }
+
+        for scene in UIApplication.shared.connectedScenes {
+            if scene.session.role == .windowExternalDisplayNonInteractive,
+               let windowScene = scene as? UIWindowScene {
+                attach(to: windowScene)
+                return
+            }
         }
     }
 
-    // MARK: Attach / Detach
-
-    /// Attach via UIWindowScene (called from ExternalDisplaySceneDelegate).
-    func attachViaScene(_ windowScene: UIWindowScene) {
-        guard !isConnected else {
-            print("[ExternalDisplay] Already connected, ignoring scene attach")
-            return
-        }
-
+    private func attach(to windowScene: UIWindowScene) {
         let screen = windowScene.screen
-        let (bs, ss) = makeStates(screen: screen)
+        let screenBounds = screen.bounds
 
-        let view = ExternalBrowserView(browserState: bs, serverState: ss)
-        let hostingController = UIHostingController(rootView: view)
-        hostingController.view.backgroundColor = .black
-
-        let window = UIWindow(windowScene: windowScene)
-        window.rootViewController = hostingController
-        window.makeKeyAndVisible()
-        finishAttach(bs: bs, ss: ss, window: window, screen: screen)
-    }
-
-    /// Attach via UIScreen (called from didConnectNotification).
-    private func attachViaScreen(_ screen: UIScreen) {
-        guard !isConnected else {
-            print("[ExternalDisplay] Already connected, ignoring screen attach")
-            return
-        }
-
-        let (bs, ss) = makeStates(screen: screen)
-
-        let view = ExternalBrowserView(browserState: bs, serverState: ss)
-        let hostingController = UIHostingController(rootView: view)
-        hostingController.view.backgroundColor = .black
-
-        let window = UIWindow(frame: screen.bounds)
-        window.screen = screen
-        window.rootViewController = hostingController
-        window.isHidden = false
-        finishAttach(bs: bs, ss: ss, window: window, screen: screen)
-    }
-
-    private func makeStates(screen: UIScreen) -> (BrowserState, ServerState) {
         let info = DeviceInfo.externalDisplay(
             port: Int(externalPort),
-            screenSize: screen.bounds.size,
+            screenSize: screenBounds.size,
             scale: screen.scale
         )
         let bs = BrowserState()
         let ss = ServerState(deviceInfo: info)
-        return (bs, ss)
-    }
 
-    private func finishAttach(bs: BrowserState, ss: ServerState, window: UIWindow, screen: UIScreen) {
+        // Build WKWebView directly in UIKit — avoids SwiftUI layout confusion
+        // about which screen's coordinate space to use.
+        let config = WKWebViewConfiguration()
+        config.allowsInlineMediaPlayback = true
+
+        // Inject bridge scripts
+        let ucc = config.userContentController
+        ucc.addUserScript(NetworkBridge.bridgeScript)
+        ucc.add(ss.handlerContext, name: "mollotovNetwork")
+        ucc.addUserScript(ConsoleHandler.bridgeScript)
+        ucc.add(ss.handlerContext, name: "mollotovConsole")
+
+        // Create the WebView at half the screen size (1920x1080 for 4K TV).
+        // This gives a natural 1920px CSS viewport — desktop-width layout.
+        // contentScaleFactor=2 makes WebKit render at 3840x2160 pixels (4K).
+        // The 2x transform fills the full screen with pixel-perfect quality.
+        let cssSize = CGSize(width: screenBounds.width / 2, height: screenBounds.height / 2)
+
+        let vc = UIViewController()
+        vc.view.frame = screenBounds
+        vc.view.backgroundColor = .black
+
+        let webView = WKWebView(frame: CGRect(origin: .zero, size: cssSize), configuration: config)
+        webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/604.1"
+        webView.contentScaleFactor = 2
+        webView.layer.anchorPoint = .zero
+        webView.layer.position = .zero
+        webView.transform = CGAffineTransform(scaleX: 2, y: 2)
+        vc.view.addSubview(webView)
+
+        let window = UIWindow(windowScene: windowScene)
+        window.frame = screenBounds
+        window.rootViewController = vc
+        window.makeKeyAndVisible()
+
+        // Load home page
+        if let url = URL(string: bs.currentURL) {
+            webView.load(URLRequest(url: url))
+        }
+
+        // Wire up server state
+        ss.webView = webView
+        ss.handlerContext.webView = webView
+
         browserState = bs
         serverState = ss
         externalWindow = window
         isConnected = true
+        attachPath = "scene-scan"
 
         ss.startHTTPServer()
         ss.startMDNS()
-        print("[ExternalDisplay] Attached \(screen.bounds.size) @ \(screen.scale)x, port \(externalPort)")
+
+        // Track navigation changes for history
+        let coordinator = TVWebViewObserver(browserState: bs)
+        webView.navigationDelegate = coordinator
+        objc_setAssociatedObject(webView, &tvObserverKey, coordinator, .OBJC_ASSOCIATION_RETAIN)
     }
 
     func detach() {
@@ -144,6 +124,39 @@ final class ExternalDisplayManager {
         serverState = nil
         browserState = nil
         isConnected = false
-        print("[ExternalDisplay] Detached")
+        attachPath = nil
+    }
+}
+
+private var tvObserverKey: UInt8 = 0
+
+/// Minimal WKNavigationDelegate to sync BrowserState for the TV WebView.
+private class TVWebViewObserver: NSObject, WKNavigationDelegate {
+    let browserState: BrowserState
+
+    init(browserState: BrowserState) {
+        self.browserState = browserState
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        Task { @MainActor in
+            browserState.currentURL = webView.url?.absoluteString ?? ""
+            browserState.pageTitle = webView.title ?? ""
+            browserState.isLoading = false
+            HistoryStore.shared.record(url: browserState.currentURL, title: browserState.pageTitle)
+        }
+    }
+
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        Task { @MainActor in
+            browserState.isLoading = true
+        }
+    }
+
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        Task { @MainActor in
+            browserState.currentURL = webView.url?.absoluteString ?? ""
+            browserState.pageTitle = webView.title ?? ""
+        }
     }
 }

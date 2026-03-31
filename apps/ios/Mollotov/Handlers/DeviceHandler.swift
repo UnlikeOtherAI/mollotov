@@ -12,6 +12,9 @@ struct DeviceHandler {
         router.register("get-capabilities") { _ in getCapabilities() }
         router.register("set-orientation") { body in await setOrientation(body) }
         router.register("get-orientation") { _ in await getOrientation() }
+        router.register("debug-screens") { _ in await debugScreens() }
+        router.register("set-debug-overlay") { body in setDebugOverlay(body) }
+        router.register("get-debug-overlay") { _ in getDebugOverlay() }
     }
 
     @MainActor
@@ -96,6 +99,131 @@ struct DeviceHandler {
             return errorResponse(code: "INVALID_PARAM", message: "orientation must be portrait, landscape, or auto")
         }
         return successResponse(["orientation": orientation])
+    }
+
+    @MainActor
+    private func debugScreens() async -> [String: Any] {
+        let screens = UIScreen.screens
+        let scenes = UIApplication.shared.connectedScenes.map { scene -> [String: Any] in
+            [
+                "role": scene.session.role.rawValue,
+                "state": "\(scene.activationState.rawValue)",
+                "configuration": scene.session.configuration.name ?? "nil",
+            ]
+        }
+        let mgr = ExternalDisplayManager.shared
+
+        // Native layers — include origin coordinates for all frames
+        var windowInfo: [String: Any] = ["exists": false]
+        var webViewInfo: [String: Any] = ["exists": false]
+        var vcViewInfo: [String: Any] = ["exists": false]
+        if let win = mgr.externalWindow {
+            windowInfo = [
+                "exists": true,
+                "hidden": win.isHidden,
+                "hasScene": win.windowScene != nil,
+                "frame": ["x": win.frame.origin.x, "y": win.frame.origin.y, "w": win.frame.width, "h": win.frame.height],
+                "bounds": ["x": win.bounds.origin.x, "y": win.bounds.origin.y, "w": win.bounds.width, "h": win.bounds.height],
+            ]
+            if let vcView = win.rootViewController?.view {
+                vcViewInfo = [
+                    "exists": true,
+                    "frame": ["x": vcView.frame.origin.x, "y": vcView.frame.origin.y, "w": vcView.frame.width, "h": vcView.frame.height],
+                    "bounds": ["x": vcView.bounds.origin.x, "y": vcView.bounds.origin.y, "w": vcView.bounds.width, "h": vcView.bounds.height],
+                ]
+            }
+        }
+        if let wv = context.webView {
+            let sv = wv.scrollView
+            webViewInfo = [
+                "exists": true,
+                "frame": ["x": wv.frame.origin.x, "y": wv.frame.origin.y, "w": wv.frame.width, "h": wv.frame.height],
+                "bounds": ["x": wv.bounds.origin.x, "y": wv.bounds.origin.y, "w": wv.bounds.width, "h": wv.bounds.height],
+                "contentScaleFactor": wv.contentScaleFactor,
+                "pageZoom": wv.pageZoom,
+                "scrollView": [
+                    "contentSize": ["w": sv.contentSize.width, "h": sv.contentSize.height],
+                    "contentOffset": ["x": sv.contentOffset.x, "y": sv.contentOffset.y],
+                    "zoomScale": sv.zoomScale,
+                    "contentInset": ["t": sv.contentInset.top, "l": sv.contentInset.left, "b": sv.contentInset.bottom, "r": sv.contentInset.right],
+                ],
+            ]
+        }
+
+        // HTML layer — get CSS viewport and document size via JS
+        var htmlInfo: [String: Any] = [:]
+        if let wv = context.webView {
+            let js = """
+            JSON.stringify({
+                innerWidth: window.innerWidth,
+                innerHeight: window.innerHeight,
+                outerWidth: window.outerWidth,
+                outerHeight: window.outerHeight,
+                screenX: window.screenX,
+                screenY: window.screenY,
+                scrollX: window.scrollX,
+                scrollY: window.scrollY,
+                devicePixelRatio: window.devicePixelRatio,
+                documentWidth: document.documentElement.scrollWidth,
+                documentHeight: document.documentElement.scrollHeight,
+                clientWidth: document.documentElement.clientWidth,
+                clientHeight: document.documentElement.clientHeight,
+                bodyWidth: document.body ? document.body.scrollWidth : null,
+                bodyHeight: document.body ? document.body.scrollHeight : null,
+                bodyOffsetLeft: document.body ? document.body.offsetLeft : null,
+                bodyOffsetTop: document.body ? document.body.offsetTop : null,
+                viewportMeta: (function(){ var m = document.querySelector('meta[name=viewport]'); return m ? m.content : null; })(),
+                visualViewport: window.visualViewport ? {
+                    width: window.visualViewport.width,
+                    height: window.visualViewport.height,
+                    offsetLeft: window.visualViewport.offsetLeft,
+                    offsetTop: window.visualViewport.offsetTop,
+                    pageLeft: window.visualViewport.pageLeft,
+                    pageTop: window.visualViewport.pageTop,
+                    scale: window.visualViewport.scale
+                } : null
+            })
+            """
+            if let result = try? await wv.evaluateJavaScript(js) as? String,
+               let data = result.data(using: .utf8),
+               let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                htmlInfo = parsed
+            }
+        }
+
+        return successResponse([
+            "screenCount": screens.count,
+            "screens": screens.enumerated().map { i, s in
+                [
+                    "index": i,
+                    "width": s.bounds.width,
+                    "height": s.bounds.height,
+                    "scale": s.scale,
+                    "nativeScale": s.nativeScale,
+                    "mirrored": s.mirrored != nil,
+                ]
+            },
+            "scenes": scenes,
+            "externalDisplay": [
+                "connected": mgr.isConnected,
+                "attachPath": mgr.attachPath ?? "none",
+                "port": mgr.externalPort,
+            ],
+            "window": windowInfo,
+            "vcView": vcViewInfo,
+            "webView": webViewInfo,
+            "html": htmlInfo,
+        ])
+    }
+
+    private func setDebugOverlay(_ body: [String: Any]) -> [String: Any] {
+        let enabled = body["enabled"] as? Bool ?? true
+        UserDefaults.standard.set(enabled, forKey: "debugOverlay")
+        return successResponse(["enabled": enabled])
+    }
+
+    private func getDebugOverlay() -> [String: Any] {
+        successResponse(["enabled": UserDefaults.standard.bool(forKey: "debugOverlay")])
     }
 
     private func getCapabilities() -> [String: Any] {
