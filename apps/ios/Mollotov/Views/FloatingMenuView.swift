@@ -31,7 +31,7 @@ struct FloatingMenuView: View {
     let onNetworkInspector: () -> Void
 
     @State private var isOpen = false
-    @State private var side: CGFloat = 1
+    @Binding var side: CGFloat
     @State private var dragOffset: CGFloat = 0
     @State private var isDragging = false
 

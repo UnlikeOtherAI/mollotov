@@ -4,6 +4,10 @@ import WebKit
 /// Manages an external display (Apple TV via AirPlay).
 /// Uses UIScreen notifications to detect AirPlay, then scans connected scenes
 /// for the external display UIWindowScene and creates a fullscreen WKWebView on it.
+extension Notification.Name {
+    static let externalDisplayConnectionChanged = Notification.Name("externalDisplayConnectionChanged")
+}
+
 @MainActor
 final class ExternalDisplayManager {
     static let shared = ExternalDisplayManager()
@@ -106,6 +110,7 @@ final class ExternalDisplayManager {
         externalWindow = window
         isConnected = true
         attachPath = "scene-scan"
+        NotificationCenter.default.post(name: .externalDisplayConnectionChanged, object: nil)
 
         ss.startHTTPServer()
         ss.startMDNS()
@@ -125,6 +130,7 @@ final class ExternalDisplayManager {
         browserState = nil
         isConnected = false
         attachPath = nil
+        NotificationCenter.default.post(name: .externalDisplayConnectionChanged, object: nil)
     }
 }
 

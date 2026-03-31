@@ -42,6 +42,8 @@
 		A100000041 /* WelcomeCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000041; };
 		A100000042 /* ExternalBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000042; };
 		A100000043 /* ExternalDisplayManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000043; };
+		A100000044 /* TVControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000044; };
+		A100000045 /* TouchpadOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000045; };
 		DFDB1F217CF14213A9FB5CCE /* BookmarkStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4372587B096643C1AE55184F /* BookmarkStore.swift */; };
 		557BEEFEC864450EB89DE351 /* HistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FF936A1AD0C457183D75A46 /* HistoryStore.swift */; };
 		D2474B135EE9443A9A60289B /* NetworkTrafficStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E8CCB2224B44E128F3A4D13 /* NetworkTrafficStore.swift */; };
@@ -89,6 +91,8 @@
 		B100000041 /* WelcomeCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeCardView.swift; sourceTree = "<group>"; };
 		B100000042 /* ExternalBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExternalBrowserView.swift; sourceTree = "<group>"; };
 		B100000043 /* ExternalDisplayManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExternalDisplayManager.swift; sourceTree = "<group>"; };
+		B100000044 /* TVControlsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVControlsView.swift; sourceTree = "<group>"; };
+		B100000045 /* TouchpadOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TouchpadOverlayView.swift; sourceTree = "<group>"; };
 		B100000099 /* Mollotov.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Mollotov.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4372587B096643C1AE55184F /* BookmarkStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookmarkStore.swift; sourceTree = "<group>"; };
 		2FF936A1AD0C457183D75A46 /* HistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryStore.swift; sourceTree = "<group>"; };
@@ -150,6 +154,8 @@
 				D43743BF12FB4153846B26F0 /* NetworkInspectorView.swift */,
 				B100000041 /* WelcomeCardView.swift */,
 				B100000042 /* ExternalBrowserView.swift */,
+				B100000044 /* TVControlsView.swift */,
+				B100000045 /* TouchpadOverlayView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -344,7 +350,9 @@
 				A100000041 /* WelcomeCardView.swift in Sources */,
 				A100000042 /* ExternalBrowserView.swift in Sources */,
 				A100000043 /* ExternalDisplayManager.swift in Sources */,
-			
+				A100000044 /* TVControlsView.swift in Sources */,
+				A100000045 /* TouchpadOverlayView.swift in Sources */,
+
 				DFDB1F217CF14213A9FB5CCE /* BookmarkStore.swift in Sources */,
 				557BEEFEC864450EB89DE351 /* HistoryStore.swift in Sources */,
 				D2474B135EE9443A9A60289B /* NetworkTrafficStore.swift in Sources */,
