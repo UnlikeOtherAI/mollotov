@@ -1,0 +1,109 @@
+import Foundation
+
+/// Manages a Firefox subprocess with the Remote Debugging Protocol enabled.
+/// Finds Firefox.app at standard macOS install paths and spawns it with a
+/// dedicated profile so it does not interfere with the user's own Firefox.
+@MainActor
+final class GeckoProcessManager {
+    private(set) var debugPort: Int = 0
+    private var process: Process?
+    private var profileDir: URL?
+
+    static let firefoxPaths: [String] = [
+        "/Applications/Firefox.app/Contents/MacOS/firefox",
+        "/Applications/Firefox Developer Edition.app/Contents/MacOS/firefox",
+        (NSHomeDirectory() as NSString).appendingPathComponent(
+            "Applications/Firefox.app/Contents/MacOS/firefox"
+        ),
+    ]
+
+    enum GeckoError: Error {
+        case firefoxNotFound
+        case portUnavailable
+        case startupTimeout
+    }
+
+    static func locateFirefox() -> String? {
+        firefoxPaths.first { FileManager.default.fileExists(atPath: $0) }
+    }
+
+    func start() async throws {
+        guard let execPath = Self.locateFirefox() else {
+            throw GeckoError.firefoxNotFound
+        }
+
+        let port = Self.findFreePort()
+        guard port > 0 else { throw GeckoError.portUnavailable }
+        debugPort = port
+
+        let tempProfile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("com.mollotov.gecko-profile-\(port)")
+        try? FileManager.default.createDirectory(at: tempProfile, withIntermediateDirectories: true)
+        profileDir = tempProfile
+
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: execPath)
+        proc.arguments = [
+            "--remote-debugging-port", "\(port)",
+            "--no-remote",
+            "--profile", tempProfile.path,
+            "--headless",
+            "about:blank",
+        ]
+        proc.standardOutput = FileHandle.nullDevice
+        proc.standardError = FileHandle.nullDevice
+        try proc.run()
+        process = proc
+        NSLog("[GeckoProcessManager] Firefox PID=%d port=%d", proc.processIdentifier, port)
+
+        try await waitForEndpoint(port: port)
+    }
+
+    func stop() {
+        process?.terminate()
+        process = nil
+        if let dir = profileDir {
+            try? FileManager.default.removeItem(at: dir)
+            profileDir = nil
+        }
+        debugPort = 0
+    }
+
+    var isRunning: Bool { process?.isRunning == true }
+
+    private func waitForEndpoint(port: Int, retries: Int = 40) async throws {
+        let url = URL(string: "http://localhost:\(port)/json/version")!
+        for _ in 0..<retries {
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            if let _ = try? await URLSession.shared.data(from: url) {
+                return
+            }
+        }
+        throw GeckoError.startupTimeout
+    }
+
+    private static func findFreePort() -> Int {
+        let sock = socket(AF_INET6, SOCK_STREAM, 0)
+        guard sock >= 0 else { return 0 }
+        defer { close(sock) }
+        var addr = sockaddr_in6()
+        addr.sin6_family = sa_family_t(AF_INET6)
+        addr.sin6_port = 0
+        addr.sin6_addr = in6addr_any
+        addr.sin6_len = UInt8(MemoryLayout<sockaddr_in6>.size)
+        var result = withUnsafeMutablePointer(to: &addr) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                bind(sock, $0, socklen_t(MemoryLayout<sockaddr_in6>.size))
+            }
+        }
+        guard result == 0 else { return 0 }
+        var len = socklen_t(MemoryLayout<sockaddr_in6>.size)
+        result = withUnsafeMutablePointer(to: &addr) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                getsockname(sock, $0, &len)
+            }
+        }
+        guard result == 0 else { return 0 }
+        return Int(addr.sin6_port.bigEndian)
+    }
+}

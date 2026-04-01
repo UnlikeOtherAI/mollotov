@@ -18,9 +18,10 @@ final class ServerState: ObservableObject {
 
     var rendererState: RendererState?
 
-    // Both renderers are created eagerly for instant switching
+    // Renderers are created on first use and cached for instant switching
     private(set) var wkRenderer: WKWebViewRenderer?
     private(set) var cefRenderer: CEFRenderer?
+    private(set) var geckoRenderer: GeckoRenderer?
 
     private var httpServer: HTTPServer?
     private var toastDismissTask: Task<Void, Never>?
@@ -185,6 +186,16 @@ final class ServerState: ObservableObject {
                 self?.handlerContext.handleScriptMessage(name: name, body: body)
             }
             cefRenderer = renderer
+            return renderer
+        case .gecko:
+            if let geckoRenderer {
+                return geckoRenderer
+            }
+            let renderer = GeckoRenderer()
+            renderer.onScriptMessage = { [weak self] name, body in
+                self?.handlerContext.handleScriptMessage(name: name, body: body)
+            }
+            geckoRenderer = renderer
             return renderer
         }
     }

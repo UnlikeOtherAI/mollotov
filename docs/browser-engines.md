@@ -33,9 +33,9 @@ Mollotov is an LLM-controlled testing browser that needs to support multiple ren
 |---|---|---|
 | **WebKit** (WKWebView) | Always available | Safari-compatible rendering |
 | **Chromium/Blink** (CEF) | Always available | Chromium Embedded Framework; no entitlement required on macOS |
-| **Gecko** | Available but not embedded | Can be installed as standalone Firefox; not currently embedded in Mollotov |
+| **Gecko** (Firefox Remote Protocol) | Available — CDP subprocess | Spawns Firefox.app with `--remote-debugging-port`; driven via Firefox Remote Protocol (CDP-compatible WebSocket) |
 
-**Current Implementation:** macOS apps support both WKWebView and CEF with runtime switching via the renderer abstraction layer.
+**Current Implementation:** macOS apps support WebKit, CEF (Chromium), and Gecko (Firefox) with runtime switching via the renderer abstraction layer. Gecko spawns Firefox.app as a headless subprocess and drives it via the CDP-compatible Firefox Remote Protocol.
 
 ### Windows
 

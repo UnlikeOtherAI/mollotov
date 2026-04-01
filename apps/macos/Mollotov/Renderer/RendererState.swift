@@ -6,11 +6,13 @@ final class RendererState: ObservableObject {
     enum Engine: String, CaseIterable {
         case webkit = "webkit"
         case chromium = "chromium"
+        case gecko = "gecko"
 
         var displayName: String {
             switch self {
             case .webkit: return "Safari (WebKit)"
             case .chromium: return "Chrome (Chromium)"
+            case .gecko: return "Firefox (Gecko)"
             }
         }
     }

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Mollotov is a two-component system: native browser apps on iOS, Android, and macOS devices and a CLI orchestrator on the developer's machine. All components communicate over the local network via HTTP/JSON. Discovery is automatic via mDNS.
+Mollotov is a two-component system: native browser apps on iOS, Android, macOS, and Linux devices and a CLI orchestrator on the developer's machine. All components communicate over the local network via HTTP/JSON. Discovery is automatic via mDNS.
 
 ```
                         ┌─────────────┐
@@ -55,7 +55,7 @@ For full tech stack details, see [tech-stack.md](tech-stack.md). For browser eng
 
 ## Component Architecture
 
-### 1. Browser App (iOS / Android / macOS)
+### 1. Browser App (iOS / Android / macOS / Linux)
 
 Each browser app has four internal layers:
 
@@ -77,16 +77,17 @@ Each browser app has four internal layers:
 └──────────────────────────────────┘
 ```
 
-**UI Layer** — Minimal chrome on mobile, with the URL bar and settings access always visible. On macOS, the browser window adds desktop toolbar controls and a segmented renderer switcher for Safari/WebKit vs Chrome/Chromium. Settings still expose IP address, port, device name, mDNS status, and connection instructions. For details, see [ui/mobile.md](ui/mobile.md).
+**UI Layer** — Minimal chrome on mobile, with the URL bar and settings access always visible. On macOS, the browser window adds desktop toolbar controls and a segmented renderer switcher for Safari/WebKit vs Chrome/Chromium. On Linux, the desktop shell offers a GTK URL bar plus floating access to bookmarks, history, network inspection, and settings, with a headless mode that skips the UI entirely. Settings still expose IP address, port, device name, mDNS status, and connection instructions. For details, see [ui/mobile.md](ui/mobile.md).
 
 **Browser Engine** — Platform WebView. All page interaction goes through native APIs:
 - iOS: `WKWebView` native methods — `evaluateJavaScript`, `takeSnapshot`, scroll via `scrollView`
 - Android: `WebView` + CDP — `DOM.getDocument`, `Page.captureScreenshot`, `Runtime.evaluate`
 - macOS: dual renderer stack — `WKWebView` for Safari/WebKit parity and CEF for Chromium/Chrome parity. Both conform to a shared renderer interface so the HTTP and MCP surface stays the same while the active engine changes.
+- Linux: CEF-backed Chromium shell when the SDK/runtime is present, with a stub-safe fallback that keeps the HTTP server, mDNS, and persisted state alive when CEF is unavailable.
 
 **Command Handler** — Translates incoming HTTP requests into native browser calls. Android uses CDP for most operations (no scripts enter the page). iOS uses native `evaluateJavaScript` calls and, for features WebKit doesn't expose natively, ephemeral bridge scripts that are cleared on navigation (see [iOS bridge scripts](#ios--no-injection-dom-access)). macOS routes the same handlers through the active renderer and adds `set-renderer` / `get-renderer` so the UI and API can switch engines at runtime.
 
-**Network Layer** — Embedded HTTP server (Swifter/Telegraph on iOS, Ktor on Android, Network.framework-based server on macOS), MCP server over the same transport, and mDNS service advertisement.
+**Network Layer** — Embedded HTTP server (Swifter/Telegraph on iOS, Ktor on Android, Network.framework-based server on macOS, native socket server on Linux), MCP server over the same transport, and mDNS service advertisement.
 
 ### 2. CLI
 
@@ -201,7 +202,7 @@ TXT Records:
   name     = "My iPhone"           # User-friendly device name
   model    = "iPhone 15 Pro"       # Device model
   platform = "ios" | "android" | "macos"   # Platform identifier
-  engine   = "webkit" | "chromium"         # Active renderer on macOS
+  engine   = "webkit" | "chromium" | "gecko"  # Active renderer on macOS
   width    = "390"                  # CSS viewport width
   height   = "844"                  # CSS viewport height
   port     = "8420"                 # HTTP server port
@@ -215,6 +216,7 @@ Every Mollotov browser instance has a **stable unique device ID** used for relia
 - **iOS**: Uses `identifierForVendor` (UUID that persists across app launches, resets only on full app reinstall). Stored in Keychain for extra persistence.
 - **Android**: Uses a self-generated UUIDv4, stored in SharedPreferences on first launch. Persists across app restarts. Falls back to `Settings.Secure.ANDROID_ID` as a secondary identifier.
 - **macOS**: Uses the machine's stable hardware UUID (`IOPlatformUUID`) as the base identity and persists it for app-level reuse.
+- **Linux**: Uses a self-generated UUIDv4 stored in the profile directory (`device-id`). Persists across restarts and survives port changes.
 - **Simulators/Emulators**: Generate a UUIDv4 on first launch, stored locally. Each simulator instance gets its own unique ID.
 
 The device ID is:
