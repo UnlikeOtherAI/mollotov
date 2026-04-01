@@ -2,6 +2,7 @@ package com.mollotov.browser.browser
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.mollotov.browser.nativecore.NativeCore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,44 +21,71 @@ data class HistoryEntry(
 )
 
 object HistoryStore {
+    private const val PREFS_NAME = "mollotov_history"
+    private const val DATA_KEY = "data"
+
     private lateinit var prefs: SharedPreferences
+    private val nativeHandle = NativeCore.historyStoreCreate()
+    private val lock = Any()
     private val _entries = MutableStateFlow<List<HistoryEntry>>(emptyList())
     val entries: StateFlow<List<HistoryEntry>> = _entries.asStateFlow()
-    private const val MAX_ENTRIES = 500
 
     fun init(context: Context) {
-        prefs = context.getSharedPreferences("mollotov_history", Context.MODE_PRIVATE)
-        load()
+        synchronized(lock) {
+            prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            NativeCore.historyStoreLoadJson(nativeHandle, prefs.getString(DATA_KEY, null))
+            refreshFromNative(save = false)
+        }
     }
 
     fun record(url: String, title: String) {
-        if (_entries.value.lastOrNull()?.url == url) return
-        val updated = _entries.value + HistoryEntry(url = url, title = title)
-        _entries.value = if (updated.size > MAX_ENTRIES) updated.drop(updated.size - MAX_ENTRIES) else updated
-        save()
+        synchronized(lock) {
+            NativeCore.historyStoreRecord(nativeHandle, url, title)
+            refreshFromNative(save = true)
+        }
     }
 
     fun clear() {
-        _entries.value = emptyList()
-        save()
+        synchronized(lock) {
+            NativeCore.historyStoreClear(nativeHandle)
+            refreshFromNative(save = true)
+        }
     }
 
-    fun toJSON(): List<Map<String, Any>> = _entries.value.reversed().map { e ->
+    fun updateLatestTitle(url: String, title: String) {
+        synchronized(lock) {
+            NativeCore.historyStoreUpdateLatestTitle(nativeHandle, url, title)
+            refreshFromNative(save = true)
+        }
+    }
+
+    fun toJSON(): List<Map<String, Any>> = _entries.value.asReversed().map { e ->
         mapOf("id" to e.id, "url" to e.url, "title" to e.title, "timestamp" to e.timestamp)
     }
 
-    private fun save() {
+    private fun refreshFromNative(save: Boolean) {
+        val newestFirst = parseHistoryEntries(NativeCore.historyStoreToJson(nativeHandle))
+        _entries.value = newestFirst.asReversed()
+        if (save) {
+            saveHistoryJson(_entries.value)
+        }
+    }
+
+    private fun saveHistoryJson(entries: List<HistoryEntry>) {
         val arr = JSONArray()
-        _entries.value.forEach { e ->
+        entries.forEach { e ->
             arr.put(JSONObject().apply {
                 put("id", e.id); put("url", e.url); put("title", e.title); put("timestamp", e.timestamp)
             })
         }
-        prefs.edit().putString("data", arr.toString()).apply()
+        prefs.edit().putString(DATA_KEY, arr.toString()).apply()
     }
 
-    private fun load() {
-        val json = prefs.getString("data", null) ?: return
+    private fun parseHistoryEntries(json: String?): List<HistoryEntry> {
+        if (json.isNullOrBlank()) {
+            return emptyList()
+        }
+
         val arr = JSONArray(json)
         val list = mutableListOf<HistoryEntry>()
         for (i in 0 until arr.length()) {
@@ -69,6 +97,6 @@ object HistoryStore {
                 timestamp = obj.optString("timestamp", ""),
             ))
         }
-        _entries.value = list
+        return list
     }
 }

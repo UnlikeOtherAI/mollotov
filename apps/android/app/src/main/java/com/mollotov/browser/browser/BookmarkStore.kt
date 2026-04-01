@@ -2,11 +2,11 @@ package com.mollotov.browser.browser
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.mollotov.browser.nativecore.NativeCore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONArray
-import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -20,46 +20,61 @@ data class Bookmark(
 )
 
 object BookmarkStore {
+    private const val PREFS_NAME = "mollotov_bookmarks"
+    private const val DATA_KEY = "data"
+
     private lateinit var prefs: SharedPreferences
+    private val nativeHandle = NativeCore.bookmarkStoreCreate()
+    private val lock = Any()
     private val _bookmarks = MutableStateFlow<List<Bookmark>>(emptyList())
     val bookmarks: StateFlow<List<Bookmark>> = _bookmarks.asStateFlow()
 
     fun init(context: Context) {
-        prefs = context.getSharedPreferences("mollotov_bookmarks", Context.MODE_PRIVATE)
-        load()
+        synchronized(lock) {
+            prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            NativeCore.bookmarkStoreLoadJson(nativeHandle, prefs.getString(DATA_KEY, null))
+            _bookmarks.value = parseBookmarks(NativeCore.bookmarkStoreToJson(nativeHandle))
+        }
     }
 
     fun add(title: String, url: String) {
-        _bookmarks.value = _bookmarks.value + Bookmark(title = title, url = url)
-        save()
+        synchronized(lock) {
+            NativeCore.bookmarkStoreAdd(nativeHandle, title, url)
+            refreshFromNative(save = true)
+        }
     }
 
     fun remove(id: String) {
-        _bookmarks.value = _bookmarks.value.filter { it.id != id }
-        save()
+        synchronized(lock) {
+            NativeCore.bookmarkStoreRemove(nativeHandle, id)
+            refreshFromNative(save = true)
+        }
     }
 
     fun clear() {
-        _bookmarks.value = emptyList()
-        save()
+        synchronized(lock) {
+            NativeCore.bookmarkStoreRemoveAll(nativeHandle)
+            refreshFromNative(save = true)
+        }
     }
 
     fun toJSON(): List<Map<String, Any>> = _bookmarks.value.map { b ->
         mapOf("id" to b.id, "title" to b.title, "url" to b.url, "createdAt" to b.createdAt)
     }
 
-    private fun save() {
-        val arr = JSONArray()
-        _bookmarks.value.forEach { b ->
-            arr.put(JSONObject().apply {
-                put("id", b.id); put("title", b.title); put("url", b.url); put("createdAt", b.createdAt)
-            })
+    private fun refreshFromNative(save: Boolean) {
+        val json = NativeCore.bookmarkStoreToJson(nativeHandle)
+        _bookmarks.value = parseBookmarks(json)
+        if (save) {
+            prefs.edit().putString(DATA_KEY, json ?: "[]").apply()
         }
-        prefs.edit().putString("data", arr.toString()).apply()
     }
 
-    private fun load() {
-        val json = prefs.getString("data", null) ?: return
+    private fun parseBookmarks(json: String?): List<Bookmark> {
+        if (json.isNullOrBlank()) {
+            return emptyList()
+        }
+
         val arr = JSONArray(json)
         val list = mutableListOf<Bookmark>()
         for (i in 0 until arr.length()) {
@@ -68,9 +83,9 @@ object BookmarkStore {
                 id = obj.getString("id"),
                 title = obj.getString("title"),
                 url = obj.getString("url"),
-                createdAt = obj.optString("createdAt", ""),
+                createdAt = obj.optString("created_at", obj.optString("createdAt", "")),
             ))
         }
-        _bookmarks.value = list
+        return list
     }
 }

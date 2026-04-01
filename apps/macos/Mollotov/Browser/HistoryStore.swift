@@ -7,7 +7,7 @@ final class HistoryStore: ObservableObject {
     struct HistoryEntry: Identifiable, Codable {
         let id: UUID
         let url: String
-        let title: String
+        var title: String
         let timestamp: Date
 
         init(url: String, title: String) {
@@ -16,43 +16,181 @@ final class HistoryStore: ObservableObject {
             self.title = title
             self.timestamp = Date()
         }
-    }
 
-    @Published private(set) var entries: [HistoryEntry] = []
-    private let key = "mollotov_history"
-    private let maxEntries = 500
+        private enum EncodingKeys: String, CodingKey {
+            case id
+            case url
+            case title
+            case timestamp
+        }
 
-    private init() { load() }
+        private enum DecodingKeys: String, CodingKey {
+            case id
+            case url
+            case title
+            case timestamp
+        }
 
-    func record(url: String, title: String) {
-        // Deduplicate consecutive identical URLs
-        if entries.last?.url == url { return }
-        entries.append(HistoryEntry(url: url, title: title))
-        if entries.count > maxEntries { entries.removeFirst(entries.count - maxEntries) }
-        save()
-    }
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: DecodingKeys.self)
 
-    func clear() {
-        entries.removeAll()
-        save()
-    }
+            let identifier = try container.decodeIfPresent(String.self, forKey: .id) ?? ""
+            id = UUID(uuidString: identifier) ?? UUID()
+            url = try container.decodeIfPresent(String.self, forKey: .url) ?? ""
+            title = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
+            timestamp = Self.decodeDate(from: container) ?? Date()
+        }
 
-    func toJSON() -> [[String: Any]] {
-        entries.reversed().map { e in
-            ["id": e.id.uuidString, "url": e.url, "title": e.title,
-             "timestamp": ISO8601DateFormatter().string(from: e.timestamp)]
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: EncodingKeys.self)
+            try container.encode(id.uuidString, forKey: .id)
+            try container.encode(url, forKey: .url)
+            try container.encode(title, forKey: .title)
+            try container.encode(timestamp, forKey: .timestamp)
+        }
+
+        private static func decodeDate(from container: KeyedDecodingContainer<DecodingKeys>) -> Date? {
+            if let date = try? container.decode(Date.self, forKey: .timestamp) {
+                return date
+            }
+            if let string = try? container.decode(String.self, forKey: .timestamp),
+               let date = HistoryStore.iso8601Formatter.date(from: string) {
+                return date
+            }
+            return nil
         }
     }
 
-    private func save() {
-        if let data = try? JSONEncoder().encode(entries) {
-            UserDefaults.standard.set(data, forKey: key)
+    @Published private(set) var entries: [HistoryEntry] = []
+
+    private let key = "mollotov_history"
+    private let storeHandle = mollotov_history_store_create()
+
+    fileprivate static let iso8601Formatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        return formatter
+    }()
+
+    private init() {
+        load()
+    }
+
+    deinit {
+        mollotov_history_store_destroy(storeHandle)
+    }
+
+    func record(url: String, title: String) {
+        guard let storeHandle else { return }
+        url.withCString { urlPointer in
+            title.withCString { titlePointer in
+                mollotov_history_store_record(storeHandle, urlPointer, titlePointer)
+            }
+        }
+        refreshFromCore()
+        persist()
+    }
+
+    func clear() {
+        guard let storeHandle else { return }
+        mollotov_history_store_clear(storeHandle)
+        refreshFromCore()
+        persist()
+    }
+
+    func updateLatestTitle(for url: String, title: String) {
+        guard let storeHandle else { return }
+        url.withCString { urlPointer in
+            title.withCString { titlePointer in
+                mollotov_history_store_update_latest_title(storeHandle, urlPointer, titlePointer)
+            }
+        }
+        refreshFromCore()
+        persist()
+    }
+
+    func toJSON() -> [[String: Any]] {
+        entries.reversed().map { entry in
+            [
+                "id": entry.id.uuidString,
+                "url": entry.url,
+                "title": entry.title,
+                "timestamp": Self.iso8601Formatter.string(from: entry.timestamp),
+            ]
         }
     }
 
     private func load() {
-        guard let data = UserDefaults.standard.data(forKey: key),
-              let decoded = try? JSONDecoder().decode([HistoryEntry].self, from: data) else { return }
-        entries = decoded
+        guard let storeHandle else { return }
+
+        let persistedJSON = loadPersistedJSON() ?? "[]"
+        persistedJSON.withCString { jsonPointer in
+            mollotov_history_store_load_json(storeHandle, jsonPointer)
+        }
+        refreshFromCore()
+    }
+
+    private func refreshFromCore() {
+        guard let json = exportedJSON() else {
+            entries = []
+            return
+        }
+
+        let decoded = Self.decodeEntries(from: json.data(using: .utf8) ?? Data()) ?? []
+        entries = Array(decoded.reversed())
+    }
+
+    private func persist() {
+        let payload = Self.jsonData(from: entries.map(Self.persistedJSONObject)) ?? Data("[]".utf8)
+        UserDefaults.standard.set(payload, forKey: key)
+    }
+
+    private func exportedJSON() -> String? {
+        guard let storeHandle else { return nil }
+        guard let rawPointer = mollotov_history_store_to_json(storeHandle) else { return nil }
+        defer { mollotov_free_string(rawPointer) }
+        return String(cString: rawPointer)
+    }
+
+    private func loadPersistedJSON() -> String? {
+        if let data = UserDefaults.standard.data(forKey: key) {
+            return normalizedPersistedJSON(from: data)
+        }
+
+        if let string = UserDefaults.standard.string(forKey: key) {
+            return normalizedPersistedJSON(from: Data(string.utf8))
+        }
+
+        return nil
+    }
+
+    private func normalizedPersistedJSON(from data: Data) -> String? {
+        guard let decoded = Self.decodeEntries(from: data) else { return nil }
+        return Self.makeJSONString(from: decoded.map(Self.persistedJSONObject))
+    }
+
+    private static func decodeEntries(from data: Data) -> [HistoryEntry]? {
+        let decoder = JSONDecoder()
+        return try? decoder.decode([HistoryEntry].self, from: data)
+    }
+
+    private static func persistedJSONObject(for entry: HistoryEntry) -> [String: Any] {
+        [
+            "id": entry.id.uuidString,
+            "url": entry.url,
+            "title": entry.title,
+            "timestamp": iso8601Formatter.string(from: entry.timestamp),
+        ]
+    }
+
+    private static func makeJSONString(from object: Any) -> String? {
+        guard let data = jsonData(from: object) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    private static func jsonData(from object: Any) -> Data? {
+        guard JSONSerialization.isValidJSONObject(object) else { return nil }
+        return try? JSONSerialization.data(withJSONObject: object)
     }
 }

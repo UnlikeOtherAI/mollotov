@@ -16,44 +16,184 @@ final class BookmarkStore: ObservableObject {
             self.url = url
             self.createdAt = Date()
         }
-    }
 
-    @Published private(set) var bookmarks: [Bookmark] = []
-    private let key = "mollotov_bookmarks"
+        private enum EncodingKeys: String, CodingKey {
+            case id
+            case title
+            case url
+            case createdAt
+        }
 
-    private init() { load() }
+        private enum DecodingKeys: String, CodingKey {
+            case id
+            case title
+            case url
+            case createdAt
+            case created_at
+        }
 
-    func add(title: String, url: String) {
-        bookmarks.append(Bookmark(title: title, url: url))
-        save()
-    }
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: DecodingKeys.self)
 
-    func remove(id: UUID) {
-        bookmarks.removeAll { $0.id == id }
-        save()
-    }
+            let identifier = try container.decodeIfPresent(String.self, forKey: .id) ?? ""
+            id = UUID(uuidString: identifier) ?? UUID()
+            title = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
+            url = try container.decodeIfPresent(String.self, forKey: .url) ?? ""
+            createdAt = Self.decodeDate(from: container) ?? Date()
+        }
 
-    func removeAll() {
-        bookmarks.removeAll()
-        save()
-    }
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: EncodingKeys.self)
+            try container.encode(id.uuidString, forKey: .id)
+            try container.encode(title, forKey: .title)
+            try container.encode(url, forKey: .url)
+            try container.encode(createdAt, forKey: .createdAt)
+        }
 
-    func toJSON() -> [[String: Any]] {
-        bookmarks.map { b in
-            ["id": b.id.uuidString, "title": b.title, "url": b.url,
-             "createdAt": ISO8601DateFormatter().string(from: b.createdAt)]
+        private static func decodeDate(from container: KeyedDecodingContainer<DecodingKeys>) -> Date? {
+            if let date = try? container.decode(Date.self, forKey: .createdAt) {
+                return date
+            }
+            if let string = try? container.decode(String.self, forKey: .createdAt),
+               let date = BookmarkStore.iso8601Formatter.date(from: string) {
+                return date
+            }
+            if let string = try? container.decode(String.self, forKey: .created_at),
+               let date = BookmarkStore.iso8601Formatter.date(from: string) {
+                return date
+            }
+            return nil
         }
     }
 
-    private func save() {
-        if let data = try? JSONEncoder().encode(bookmarks) {
-            UserDefaults.standard.set(data, forKey: key)
+    @Published private(set) var bookmarks: [Bookmark] = []
+
+    private let key = "mollotov_bookmarks"
+    private let storeHandle = mollotov_bookmark_store_create()
+
+    fileprivate static let iso8601Formatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        return formatter
+    }()
+
+    private init() {
+        load()
+    }
+
+    deinit {
+        mollotov_bookmark_store_destroy(storeHandle)
+    }
+
+    func add(title: String, url: String) {
+        guard let storeHandle else { return }
+        title.withCString { titlePointer in
+            url.withCString { urlPointer in
+                mollotov_bookmark_store_add(storeHandle, titlePointer, urlPointer)
+            }
+        }
+        refreshFromCore()
+        persist()
+    }
+
+    func remove(id: UUID) {
+        guard let storeHandle else { return }
+        id.uuidString.withCString { idPointer in
+            mollotov_bookmark_store_remove(storeHandle, idPointer)
+        }
+        refreshFromCore()
+        persist()
+    }
+
+    func removeAll() {
+        guard let storeHandle else { return }
+        mollotov_bookmark_store_remove_all(storeHandle)
+        refreshFromCore()
+        persist()
+    }
+
+    func toJSON() -> [[String: Any]] {
+        bookmarks.map { bookmark in
+            [
+                "id": bookmark.id.uuidString,
+                "title": bookmark.title,
+                "url": bookmark.url,
+                "createdAt": Self.iso8601Formatter.string(from: bookmark.createdAt),
+            ]
         }
     }
 
     private func load() {
-        guard let data = UserDefaults.standard.data(forKey: key),
-              let decoded = try? JSONDecoder().decode([Bookmark].self, from: data) else { return }
-        bookmarks = decoded
+        guard let storeHandle else { return }
+
+        let persistedJSON = loadPersistedJSON() ?? "[]"
+        persistedJSON.withCString { jsonPointer in
+            mollotov_bookmark_store_load_json(storeHandle, jsonPointer)
+        }
+        refreshFromCore()
+    }
+
+    private func refreshFromCore() {
+        guard let json = exportedJSON() else {
+            bookmarks = []
+            return
+        }
+
+        let decoded = Self.decodeBookmarks(from: json.data(using: .utf8) ?? Data())
+        bookmarks = decoded ?? []
+    }
+
+    private func persist() {
+        let payload = Self.jsonData(from: toJSON()) ?? Data("[]".utf8)
+        UserDefaults.standard.set(payload, forKey: key)
+    }
+
+    private func exportedJSON() -> String? {
+        guard let storeHandle else { return nil }
+        guard let rawPointer = mollotov_bookmark_store_to_json(storeHandle) else { return nil }
+        defer { mollotov_free_string(rawPointer) }
+        return String(cString: rawPointer)
+    }
+
+    private func loadPersistedJSON() -> String? {
+        if let data = UserDefaults.standard.data(forKey: key) {
+            return normalizedPersistedJSON(from: data)
+        }
+
+        if let string = UserDefaults.standard.string(forKey: key) {
+            return normalizedPersistedJSON(from: Data(string.utf8))
+        }
+
+        return nil
+    }
+
+    private func normalizedPersistedJSON(from data: Data) -> String? {
+        guard let decoded = Self.decodeBookmarks(from: data) else { return nil }
+        return Self.makeJSONString(from: decoded.map(Self.persistedJSONObject))
+    }
+
+    private static func decodeBookmarks(from data: Data) -> [Bookmark]? {
+        let decoder = JSONDecoder()
+        return try? decoder.decode([Bookmark].self, from: data)
+    }
+
+    private static func persistedJSONObject(for bookmark: Bookmark) -> [String: Any] {
+        [
+            "id": bookmark.id.uuidString,
+            "title": bookmark.title,
+            "url": bookmark.url,
+            "createdAt": iso8601Formatter.string(from: bookmark.createdAt),
+        ]
+    }
+
+    private static func makeJSONString(from object: Any) -> String? {
+        guard let data = jsonData(from: object) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    private static func jsonData(from object: Any) -> Data? {
+        guard JSONSerialization.isValidJSONObject(object) else { return nil }
+        return try? JSONSerialization.data(withJSONObject: object)
     }
 }
