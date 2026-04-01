@@ -342,6 +342,12 @@ static void LogBrowserHandles(const char *event, cef_browser_t *callbackBrowser,
 
 - (void)dealloc {
     @synchronized (self) {
+        // Nil out all owner back-pointers before releasing CEF handles.
+        // The 60 Hz message-loop timer can fire cef_do_message_loop_work()
+        // between here and the next run-loop iteration, invoking callbacks
+        // through these pointers. Clearing them first turns those callbacks
+        // into safe no-ops instead of dangling-pointer crashes.
+        CEFBridgeNullifyClientOwner(_client);
         if (_cookieManager != nullptr) {
             _cookieManager->base.release(&_cookieManager->base);
             _cookieManager = nullptr;

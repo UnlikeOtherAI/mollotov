@@ -466,6 +466,15 @@ cef_client_t *CEFBridgeClientHandle(BridgeClient *client) {
     return client != nullptr ? &client->client : nullptr;
 }
 
+void CEFBridgeNullifyClientOwner(BridgeClient *client) {
+    if (client == nullptr) { return; }
+    client->owner = nil;
+    if (client->lifeSpan != nullptr) { client->lifeSpan->owner = nil; }
+    if (client->load     != nullptr) { client->load->owner     = nil; }
+    if (client->display  != nullptr) { client->display->owner  = nil; }
+    if (client->frame    != nullptr) { client->frame->owner    = nil; }
+}
+
 void CEFBridgeReleaseClient(BridgeClient *client) {
     if (client != nullptr) {
         client->client.base.release(&client->client.base);

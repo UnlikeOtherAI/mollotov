@@ -27,6 +27,7 @@ cef_basetime_t CEFBridgeBaseTimeFromDate(NSDate *value);
 
 BridgeClient *CEFBridgeCreateClient(CEFBridge *owner);
 cef_client_t *CEFBridgeClientHandle(BridgeClient *client);
+void CEFBridgeNullifyClientOwner(BridgeClient *client);
 void CEFBridgeReleaseClient(BridgeClient *client);
 
 cef_cookie_manager_t *CEFBridgeCookieManagerFromBrowser(cef_browser_t *browser);

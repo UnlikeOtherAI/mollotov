@@ -628,6 +628,7 @@
 				CODE_SIGN_ENTITLEMENTS = Mollotov/Mollotov.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
 				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(PROJECT_DIR)/Frameworks",
 					"\"Frameworks\"",
@@ -821,6 +822,7 @@
 				CODE_SIGN_ENTITLEMENTS = Mollotov/Mollotov.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
 				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(PROJECT_DIR)/Frameworks",
 					"\"Frameworks\"",
