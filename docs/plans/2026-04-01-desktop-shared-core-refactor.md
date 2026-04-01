@@ -32,6 +32,7 @@ Owns:
 - MCP tool names
 - error codes
 - platform and engine enums
+- region constants for alternative engine availability (`ALTERNATIVE_ENGINE_REGIONS`)
 - capability model
 - request/response schemas
 
@@ -94,7 +95,7 @@ Owns:
 
 Rules:
 
-- Reusable by Android and Chromium desktop adapters.
+- Reusable by Android, Chromium desktop adapters, and iOS Chromium (region-gated).
 - Must not assume CEF-specific embedding.
 
 ### `engine-chromium-desktop`
@@ -130,7 +131,7 @@ Rules:
 Owns:
 
 - Gecko/Firefox embedding runtime
-- GeckoView or Gecko embedding API integration
+- GeckoView (mobile) or Gecko embedding API (desktop) integration
 - Gecko-specific DOM, screenshot, cookie, and network hooks
 - Firefox-parity rendering for web compatibility testing
 
@@ -138,9 +139,25 @@ Rules:
 
 - Primary engine for Windows.
 - Available on macOS as a third renderer option alongside WebKit and CEF — gives macOS Safari + Chrome + Firefox rendering parity.
-- Available on Linux if Gecko embedding is supported (GeckoView is Android-first, but libxul / Firefox embedding may work on desktop Linux).
+- Available on iOS as an alternative engine in EU, UK, and Japan regions only (see [Region-Gated Engine Availability](#region-gated-engine-availability)).
+- Available on Android as an alternative engine via GeckoView (no region restriction — Android has always allowed alternative engines).
+- Available on Linux if Gecko embedding is supported.
 - Shares the CDP-like remote debugging surface where possible (Firefox Remote Protocol / Marionette).
 - Must not assume Chromium APIs — Gecko has its own debugging protocol.
+
+### `engine-chromium-mobile`
+
+Owns:
+
+- Chromium embedding for iOS in regions where alternative engines are permitted
+- Blink-based rendering as an alternative to WKWebView
+- CDP surface reuse from `engine-cdp`
+
+Rules:
+
+- iOS only, region-gated to EU, UK, and Japan.
+- Android already uses Chromium via system WebView — this module is for iOS alternative engine support.
+- Shares CDP helpers with `engine-cdp`.
 
 ### `platform-shell-*`
 
@@ -157,6 +174,39 @@ Rules:
 
 - Thin only.
 - No business logic beyond shell concerns.
+
+---
+
+## Region-Gated Engine Availability
+
+EU Digital Markets Act (DMA), upcoming UK and Japan legislation require Apple to permit alternative browser engines on iOS in those jurisdictions. This means iOS can run Chromium (Blink) and Gecko (Firefox) in addition to WebKit — but only when the device's App Store region is EU, UK, or Japan.
+
+### Detection
+
+- iOS: check `Storefront.current` or `SKStorefront.countryCode` at runtime to determine the device's registered region
+- The renderer switcher UI (like macOS has for WebKit/CEF) must only appear on iOS when the region is in the allowed set: `EU`, `GB`, `JP`
+- Android has no region restriction on alternative engines — GeckoView is always available
+
+### Regions list
+
+Maintain a single `ALTERNATIVE_ENGINE_REGIONS` constant in `core-protocol`:
+- `EU` (all EU member states — use the full ISO 3166-1 alpha-2 list)
+- `GB` (United Kingdom)
+- `JP` (Japan)
+
+This list will expand as more jurisdictions adopt similar legislation. Keep it data-driven so adding a country is a one-line change.
+
+### iOS behavior
+
+- Default region (outside EU/UK/JP): WebKit only, no renderer switcher shown
+- EU/UK/JP region: WebKit + Chromium + Gecko available, renderer switcher visible in settings and floating menu
+- The active engine is persisted per-session and reported in mDNS TXT records and `getDeviceInfo`
+
+### Android behavior
+
+- Default: system Chromium WebView (current behavior)
+- GeckoView available as alternative engine everywhere (no region gate)
+- Renderer switcher shown in settings
 
 ---
 
@@ -181,6 +231,7 @@ Minimum availability metadata:
 - requires UI
 - allowed in headless mode
 - required capability flags
+- region restrictions (optional — for region-gated features like iOS alternative engines)
 
 Example cases:
 
@@ -188,8 +239,8 @@ Example cases:
   - platforms: `ios`, `macos`
   - requires UI: `true`
 - `mollotov_set_renderer`
-  - platforms: `macos`, `windows`, `linux`
-  - engines: `webkit` (macOS), `chromium` (macOS/Linux/Windows), `gecko` (macOS/Windows/Linux)
+  - platforms: `ios` (EU/UK/JP only), `android`, `macos`, `windows`, `linux`
+  - engines: `webkit` (iOS/macOS), `chromium` (all), `gecko` (all)
 - `mollotov_show_keyboard`
   - platforms: `ios`, `android`
   - requires UI: `true`
@@ -199,7 +250,8 @@ Rules:
 - Shared tools are exposed everywhere they are supported.
 - Unsupported tools should be omitted from browser-side MCP discovery.
 - HTTP endpoints may remain present for contract stability, but must return `PLATFORM_NOT_SUPPORTED`.
-- `getCapabilities` must be generated from the same availability source of truth.
+- Region-gated tools (like `set_renderer` on iOS) must return `PLATFORM_NOT_SUPPORTED` when invoked outside the permitted region.
+- `getCapabilities` must be generated from the same availability source of truth, including region awareness.
 
 ---
 
@@ -279,6 +331,7 @@ native/
   core-mcp/
   engine-cdp/
   engine-chromium-desktop/
+  engine-chromium-mobile/
   engine-webkit/
   engine-gecko/
 apps/
@@ -387,8 +440,11 @@ Deliverable:
 
 ### Task 5: Platform adapters
 
-- iOS WebKit adapter
-- Android WebView/CDP adapter
+- iOS WebKit adapter (default, all regions)
+- iOS Chromium adapter (EU/UK/JP only, region-gated)
+- iOS Gecko/GeckoView adapter (EU/UK/JP only, region-gated)
+- Android WebView/CDP adapter (default)
+- Android GeckoView adapter (alternative, no region gate)
 - macOS WebKit adapter
 - macOS Gecko/Firefox adapter (third renderer alongside WebKit + CEF)
 - Windows Gecko/Firefox adapter (primary engine)
@@ -430,6 +486,17 @@ Mitigation:
 Mitigation:
 
 - share CDP logic, not desktop Chromium embedding
+
+### iOS region-gated engine complexity
+
+Risk: Region detection on iOS relies on App Store storefront APIs which may change. Apple's compliance with DMA/UK/JP legislation is evolving — engine availability rules may shift.
+
+Mitigation:
+
+- keep the region list (`ALTERNATIVE_ENGINE_REGIONS`) as a data-driven constant, not hard-coded conditionals
+- detect region at app launch and cache; re-check on `willEnterForeground`
+- if region detection fails, fall back to WebKit-only (safe default)
+- watch Apple developer documentation for changes to alternative engine entitlements
 
 ### Gecko embedding maturity
 
