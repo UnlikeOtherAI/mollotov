@@ -1,0 +1,409 @@
+name: Publish Release Assets
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: release-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  build-linux:
+    name: Build Linux (${{ matrix.distro.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        distro:
+          - name: ubuntu-22.04
+            image: ubuntu:22.04
+            install: |
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update
+              apt-get install -y --no-install-recommends \
+                apt-utils \
+                build-essential \
+                ca-certificates \
+                cmake \
+                curl \
+                dpkg-dev \
+                file \
+                git \
+                libasound2-dev \
+                libatk-bridge2.0-dev \
+                libatk1.0-dev \
+                libavahi-client-dev \
+                libcups2-dev \
+                libdbus-1-dev \
+                libdrm-dev \
+                libfontconfig1-dev \
+                libgbm-dev \
+                libglib2.0-dev \
+                libgtk-3-dev \
+                libnspr4-dev \
+                libnss3-dev \
+                libpango1.0-dev \
+                libx11-dev \
+                libxcomposite-dev \
+                libxdamage-dev \
+                libxext-dev \
+                libxfixes-dev \
+                libxrandr-dev \
+                ninja-build \
+                nlohmann-json3-dev \
+                pkg-config \
+                tar \
+                xz-utils
+              rm -rf /var/lib/apt/lists/*
+            package_kind: deb
+            build_appimage: true
+          - name: fedora-40
+            image: fedora:40
+            install: |
+              dnf install -y \
+                @development-tools \
+                ca-certificates \
+                cmake \
+                curl \
+                file \
+                fontconfig-devel \
+                git \
+                glib2-devel \
+                gtk3-devel \
+                libX11-devel \
+                libXcomposite-devel \
+                libXdamage-devel \
+                libXext-devel \
+                libXfixes-devel \
+                libXrandr-devel \
+                libdrm-devel \
+                mesa-libgbm-devel \
+                nlohmann-json-devel \
+                nspr-devel \
+                nss-devel \
+                pango-devel \
+                pkgconf-pkg-config \
+                avahi-devel \
+                cups-devel \
+                dbus-devel \
+                ninja-build \
+                rpm-build \
+                tar
+              dnf clean all
+            package_kind: rpm
+            build_appimage: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Linux packages
+        env:
+          DISTRO_NAME: ${{ matrix.distro.name }}
+          DISTRO_IMAGE: ${{ matrix.distro.image }}
+          DISTRO_INSTALL: ${{ matrix.distro.install }}
+          PACKAGE_KIND: ${{ matrix.distro.package_kind }}
+          BUILD_APPIMAGE: ${{ matrix.distro.build_appimage }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          APPIMAGETOOL_URL: https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+
+          docker pull "${DISTRO_IMAGE}"
+
+          docker run --rm \
+            -e DISTRO_NAME="${DISTRO_NAME}" \
+            -e DISTRO_INSTALL="${DISTRO_INSTALL}" \
+            -e PACKAGE_KIND="${PACKAGE_KIND}" \
+            -e BUILD_APPIMAGE="${BUILD_APPIMAGE}" \
+            -e VERSION="${version}" \
+            -e APPIMAGETOOL_URL="${APPIMAGETOOL_URL}" \
+            -v "${PWD}:/workspace" \
+            -w /workspace \
+            "${DISTRO_IMAGE}" \
+            bash -lc '
+              set -euo pipefail
+              eval "${DISTRO_INSTALL}"
+
+              bash scripts/download-cef.sh linux
+              make linux
+
+              package_root="dist/release/${DISTRO_NAME}"
+              bundle_root="${package_root}/bundle"
+              mkdir -p "${package_root}"
+
+              bash scripts/build-linux-runtime-bundle.sh \
+                --version "${VERSION}" \
+                --build-label "${DISTRO_NAME}" \
+                --output-dir "${bundle_root}"
+
+              tar -C "${bundle_root}" -czf "${package_root}/mollotov-linux-${VERSION}-${DISTRO_NAME}-x86_64.tar.gz" mollotov-linux
+
+              case "${PACKAGE_KIND}" in
+                deb)
+                  bash scripts/package-linux-deb.sh \
+                    --version "${VERSION}" \
+                    --bundle-dir "${bundle_root}/mollotov-linux" \
+                    --output-dir "${package_root}"
+
+                  if [ "${BUILD_APPIMAGE}" = "true" ]; then
+                    curl -L --fail -o /tmp/appimagetool.AppImage "${APPIMAGETOOL_URL}"
+                    chmod 755 /tmp/appimagetool.AppImage
+                    APPIMAGE_EXTRACT_AND_RUN=1 /tmp/appimagetool.AppImage --appimage-extract >/dev/null
+                    bash scripts/package-linux-appimage.sh \
+                      --version "${VERSION}" \
+                      --bundle-dir "${bundle_root}/mollotov-linux" \
+                      --output-dir "${package_root}" \
+                      --appimagetool "/tmp/squashfs-root/AppRun"
+                  fi
+                  ;;
+                rpm)
+                  bash scripts/package-linux-rpm.sh \
+                    --version "${VERSION}" \
+                    --bundle-dir "${bundle_root}/mollotov-linux" \
+                    --output-dir "${package_root}"
+                  ;;
+              esac
+
+              (
+                cd "${package_root}"
+                sha256sum *.tar.gz *.deb *.rpm *.AppImage 2>/dev/null | tee checksums.txt || true
+              )
+              chmod -R a+rX dist/release
+            '
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-release-${{ matrix.distro.name }}
+          path: |
+            dist/release/${{ matrix.distro.name }}/*.tar.gz
+            dist/release/${{ matrix.distro.name }}/*.deb
+            dist/release/${{ matrix.distro.name }}/*.rpm
+            dist/release/${{ matrix.distro.name }}/*.AppImage
+            dist/release/${{ matrix.distro.name }}/checksums.txt
+          if-no-files-found: error
+
+  build-android:
+    name: Build Android release artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Build Android APK and App Bundle
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          cd apps/android
+
+          SIGNING_ARGS=()
+          if [ -n "${ANDROID_KEYSTORE_BASE64}" ]; then
+            echo "${ANDROID_KEYSTORE_BASE64}" | base64 -d > signing-keystore.jks
+            SIGNING_ARGS+=(
+              "-Pandroid.injected.signing.store.file=$(pwd)/signing-keystore.jks"
+              "-Pandroid.injected.signing.store.password=${ANDROID_KEYSTORE_PASSWORD}"
+              "-Pandroid.injected.signing.key.alias=${ANDROID_KEY_ALIAS}"
+              "-Pandroid.injected.signing.key.password=${ANDROID_KEY_PASSWORD}"
+            )
+          fi
+
+          ./gradlew assembleRelease bundleRelease "${SIGNING_ARGS[@]}"
+
+          release_tag="${GITHUB_REF_NAME#v}"
+          out_dir="../../dist/release/android"
+          mkdir -p "${out_dir}"
+
+          find app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' -exec cp -a {} "${out_dir}/" \;
+          find app/build/outputs/bundle/release -maxdepth 1 -type f -name '*.aab' -exec cp -a {} "${out_dir}/" \;
+
+          for artifact in "${out_dir}"/*; do
+            [ -f "${artifact}" ] || continue
+            ext="${artifact##*.}"
+            case "$(basename "${artifact}")" in
+              *unsigned*)
+                mv "${artifact}" "${out_dir}/mollotov-android-${release_tag}-release-unsigned.${ext}"
+                ;;
+              *)
+                mv "${artifact}" "${out_dir}/mollotov-android-${release_tag}-release.${ext}"
+                ;;
+            esac
+          done
+
+          (
+            cd "${out_dir}"
+            sha256sum *.apk *.aab > checksums.txt
+          )
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-release
+          path: |
+            dist/release/android/*.apk
+            dist/release/android/*.aab
+            dist/release/android/checksums.txt
+          if-no-files-found: error
+
+  publish-cli:
+    name: Build and publish CLI
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify release version matches CLI package
+        run: |
+          set -euo pipefail
+          cli_version="$(node -p "require('./packages/cli/package.json').version")"
+          release_version="${GITHUB_REF_NAME#v}"
+          if [ "${cli_version}" != "${release_version}" ]; then
+            echo "Release tag ${release_version} does not match CLI version ${cli_version}" >&2
+            exit 1
+          fi
+
+      - name: Build and test CLI packages
+        run: |
+          pnpm --filter @unlikeotherai/mollotov-shared build
+          pnpm --filter @unlikeotherai/mollotov build
+          pnpm --filter @unlikeotherai/mollotov-shared test
+          pnpm --filter @unlikeotherai/mollotov test
+
+      - name: Pack CLI tarballs
+        run: |
+          set -euo pipefail
+          mkdir -p dist/release/cli
+          pnpm --filter @unlikeotherai/mollotov-shared pack --pack-destination dist/release/cli
+          pnpm --filter @unlikeotherai/mollotov pack --pack-destination dist/release/cli
+          (
+            cd dist/release/cli
+            sha256sum *.tgz > checksums.txt
+          )
+
+      - name: Publish shared package to npm
+        if: ${{ secrets.NPM_TOKEN != '' }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./packages/shared/package.json').version")"
+          if npm view "@unlikeotherai/mollotov-shared@${version}" version >/dev/null 2>&1; then
+            echo "@unlikeotherai/mollotov-shared@${version} already published"
+          else
+            cd packages/shared && npm publish --access public --provenance
+          fi
+
+      - name: Publish CLI package to npm
+        if: ${{ secrets.NPM_TOKEN != '' }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./packages/cli/package.json').version")"
+          if npm view "@unlikeotherai/mollotov@${version}" version >/dev/null 2>&1; then
+            echo "@unlikeotherai/mollotov@${version} already published"
+          else
+            cd packages/cli && npm publish --access public --provenance
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cli-release
+          path: |
+            dist/release/cli/*.tgz
+            dist/release/cli/checksums.txt
+          if-no-files-found: error
+
+  attach-to-release:
+    name: Attach assets to GitHub release
+    runs-on: ubuntu-latest
+    needs:
+      - build-linux
+      - build-android
+      - publish-cli
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: '*-release*'
+          merge-multiple: true
+          path: dist/release
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: cli-release
+          path: dist/release/cli
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.release.tag_name }}
+          files: |
+            dist/release/**/*.tar.gz
+            dist/release/**/*.deb
+            dist/release/**/*.rpm
+            dist/release/**/*.AppImage
+            dist/release/**/*.apk
+            dist/release/**/*.aab
+            dist/release/**/*.tgz
+            dist/release/**/checksums.txt
+
+  publish-package-repos:
+    name: Publish Linux package repositories
+    runs-on: ubuntu-latest
+    needs:
+      - attach-to-release
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install package repo tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y apt-utils createrepo-c
+
+      - name: Import APT signing key
+        if: ${{ secrets.APT_GPG_PRIVATE_KEY != '' }}
+        env:
+          APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+        run: |
+          printf '%s' "${APT_GPG_PRIVATE_KEY}" | gpg --batch --import
+
+      - name: Build package repositories in site/
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APT_GPG_KEY_ID: ${{ secrets.APT_GPG_KEY_ID }}
+        run: bash scripts/build-linux-package-repos.sh --site-dir site
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - uses: actions/deploy-pages@v4

@@ -24,7 +24,7 @@ Full navigation control: go to any URL, go back/forward, reload, get the current
 
 On macOS, the desktop URL bar stays synced with both API/MCP-triggered navigation and user-driven page navigation, uses compact Safari-style rounded chrome with coloured browser-brand renderer switches, and supports native fullscreen toggling for the active window from the Window menu or with `Cmd+F`. On Linux, the GTK shell now uses matching rounded toolbar chrome, a Chromium brand badge in the URL field, and the same warm orange floating menu treatment as the macOS app instead of stock GTK buttons.
 
-On Linux, the desktop shell runs in either GUI or headless mode. Both modes expose the same HTTP surface, advertise themselves over mDNS, persist profile-backed bookmarks/history/network/console state, support a persisted home page URL, and degrade cleanly when the CEF runtime is unavailable. In GUI mode, the browser window can also be toggled into fullscreen via API/MCP. GitHub Releases now attach distro-specific Linux runtime tarballs automatically when a release is published so users can download Linux builds directly from the release page.
+On Linux, the desktop shell runs in either GUI or headless mode. Both modes expose the same HTTP surface, advertise themselves over mDNS, persist profile-backed bookmarks/history/network/console state, support a persisted home page URL, and degrade cleanly when the CEF runtime is unavailable. In GUI mode, the browser window can also be toggled into fullscreen via API/MCP. Published GitHub releases now attach Linux `.tar.gz`, `.deb`, `.rpm`, and `.AppImage` artifacts automatically and refresh Debian/Ubuntu `apt` plus Fedora-compatible `dnf` package repositories on GitHub Pages from the same release event.
 
 On Windows, the first desktop shell now exists under `apps/windows/`: Win32 main window, URL bar, native settings dialog, bookmarks/history/network inspector windows, native toast overlay, device info provider, optional CEF child host, and embedded `/v1/` HTTP server. Until the shared `engine-chromium-desktop` runtime lands, navigation and shell-state endpoints work, but screenshot/eval/DOM-heavy Chromium automation endpoints still return `PLATFORM_NOT_SUPPORTED` instead of faking incomplete behavior.
 
@@ -207,6 +207,8 @@ All MCP tools use the `mollotov_` prefix and include JSON schemas with descripti
 Every CLI command supports `--llm-help` for machine-readable documentation. `mollotov --llm-help` outputs the complete reference. `mollotov explain <command>` gives natural-language explanations. Designed so an LLM can teach itself the tool without human guidance.
 
 The CLI also manages local macOS browser aliases under `~/.mollotov`. `mollotov browser register <name>` creates a reusable local alias, `mollotov browser launch <name>` starts a fresh Mollotov.app instance for that alias on an explicit or auto-assigned port, and the rest of the CLI can target that launched instance via `--device <name>` without relying on network discovery alone. Auto-assigned launch ports skip reserved ports such as `8421` so AppReveal and CLI MCP do not clash with launched browser instances.
+
+Published GitHub releases also build Android release artifacts and publish the CLI packages to npm automatically, so the release page and npm stay aligned with the tagged version.
 
 ## Settings Panel
 

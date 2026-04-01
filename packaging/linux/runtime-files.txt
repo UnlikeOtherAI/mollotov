@@ -1,0 +1,17 @@
+FontAwesome6Brands-Regular.otf
+chrome-sandbox
+chrome_100_percent.pak
+chrome_200_percent.pak
+icon-1024.png
+icudtl.dat
+libEGL.so
+libGLESv2.so
+libcef.so
+libvk_swiftshader.so
+libvulkan.so.1
+locales
+mollotov-linux
+resources.pak
+snapshot_blob.bin
+v8_context_snapshot.bin
+vk_swiftshader_icd.json

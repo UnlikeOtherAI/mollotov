@@ -31,6 +31,8 @@ No emulators pretending to be phones. No persistent content scripts. No browser 
 npm install -g @unlikeotherai/mollotov
 ```
 
+Published releases also attach Android artifacts plus Linux `.tar.gz`, `.deb`, `.rpm`, and `.AppImage` downloads. GitHub Pages publishes Linux package repositories for `apt` and `dnf` from the same release flow.
+
 ## Quick start
 
 1. Build and run the iOS or Android app on a device or simulator

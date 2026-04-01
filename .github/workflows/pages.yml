@@ -23,6 +23,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install package repo tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y apt-utils createrepo-c
+      - name: Import APT signing key
+        if: ${{ secrets.APT_GPG_PRIVATE_KEY != '' }}
+        env:
+          APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+        run: |
+          printf '%s' "${APT_GPG_PRIVATE_KEY}" | gpg --batch --import
+      - name: Rebuild Linux package repositories
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APT_GPG_KEY_ID: ${{ secrets.APT_GPG_KEY_ID }}
+        run: bash scripts/build-linux-package-repos.sh --site-dir site
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
