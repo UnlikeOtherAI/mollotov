@@ -25,3 +25,4 @@ vendor/
 .ninja/
 apps/macos/Frameworks/
 tmp/
+.cache/
