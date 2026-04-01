@@ -4,13 +4,46 @@ import AppKit
 /// Wraps CEFBridge (Obj-C++) and bridges callbacks to async/await.
 @MainActor
 final class CEFRenderer: RendererEngine {
+    private final class CookieContinuationState {
+        var didResume = false
+    }
+
+
+
+    private final class CEFHostView: NSView {
+        var onWindowReady: (() -> Void)?
+        var onBoundsReady: (() -> Void)?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            notifyIfReady()
+        }
+
+        override func layout() {
+            super.layout()
+            notifyIfReady()
+        }
+
+        private func notifyIfReady() {
+            guard window != nil else { return }
+            guard bounds.width > 0, bounds.height > 0 else { return }
+            onWindowReady?()
+            onBoundsReady?()
+        }
+    }
+
     let engineName = "chromium"
 
     private static var cefInitialized = false
     private static var messageLoopTimer: Timer?
 
-    private let bridge: CEFBridge
-    private let containerView: NSView
+    private var bridge: CEFBridge?
+    private let containerView: CEFHostView
+    private var pendingURL: URL?
+    private var documentNavigationStart = Date()
+    private var capturedDocumentResponseURL: String?
+    private var pendingCookies: [HTTPCookie] = []
+    private var pendingDeleteAllCookies = false
 
     private(set) var currentURL: URL?
     private(set) var currentTitle: String = ""
@@ -23,12 +56,10 @@ final class CEFRenderer: RendererEngine {
     var onScriptMessage: ((_ name: String, _ body: [String: Any]) -> Void)?
 
     init() {
-        // Initialize CEF once before creating any browser
         if !Self.cefInitialized {
             let ok = CEFBridge.initializeCEF()
             Self.cefInitialized = ok
             if ok {
-                // Pump CEF message loop at ~60Hz since multi_threaded_message_loop is off
                 Self.messageLoopTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { _ in
                     CEFBridge.doMessageLoopWork()
                 }
@@ -37,9 +68,81 @@ final class CEFRenderer: RendererEngine {
             }
         }
 
-        containerView = NSView(frame: NSRect(x: 0, y: 0, width: 1280, height: 800))
-        bridge = CEFBridge(parentView: containerView, url: "about:blank", identifier: "main")
+        containerView = CEFHostView(frame: NSRect(x: 0, y: 0, width: 1280, height: 800))
+        containerView.wantsLayer = true
+        containerView.onWindowReady = { [weak self] in
+            Task { @MainActor in
+                self?.ensureBridge()
+            }
+        }
+        containerView.onBoundsReady = { [weak self] in
+            Task { @MainActor in
+                guard let self, let bridge = self.bridge else { return }
+                bridge.resize(to: self.containerView.bounds.size)
+            }
+        }
+    }
 
+    private func ensureBridge() {
+        guard Self.cefInitialized else { return }
+        guard bridge == nil else { return }
+        guard containerView.window != nil else { return }
+        guard containerView.bounds.width > 0, containerView.bounds.height > 0 else { return }
+
+        NSLog(
+            "[CEFRenderer] ensureBridge window=%@ frame=%@ bounds=%@ pendingURL=%@",
+            String(describing: containerView.window),
+            NSStringFromRect(containerView.frame),
+            NSStringFromRect(containerView.bounds),
+            pendingURL?.absoluteString ?? "nil"
+        )
+
+        guard let bridge = CEFBridge(
+            parentView: containerView,
+            url: "about:blank",
+            identifier: "main"
+        ) else {
+            NSLog("[CEFRenderer] Failed to create CEFBridge")
+            return
+        }
+        configureBridge(bridge)
+        self.bridge = bridge
+        bridge.resize(to: containerView.bounds.size)
+
+        let hasCookieWork = !pendingCookies.isEmpty || pendingDeleteAllCookies
+        let urlToLoad = pendingURL
+        pendingURL = nil
+
+        if hasCookieWork, let urlToLoad {
+            // CEF's C API set_cookie consistently returns 0 in external message
+            // loop mode — the cookie store is never accessible via the C API.
+            // Workaround: load the URL first, then inject cookies via JS after
+            // the page loads and reload so they take effect for all requests.
+            NSLog("[CEFRenderer] will inject %d cookies via JS after load, url=%@",
+                  pendingCookies.count, urlToLoad.absoluteString)
+            let cookiesToInject = pendingCookies
+            pendingCookies.removeAll()
+            pendingDeleteAllCookies = false
+            bridge.loadURL(urlToLoad.absoluteString)
+            Task { @MainActor [weak self] in
+                guard let self, let bridge = self.bridge else { return }
+                // Wait for the page to finish loading
+                for _ in 0..<200 { // up to ~10s
+                    try? await Task.sleep(nanoseconds: 50_000_000) // 50ms
+                    if !bridge.isLoading() { break }
+                }
+                self.injectCookiesViaJS(cookiesToInject)
+            }
+        } else if hasCookieWork {
+            // Cookie work but no URL — just clear pending state
+            pendingCookies.removeAll()
+            pendingDeleteAllCookies = false
+        } else if let urlToLoad {
+            bridge.loadURL(urlToLoad.absoluteString)
+        }
+    }
+
+    private func configureBridge(_ bridge: CEFBridge) {
         bridge.onStateChange = { [weak self] in
             Task { @MainActor in
                 self?.syncState()
@@ -54,33 +157,54 @@ final class CEFRenderer: RendererEngine {
     }
 
     private func syncState() {
+        let previousLoading = isLoading
+        guard let bridge else { return }
         currentURL = URL(string: bridge.currentURL())
         currentTitle = bridge.currentTitle()
         isLoading = bridge.isLoading()
         canGoBack = bridge.canGoBack()
         canGoForward = bridge.canGoForward()
+        if isLoading, !previousLoading {
+            documentNavigationStart = Date()
+            capturedDocumentResponseURL = nil
+        } else if !isLoading, previousLoading {
+            recordCompletedDocumentNavigation()
+        }
         onStateChange?()
     }
 
     // MARK: - RendererEngine
 
-    func makeView() -> NSView { containerView }
-
-    func load(url: URL) {
-        bridge.loadURL(url.absoluteString)
+    func makeView() -> NSView {
+        ensureBridge()
+        return containerView
     }
 
-    func goBack() { bridge.goBack() }
-    func goForward() { bridge.goForward() }
-    func reload() { bridge.reload() }
+    func load(url: URL) {
+        NSLog("[CEFRenderer] load url=%@", url.absoluteString)
+        let hadBridge = bridge != nil
+        pendingURL = url
+        currentURL = url
+        documentNavigationStart = Date()
+        capturedDocumentResponseURL = nil
+        ensureBridge()
+        if hadBridge {
+            bridge?.loadURL(url.absoluteString)
+            pendingURL = nil
+        }
+    }
+
+    func goBack() { bridge?.goBack() }
+    func goForward() { bridge?.goForward() }
+    func reload() { bridge?.reload() }
 
     func evaluateJS(_ script: String) async throws -> Any? {
-        try await withCheckedThrowingContinuation { continuation in
+        guard let bridge else { throw HandlerError.noWebView }
+        return try await withCheckedThrowingContinuation { continuation in
             bridge.evaluateJavaScript(script) { result, error in
                 if let error {
                     continuation.resume(throwing: error)
                 } else if let jsonString = result {
-                    // CEF returns results as JSON strings — try to parse
                     if let data = jsonString.data(using: .utf8),
                        let parsed = try? JSONSerialization.jsonObject(with: data) {
                         continuation.resume(returning: parsed)
@@ -95,8 +219,16 @@ final class CEFRenderer: RendererEngine {
     }
 
     func allCookies() async -> [HTTPCookie] {
-        await withCheckedContinuation { continuation in
+        guard let bridge else { return [] }
+        return await withCheckedContinuation { continuation in
+            let state = CookieContinuationState()
+
             bridge.getAllCookies { cookieDicts in
+                if state.didResume {
+                    return
+                }
+                state.didResume = true
+
                 let cookies = (cookieDicts ?? []).compactMap { dict -> HTTPCookie? in
                     guard let dict = dict as? [String: Any],
                           let name = dict["name"] as? String,
@@ -127,35 +259,52 @@ final class CEFRenderer: RendererEngine {
     }
 
     func setCookies(_ cookies: [HTTPCookie]) async {
-        await withTaskGroup(of: Void.self) { group in
-            for cookie in cookies {
-                group.addTask { @MainActor in
-                    await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-                        self.bridge.setCookieName(
-                            cookie.name,
-                            value: cookie.value,
-                            domain: cookie.domain,
-                            path: cookie.path,
-                            httpOnly: cookie.isHTTPOnly,
-                            secure: cookie.isSecure,
-                            expires: cookie.expiresDate
-                        ) { _ in
-                            cont.resume()
-                        }
-                    }
-                }
+        guard let bridge else {
+            if pendingDeleteAllCookies {
+                pendingCookies.removeAll()
             }
+            pendingCookies.append(contentsOf: cookies)
+            return
         }
+        // CEF's C API set_cookie doesn't work in external message loop mode.
+        // Inject non-httpOnly cookies via JS if we have a loaded page on a
+        // matching domain. httpOnly cookies are skipped (JS can't set them).
+        guard let host = currentURL?.host else { return }
+        var js = ""
+        for cookie in cookies {
+            if cookie.isHTTPOnly { continue }
+            let d = cookie.domain.trimmingCharacters(in: CharacterSet(charactersIn: "."))
+            guard host == d || host.hasSuffix(".\(d)") else { continue }
+            let n = cookie.name.replacingOccurrences(of: "'", with: "\\'")
+            let v = cookie.value.replacingOccurrences(of: "'", with: "\\'")
+            var parts = "\(n)=\(v)"
+            if !cookie.path.isEmpty { parts += "; path=\(cookie.path)" }
+            if !cookie.domain.isEmpty { parts += "; domain=\(cookie.domain)" }
+            if cookie.isSecure { parts += "; secure" }
+            if let expires = cookie.expiresDate {
+                let formatter = DateFormatter()
+                formatter.locale = Locale(identifier: "en_US_POSIX")
+                formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+                formatter.timeZone = TimeZone(identifier: "GMT")
+                parts += "; expires=\(formatter.string(from: expires))"
+            }
+            js += "document.cookie='\(parts)';\n"
+        }
+        guard !js.isEmpty else { return }
+        _ = try? await evaluateJS(js)
     }
 
     func deleteCookie(_ cookie: HTTPCookie) async {
-        // CEF only supports bulk delete — delete all then re-add others
-        // For single cookie delete, use JS: document.cookie = "name=; expires=..."
         let js = "document.cookie = '\(cookie.name)=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=\(cookie.path); domain=\(cookie.domain)';"
         _ = try? await evaluateJS(js)
     }
 
     func deleteAllCookies() async {
+        guard let bridge else {
+            pendingDeleteAllCookies = true
+            pendingCookies.removeAll()
+            return
+        }
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
             bridge.deleteAllCookies { _ in
                 cont.resume()
@@ -164,6 +313,7 @@ final class CEFRenderer: RendererEngine {
     }
 
     func takeSnapshot() async throws -> NSImage {
+        guard let bridge else { throw HandlerError.noWebView }
         guard let data = await withCheckedContinuation({ (cont: CheckedContinuation<Data?, Never>) in
             bridge.takeScreenshot { pngData in
                 cont.resume(returning: pngData as Data?)
@@ -175,5 +325,58 @@ final class CEFRenderer: RendererEngine {
             throw HandlerError.noWebView
         }
         return image
+    }
+
+    private func injectCookiesViaJS(_ cookies: [HTTPCookie]) {
+        guard let bridge, let host = currentURL?.host else { return }
+        let matching = cookies.filter { cookie in
+            let d = cookie.domain.trimmingCharacters(in: CharacterSet(charactersIn: "."))
+            return host == d || host.hasSuffix(".\(d)")
+        }
+        guard !matching.isEmpty else { return }
+        NSLog("[CEFRenderer] injecting %d cookies via JS for host=%@", matching.count, host)
+        var js = ""
+        for cookie in matching {
+            if cookie.isHTTPOnly { continue }
+            let n = cookie.name.replacingOccurrences(of: "'", with: "\\'")
+            let v = cookie.value.replacingOccurrences(of: "'", with: "\\'")
+            var parts = "\(n)=\(v)"
+            if !cookie.path.isEmpty { parts += "; path=\(cookie.path)" }
+            if !cookie.domain.isEmpty { parts += "; domain=\(cookie.domain)" }
+            if cookie.isSecure { parts += "; secure" }
+            if let expires = cookie.expiresDate {
+                let formatter = DateFormatter()
+                formatter.locale = Locale(identifier: "en_US_POSIX")
+                formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+                formatter.timeZone = TimeZone(identifier: "GMT")
+                parts += "; expires=\(formatter.string(from: expires))"
+            }
+            js += "document.cookie='\(parts)';\n"
+        }
+        guard !js.isEmpty else { return }
+        bridge.evaluateJavaScript(js) { [weak self] _, error in
+            if let error {
+                NSLog("[CEFRenderer] JS cookie injection error: %@", error.localizedDescription)
+            } else {
+                NSLog("[CEFRenderer] JS cookies injected, reloading")
+                self?.bridge?.reload()
+            }
+        }
+    }
+
+    private func recordCompletedDocumentNavigation() {
+        guard let url = currentURL?.absoluteString,
+              !url.isEmpty,
+              capturedDocumentResponseURL != url else {
+            return
+        }
+
+        NetworkTrafficStore.shared.appendDocumentNavigation(
+            url: url,
+            statusCode: 0,
+            contentType: "",
+            startedAt: documentNavigationStart
+        )
+        capturedDocumentResponseURL = url
     }
 }

@@ -133,6 +133,11 @@ static int HasOneRefImpl(cef_base_ref_counted_t *base, size_t offset) {
     return StructFromBase<T>(base, offset)->ref.count.load(std::memory_order_acquire) == 1 ? 1 : 0;
 }
 
+template <typename T>
+static int HasAtLeastOneRefImpl(cef_base_ref_counted_t *base, size_t offset) {
+    return StructFromBase<T>(base, offset)->ref.count.load(std::memory_order_acquire) >= 1 ? 1 : 0;
+}
+
 struct LifeSpanHandler {
     cef_life_span_handler_t handler;
     RefCountedState ref;
@@ -151,13 +156,20 @@ struct DisplayHandler {
     __unsafe_unretained CEFBridge *owner;
 };
 
+struct FrameHandler {
+    cef_frame_handler_t handler;
+    RefCountedState ref;
+    __unsafe_unretained CEFBridge *owner;
+};
+
 struct BridgeClient {
     cef_client_t client;
     RefCountedState ref;
     __unsafe_unretained CEFBridge *owner;
-    LifeSpanHandler lifeSpan;
-    LoadHandler load;
-    DisplayHandler display;
+    LifeSpanHandler *lifeSpan;
+    LoadHandler *load;
+    DisplayHandler *display;
+    FrameHandler *frame;
 };
 
 struct CookieVisitor {
@@ -180,29 +192,108 @@ struct DeleteCookiesCallback {
     void (^completion)(NSInteger);
 };
 
+struct FlushCallback {
+    cef_completion_callback_t callback;
+    RefCountedState ref;
+    void (^completion)(void);
+};
+
 #define DEFINE_REFCOUNTED_FUNCS(Type, field, Prefix) \
     static void Prefix##AddRef(cef_base_ref_counted_t *base) { AddRefImpl<Type>(base, offsetof(Type, field)); } \
     static int Prefix##Release(cef_base_ref_counted_t *base) { return ReleaseImpl<Type>(base, offsetof(Type, field)); } \
-    static int Prefix##HasOneRef(cef_base_ref_counted_t *base) { return HasOneRefImpl<Type>(base, offsetof(Type, field)); }
+    static int Prefix##HasOneRef(cef_base_ref_counted_t *base) { return HasOneRefImpl<Type>(base, offsetof(Type, field)); } \
+    static int Prefix##HasAtLeastOneRef(cef_base_ref_counted_t *base) { return HasAtLeastOneRefImpl<Type>(base, offsetof(Type, field)); }
 
-DEFINE_REFCOUNTED_FUNCS(BridgeClient, client, Client)
 DEFINE_REFCOUNTED_FUNCS(LifeSpanHandler, handler, LifeSpan)
 DEFINE_REFCOUNTED_FUNCS(LoadHandler, handler, Load)
 DEFINE_REFCOUNTED_FUNCS(DisplayHandler, handler, Display)
+DEFINE_REFCOUNTED_FUNCS(FrameHandler, handler, Frame)
 DEFINE_REFCOUNTED_FUNCS(CookieVisitor, visitor, CookieVisitor)
 DEFINE_REFCOUNTED_FUNCS(SetCookieCallback, callback, SetCookie)
 DEFINE_REFCOUNTED_FUNCS(DeleteCookiesCallback, callback, DeleteCookies)
+DEFINE_REFCOUNTED_FUNCS(FlushCallback, callback, Flush)
 
 static cef_life_span_handler_t *GetLifeSpanHandler(cef_client_t *self) {
-    return &StructFromBase<BridgeClient>(&self->base, offsetof(BridgeClient, client))->lifeSpan.handler;
+    BridgeClient *client = StructFromBase<BridgeClient>(&self->base, offsetof(BridgeClient, client));
+    if (client->lifeSpan == nullptr) {
+        return nullptr;
+    }
+    client->lifeSpan->handler.base.add_ref(&client->lifeSpan->handler.base);
+    return &client->lifeSpan->handler;
 }
 
 static cef_load_handler_t *GetLoadHandler(cef_client_t *self) {
-    return &StructFromBase<BridgeClient>(&self->base, offsetof(BridgeClient, client))->load.handler;
+    BridgeClient *client = StructFromBase<BridgeClient>(&self->base, offsetof(BridgeClient, client));
+    if (client->load == nullptr) {
+        return nullptr;
+    }
+    client->load->handler.base.add_ref(&client->load->handler.base);
+    return &client->load->handler;
 }
 
 static cef_display_handler_t *GetDisplayHandler(cef_client_t *self) {
-    return &StructFromBase<BridgeClient>(&self->base, offsetof(BridgeClient, client))->display.handler;
+    BridgeClient *client = StructFromBase<BridgeClient>(&self->base, offsetof(BridgeClient, client));
+    if (client->display == nullptr) {
+        return nullptr;
+    }
+    client->display->handler.base.add_ref(&client->display->handler.base);
+    return &client->display->handler;
+}
+
+static cef_frame_handler_t *GetFrameHandler(cef_client_t *self) {
+    BridgeClient *client = StructFromBase<BridgeClient>(&self->base, offsetof(BridgeClient, client));
+    if (client->frame == nullptr) {
+        return nullptr;
+    }
+    client->frame->handler.base.add_ref(&client->frame->handler.base);
+    return &client->frame->handler;
+}
+
+static void ClientAddRef(cef_base_ref_counted_t *base) {
+    AddRefImpl<BridgeClient>(base, offsetof(BridgeClient, client));
+}
+
+static int ClientRelease(cef_base_ref_counted_t *base) {
+    BridgeClient *client = StructFromBase<BridgeClient>(base, offsetof(BridgeClient, client));
+    if (client->ref.count.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+        if (client->lifeSpan != nullptr) {
+            client->lifeSpan->handler.base.release(&client->lifeSpan->handler.base);
+            client->lifeSpan = nullptr;
+        }
+        if (client->load != nullptr) {
+            client->load->handler.base.release(&client->load->handler.base);
+            client->load = nullptr;
+        }
+        if (client->display != nullptr) {
+            client->display->handler.base.release(&client->display->handler.base);
+            client->display = nullptr;
+        }
+        if (client->frame != nullptr) {
+            client->frame->handler.base.release(&client->frame->handler.base);
+            client->frame = nullptr;
+        }
+        delete client;
+        return 1;
+    }
+    return 0;
+}
+
+static int ClientHasOneRef(cef_base_ref_counted_t *base) {
+    return HasOneRefImpl<BridgeClient>(base, offsetof(BridgeClient, client));
+}
+
+static int ClientHasAtLeastOneRef(cef_base_ref_counted_t *base) {
+    return HasAtLeastOneRefImpl<BridgeClient>(base, offsetof(BridgeClient, client));
+}
+
+template <typename T>
+static T *CreateHandler(CEFBridge *owner) {
+    T *handler = new T();
+    memset(handler, 0, sizeof(T));
+    handler->ref.count = 1;
+    handler->owner = owner;
+    handler->handler.base.size = sizeof(handler->handler);
+    return handler;
 }
 
 static int OnBeforePopup(cef_life_span_handler_t *, cef_browser_t *, cef_frame_t *, int, const cef_string_t *, const cef_string_t *, cef_window_open_disposition_t, int, const cef_popup_features_t *, cef_window_info_t *, cef_client_t **, cef_browser_settings_t *, cef_dictionary_value_t **, int *) {
@@ -258,6 +349,54 @@ static void OnLoadingProgressChange(cef_display_handler_t *self, cef_browser_t *
         cefBridgeUpdateLoadingProgress:progress];
 }
 
+static void LogFrameEvent(const char *event, cef_browser_t *browser, cef_frame_t *frame, int reattached) {
+    const int browserID = browser != nullptr && browser->get_identifier != nullptr ? browser->get_identifier(browser) : 0;
+    const int browserValid = browser != nullptr && browser->is_valid != nullptr ? browser->is_valid(browser) : 0;
+    const int frameValid = frame != nullptr && frame->is_valid != nullptr ? frame->is_valid(frame) : 0;
+    const int frameMain = frame != nullptr && frame->is_main != nullptr ? frame->is_main(frame) : 0;
+    NSString *frameID = frame != nullptr && frame->get_identifier != nullptr
+        ? CEFBridgeStringFromUserFree(frame->get_identifier(frame))
+        : @"";
+    NSString *frameURL = frame != nullptr && frame->get_url != nullptr
+        ? CEFBridgeStringFromUserFree(frame->get_url(frame))
+        : @"";
+    fprintf(
+        stderr,
+        "[CEFFrame] %s browser=%p(id=%d valid=%d) frame=%p(valid=%d main=%d id=%s url=%s) reattached=%d\n",
+        event,
+        browser,
+        browserID,
+        browserValid,
+        frame,
+        frameValid,
+        frameMain,
+        frameID.UTF8String ?: "",
+        frameURL.UTF8String ?: "",
+        reattached
+    );
+}
+
+static void OnFrameCreated(cef_frame_handler_t *, cef_browser_t *browser, cef_frame_t *frame) {
+    LogFrameEvent("created", browser, frame, 0);
+}
+
+static void OnFrameDestroyed(cef_frame_handler_t *, cef_browser_t *browser, cef_frame_t *frame) {
+    LogFrameEvent("destroyed", browser, frame, 0);
+}
+
+static void OnFrameAttached(cef_frame_handler_t *, cef_browser_t *browser, cef_frame_t *frame, int reattached) {
+    LogFrameEvent("attached", browser, frame, reattached);
+}
+
+static void OnFrameDetached(cef_frame_handler_t *, cef_browser_t *browser, cef_frame_t *frame) {
+    LogFrameEvent("detached", browser, frame, 0);
+}
+
+static void OnMainFrameChanged(cef_frame_handler_t *, cef_browser_t *browser, cef_frame_t *oldFrame, cef_frame_t *newFrame) {
+    LogFrameEvent("main_changed_old", browser, oldFrame, 0);
+    LogFrameEvent("main_changed_new", browser, newFrame, 0);
+}
+
 static int OnConsoleMessage(cef_display_handler_t *self, cef_browser_t *, cef_log_severity_t, const cef_string_t *message, const cef_string_t *source, int line) {
     [StructFromBase<DisplayHandler>(&self->base, offsetof(DisplayHandler, handler))->owner
         cefBridgeHandleConsoleMessage:StringFromCEFString(message)
@@ -275,41 +414,51 @@ BridgeClient *CEFBridgeCreateClient(CEFBridge *owner) {
     client->client.base.add_ref = ClientAddRef;
     client->client.base.release = ClientRelease;
     client->client.base.has_one_ref = ClientHasOneRef;
+    client->client.base.has_at_least_one_ref = ClientHasAtLeastOneRef;
     client->client.get_life_span_handler = GetLifeSpanHandler;
     client->client.get_load_handler = GetLoadHandler;
     client->client.get_display_handler = GetDisplayHandler;
+    client->client.get_frame_handler = GetFrameHandler;
 
-    client->lifeSpan.ref.count = 1;
-    client->lifeSpan.owner = owner;
-    client->lifeSpan.handler.base.size = sizeof(client->lifeSpan.handler);
-    client->lifeSpan.handler.base.add_ref = LifeSpanAddRef;
-    client->lifeSpan.handler.base.release = LifeSpanRelease;
-    client->lifeSpan.handler.base.has_one_ref = LifeSpanHasOneRef;
-    client->lifeSpan.handler.on_before_popup = OnBeforePopup;
-    client->lifeSpan.handler.on_after_created = OnAfterCreated;
-    client->lifeSpan.handler.do_close = DoClose;
-    client->lifeSpan.handler.on_before_close = OnBeforeClose;
+    client->lifeSpan = CreateHandler<LifeSpanHandler>(owner);
+    client->lifeSpan->handler.base.add_ref = LifeSpanAddRef;
+    client->lifeSpan->handler.base.release = LifeSpanRelease;
+    client->lifeSpan->handler.base.has_one_ref = LifeSpanHasOneRef;
+    client->lifeSpan->handler.base.has_at_least_one_ref = LifeSpanHasAtLeastOneRef;
+    client->lifeSpan->handler.on_before_popup = OnBeforePopup;
+    client->lifeSpan->handler.on_after_created = OnAfterCreated;
+    client->lifeSpan->handler.do_close = DoClose;
+    client->lifeSpan->handler.on_before_close = OnBeforeClose;
 
-    client->load.ref.count = 1;
-    client->load.owner = owner;
-    client->load.handler.base.size = sizeof(client->load.handler);
-    client->load.handler.base.add_ref = LoadAddRef;
-    client->load.handler.base.release = LoadRelease;
-    client->load.handler.base.has_one_ref = LoadHasOneRef;
-    client->load.handler.on_loading_state_change = OnLoadingStateChange;
-    client->load.handler.on_load_start = OnLoadStart;
-    client->load.handler.on_load_end = OnLoadEnd;
+    client->load = CreateHandler<LoadHandler>(owner);
+    client->load->handler.base.add_ref = LoadAddRef;
+    client->load->handler.base.release = LoadRelease;
+    client->load->handler.base.has_one_ref = LoadHasOneRef;
+    client->load->handler.base.has_at_least_one_ref = LoadHasAtLeastOneRef;
+    client->load->handler.on_loading_state_change = OnLoadingStateChange;
+    client->load->handler.on_load_start = OnLoadStart;
+    client->load->handler.on_load_end = OnLoadEnd;
 
-    client->display.ref.count = 1;
-    client->display.owner = owner;
-    client->display.handler.base.size = sizeof(client->display.handler);
-    client->display.handler.base.add_ref = DisplayAddRef;
-    client->display.handler.base.release = DisplayRelease;
-    client->display.handler.base.has_one_ref = DisplayHasOneRef;
-    client->display.handler.on_address_change = OnAddressChange;
-    client->display.handler.on_title_change = OnTitleChange;
-    client->display.handler.on_loading_progress_change = OnLoadingProgressChange;
-    client->display.handler.on_console_message = OnConsoleMessage;
+    client->display = CreateHandler<DisplayHandler>(owner);
+    client->display->handler.base.add_ref = DisplayAddRef;
+    client->display->handler.base.release = DisplayRelease;
+    client->display->handler.base.has_one_ref = DisplayHasOneRef;
+    client->display->handler.base.has_at_least_one_ref = DisplayHasAtLeastOneRef;
+    client->display->handler.on_address_change = OnAddressChange;
+    client->display->handler.on_title_change = OnTitleChange;
+    client->display->handler.on_loading_progress_change = OnLoadingProgressChange;
+    client->display->handler.on_console_message = OnConsoleMessage;
+
+    client->frame = CreateHandler<FrameHandler>(owner);
+    client->frame->handler.base.add_ref = FrameAddRef;
+    client->frame->handler.base.release = FrameRelease;
+    client->frame->handler.base.has_one_ref = FrameHasOneRef;
+    client->frame->handler.base.has_at_least_one_ref = FrameHasAtLeastOneRef;
+    client->frame->handler.on_frame_created = OnFrameCreated;
+    client->frame->handler.on_frame_destroyed = OnFrameDestroyed;
+    client->frame->handler.on_frame_attached = OnFrameAttached;
+    client->frame->handler.on_frame_detached = OnFrameDetached;
+    client->frame->handler.on_main_frame_changed = OnMainFrameChanged;
     return client;
 }
 
@@ -323,8 +472,29 @@ void CEFBridgeReleaseClient(BridgeClient *client) {
     }
 }
 
-static cef_cookie_manager_t *GlobalCookieManager(void) {
-    return cef_cookie_manager_get_global_manager(nullptr);
+cef_cookie_manager_t *CEFBridgeCookieManagerFromBrowser(cef_browser_t *browser) {
+    if (browser == nullptr) {
+        NSLog(@"[CEFBridge] cookieManagerFromBrowser: browser is nil, falling back to global");
+        return cef_cookie_manager_get_global_manager(nullptr);
+    }
+    cef_browser_host_t *host = browser->get_host != nullptr ? browser->get_host(browser) : nullptr;
+    if (host == nullptr) {
+        NSLog(@"[CEFBridge] cookieManagerFromBrowser: host is nil, falling back to global");
+        return cef_cookie_manager_get_global_manager(nullptr);
+    }
+    cef_request_context_t *ctx = host->get_request_context != nullptr ? host->get_request_context(host) : nullptr;
+    host->base.release(&host->base);
+    if (ctx == nullptr) {
+        NSLog(@"[CEFBridge] cookieManagerFromBrowser: request context is nil, falling back to global");
+        return cef_cookie_manager_get_global_manager(nullptr);
+    }
+    cef_cookie_manager_t *manager = ctx->get_cookie_manager != nullptr ? ctx->get_cookie_manager(ctx, nullptr) : nullptr;
+    ctx->base.base.release(&ctx->base.base);
+    if (manager == nullptr) {
+        NSLog(@"[CEFBridge] cookieManagerFromBrowser: cookie manager is nil, falling back to global");
+        return cef_cookie_manager_get_global_manager(nullptr);
+    }
+    return manager;
 }
 
 static int VisitCookie(cef_cookie_visitor_t *self, const cef_cookie_t *cookie, int count, int total, int *deleteCookie) {
@@ -349,7 +519,10 @@ static int VisitCookie(cef_cookie_visitor_t *self, const cef_cookie_t *cookie, i
     }
     if (count + 1 >= total && !visitor->finished.exchange(true) && visitor->completion != nil) {
         NSArray<NSDictionary *> *result = [visitor->cookies copy];
-        dispatch_async(dispatch_get_main_queue(), ^{ visitor->completion(result); });
+        void (^completion)(NSArray<NSDictionary *> *) = [visitor->completion copy];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            completion(result);
+        });
     }
     return 1;
 }
@@ -379,6 +552,7 @@ static CookieVisitor *CreateCookieVisitor(void (^completion)(NSArray<NSDictionar
     visitor->visitor.base.add_ref = CookieVisitorAddRef;
     visitor->visitor.base.release = CookieVisitorRelease;
     visitor->visitor.base.has_one_ref = CookieVisitorHasOneRef;
+    visitor->visitor.base.has_at_least_one_ref = CookieVisitorHasAtLeastOneRef;
     visitor->visitor.visit = VisitCookie;
     return visitor;
 }
@@ -392,6 +566,7 @@ static SetCookieCallback *CreateSetCookieCallback(void (^completion)(BOOL)) {
     callback->callback.base.add_ref = SetCookieAddRef;
     callback->callback.base.release = SetCookieRelease;
     callback->callback.base.has_one_ref = SetCookieHasOneRef;
+    callback->callback.base.has_at_least_one_ref = SetCookieHasAtLeastOneRef;
     callback->callback.on_complete = SetCookieComplete;
     return callback;
 }
@@ -405,12 +580,34 @@ static DeleteCookiesCallback *CreateDeleteCookiesCallback(void (^completion)(NSI
     callback->callback.base.add_ref = DeleteCookiesAddRef;
     callback->callback.base.release = DeleteCookiesRelease;
     callback->callback.base.has_one_ref = DeleteCookiesHasOneRef;
+    callback->callback.base.has_at_least_one_ref = DeleteCookiesHasAtLeastOneRef;
     callback->callback.on_complete = DeleteCookiesComplete;
     return callback;
 }
 
-void CEFBridgeVisitAllCookies(void (^completion)(NSArray<NSDictionary *> *cookies)) {
-    cef_cookie_manager_t *manager = GlobalCookieManager();
+static void FlushComplete(cef_completion_callback_t *self) {
+    FlushCallback *callback = StructFromBase<FlushCallback>(&self->base, offsetof(FlushCallback, callback));
+    if (callback->completion != nil) {
+        void (^comp)(void) = [callback->completion copy];
+        dispatch_async(dispatch_get_main_queue(), comp);
+    }
+}
+
+static FlushCallback *CreateFlushCallback(void (^completion)(void)) {
+    FlushCallback *callback = new FlushCallback();
+    memset(callback, 0, sizeof(FlushCallback));
+    callback->ref.count = 1;
+    callback->completion = [completion copy];
+    callback->callback.base.size = sizeof(callback->callback);
+    callback->callback.base.add_ref = FlushAddRef;
+    callback->callback.base.release = FlushRelease;
+    callback->callback.base.has_one_ref = FlushHasOneRef;
+    callback->callback.base.has_at_least_one_ref = FlushHasAtLeastOneRef;
+    callback->callback.on_complete = FlushComplete;
+    return callback;
+}
+
+void CEFBridgeVisitAllCookies(cef_cookie_manager_t *manager, void (^completion)(NSArray<NSDictionary *> *cookies)) {
     if (manager == nullptr || manager->visit_all_cookies == nullptr) {
         if (completion != nil) {
             completion(@[]);
@@ -418,43 +615,43 @@ void CEFBridgeVisitAllCookies(void (^completion)(NSArray<NSDictionary *> *cookie
         return;
     }
 
-    CookieVisitor *visitor = CreateCookieVisitor(completion ?: ^(NSArray<NSDictionary *> *_) {});
+    void (^safeCompletion)(NSArray<NSDictionary *> *) = [completion copy];
+    CookieVisitor *visitor = CreateCookieVisitor(safeCompletion ?: ^(NSArray<NSDictionary *> *_) {});
+    visitor->visitor.base.add_ref(&visitor->visitor.base); // Keep the visitor alive for the timeout fallback.
     const int started = manager->visit_all_cookies(manager, &visitor->visitor);
     if (!started) {
-        if (completion != nil) {
-            completion(@[]);
+        if (safeCompletion != nil) {
+            safeCompletion(@[]);
         }
         visitor->visitor.base.release(&visitor->visitor.base);
-        manager->base.release(&manager->base);
+        visitor->visitor.base.release(&visitor->visitor.base);
         return;
     }
 
-    manager->base.release(&manager->base);
+    visitor->visitor.base.release(&visitor->visitor.base);
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.05 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        if (!visitor->finished.exchange(true) && completion != nil) {
-            completion([visitor->cookies copy]);
+        if (!visitor->finished.exchange(true) && safeCompletion != nil) {
+            safeCompletion(@[]);
         }
         visitor->visitor.base.release(&visitor->visitor.base);
     });
 }
 
-void CEFBridgeSetCookie(NSString *name,
+void CEFBridgeSetCookie(cef_cookie_manager_t *manager,
+                        NSString *name,
                         NSString *value,
+                        NSString *url,
                         NSString *domain,
                         NSString *path,
                         BOOL httpOnly,
                         BOOL secure,
                         NSDate *expires,
                         void (^completion)(BOOL success)) {
-    cef_cookie_manager_t *manager = GlobalCookieManager();
     if (manager == nullptr || manager->set_cookie == nullptr) {
-        if (completion != nil) {
-            completion(NO);
-        }
+        if (completion != nil) { completion(NO); }
         return;
     }
 
-    NSString *url = [NSString stringWithFormat:@"%@://%@%@", secure ? @"https" : @"http", domain ?: @"localhost", path.length > 0 ? path : @"/"];
     cef_cookie_t cookie = {};
     cookie.name = CEFBridgeStringCreate(name ?: @"");
     cookie.value = CEFBridgeStringCreate(value ?: @"");
@@ -467,33 +664,38 @@ void CEFBridgeSetCookie(NSString *name,
         cookie.expires = CEFBridgeBaseTimeFromDate(expires);
     }
 
-    cef_string_t target = CEFBridgeStringCreate(url);
+    cef_string_t target = CEFBridgeStringCreate(url ?: @"about:blank");
     SetCookieCallback *callback = CreateSetCookieCallback(completion ?: ^(BOOL) {});
     const int started = manager->set_cookie(manager, &target, &cookie, &callback->callback);
-    if (!started && completion != nil) {
-        completion(NO);
-    }
+    if (!started && completion != nil) { completion(NO); }
 
     CEFBridgeStringClear(&target);
     CEFBridgeStringClear(&cookie.name);
     CEFBridgeStringClear(&cookie.value);
     CEFBridgeStringClear(&cookie.domain);
     CEFBridgeStringClear(&cookie.path);
-    manager->base.release(&manager->base);
     callback->callback.base.release(&callback->callback.base);
 }
 
-void CEFBridgeDeleteAllCookies(void (^completion)(NSInteger deleted)) {
-    cef_cookie_manager_t *manager = GlobalCookieManager();
+void CEFBridgeDeleteAllCookies(cef_cookie_manager_t *manager, void (^completion)(NSInteger deleted)) {
     if (manager == nullptr || manager->delete_cookies == nullptr) {
-        if (completion != nil) {
-            completion(0);
-        }
+        if (completion != nil) { completion(0); }
         return;
     }
-
     DeleteCookiesCallback *callback = CreateDeleteCookiesCallback(completion ?: ^(NSInteger) {});
     manager->delete_cookies(manager, nullptr, nullptr, &callback->callback);
-    manager->base.release(&manager->base);
+    callback->callback.base.release(&callback->callback.base);
+}
+
+void CEFBridgeFlushCookieStore(cef_cookie_manager_t *manager, void (^completion)(void)) {
+    if (manager == nullptr || manager->flush_store == nullptr) {
+        if (completion != nil) { dispatch_async(dispatch_get_main_queue(), completion); }
+        return;
+    }
+    FlushCallback *callback = CreateFlushCallback(completion ?: ^{});
+    const int started = manager->flush_store(manager, &callback->callback);
+    if (!started && completion != nil) {
+        dispatch_async(dispatch_get_main_queue(), completion);
+    }
     callback->callback.base.release(&callback->callback.base);
 }

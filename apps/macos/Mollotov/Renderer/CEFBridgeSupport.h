@@ -2,10 +2,18 @@
 
 #import "CEFBridge.h"
 
+#include "include/cef_api_versions.h"
+#ifndef CEF_API_VERSION
+#define CEF_API_VERSION CEF_API_VERSION_14600
+#endif
+#include "include/cef_api_hash.h"
 #include "include/capi/cef_app_capi.h"
 #include "include/capi/cef_browser_capi.h"
 #include "include/capi/cef_client_capi.h"
+#include "include/capi/cef_callback_capi.h"
 #include "include/capi/cef_cookie_capi.h"
+#include "include/capi/cef_request_context_capi.h"
+#include "include/capi/cef_frame_capi.h"
 #include "include/internal/cef_time.h"
 
 typedef struct BridgeClient BridgeClient;
@@ -21,16 +29,20 @@ BridgeClient *CEFBridgeCreateClient(CEFBridge *owner);
 cef_client_t *CEFBridgeClientHandle(BridgeClient *client);
 void CEFBridgeReleaseClient(BridgeClient *client);
 
-void CEFBridgeVisitAllCookies(void (^completion)(NSArray<NSDictionary *> *cookies));
-void CEFBridgeSetCookie(NSString *name,
+cef_cookie_manager_t *CEFBridgeCookieManagerFromBrowser(cef_browser_t *browser);
+void CEFBridgeVisitAllCookies(cef_cookie_manager_t *manager, void (^completion)(NSArray<NSDictionary *> *cookies));
+void CEFBridgeSetCookie(cef_cookie_manager_t *manager,
+                        NSString *name,
                         NSString *value,
+                        NSString *url,
                         NSString *domain,
                         NSString *path,
                         BOOL httpOnly,
                         BOOL secure,
                         NSDate *expires,
                         void (^completion)(BOOL success));
-void CEFBridgeDeleteAllCookies(void (^completion)(NSInteger deleted));
+void CEFBridgeDeleteAllCookies(cef_cookie_manager_t *manager, void (^completion)(NSInteger deleted));
+void CEFBridgeFlushCookieStore(cef_cookie_manager_t *manager, void (^completion)(void));
 
 @interface CEFBridge (SupportCallbacks)
 - (void)cefBridgeDidCreateBrowser:(cef_browser_t *)browser;

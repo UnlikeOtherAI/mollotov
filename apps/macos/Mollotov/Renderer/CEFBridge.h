@@ -61,6 +61,7 @@
 /// Set a cookie.
 - (void)setCookieName:(NSString *)name
                 value:(NSString *)value
+                  url:(NSString *)url
                domain:(NSString *)domain
                  path:(NSString *)path
              httpOnly:(BOOL)httpOnly
@@ -70,6 +71,9 @@
 
 /// Delete all cookies.
 - (void)deleteAllCookiesWithCompletion:(void (^)(NSInteger deleted))completion;
+
+/// Flush the cookie store to ensure all pending set/delete operations are committed.
+- (void)flushCookieStoreWithCompletion:(void (^)(void))completion;
 
 /// Take a screenshot. Returns PNG data via callback.
 - (void)takeScreenshotWithCompletion:(void (^)(NSData * _Nullable pngData))completion;
