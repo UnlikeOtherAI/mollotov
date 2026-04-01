@@ -244,9 +244,46 @@ private struct AppKitSegmentedStrip: NSViewRepresentable {
         var onSelect: (String) -> Void
         private weak var container: SegmentedStripContainerView?
         private var buttonsByID: [String: SegmentedStripButton] = [:]
+        private var tooltipView: SegmentedTooltipView?
+        private var hideWorkItem: DispatchWorkItem?
 
         init(onSelect: @escaping (String) -> Void) {
             self.onSelect = onSelect
+        }
+
+        fileprivate func showTooltip(_ text: String, for button: SegmentedStripButton) {
+            guard let window = button.window, let contentView = window.contentView else { return }
+            hideWorkItem?.cancel(); hideWorkItem = nil
+            if tooltipView == nil || tooltipView?.window !== window {
+                tooltipView?.removeFromSuperview()
+                let tv = SegmentedTooltipView()
+                contentView.addSubview(tv)
+                tooltipView = tv
+            }
+            guard let tv = tooltipView else { return }
+            tv.setText(text)
+            let rect = button.convert(button.bounds, to: contentView)
+            let size = tv.fittingSize
+            let x = (rect.midX - size.width / 2).rounded()
+            let y = contentView.isFlipped ? (rect.maxY + 6).rounded() : (rect.minY - size.height - 6).rounded()
+            tv.frame = CGRect(x: x, y: y, width: size.width, height: size.height)
+            tv.alphaValue = 0; tv.isHidden = false
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.15; ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                tv.animator().alphaValue = 1
+            }
+        }
+
+        fileprivate func hideTooltip(for button: SegmentedStripButton) {
+            guard let tv = tooltipView else { return }
+            let workItem = DispatchWorkItem { [weak tv] in
+                NSAnimationContext.runAnimationGroup({ ctx in
+                    ctx.duration = 0.15; ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                    tv?.animator().alphaValue = 0
+                }) { tv?.isHidden = true }
+            }
+            hideWorkItem = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: workItem)
         }
 
         func install(in container: SegmentedStripContainerView, items: [Item]) {
@@ -285,6 +322,9 @@ private struct AppKitSegmentedStrip: NSViewRepresentable {
                 let button = SegmentedStripButton(item: item)
                 button.target = self
                 button.action = #selector(handlePress(_:))
+                button.onHoverChange = { [weak self] btn, isHovering in
+                    isHovering ? self?.showTooltip(item.accessibilityLabel, for: btn) : self?.hideTooltip(for: btn)
+                }
                 buttonsByID[item.id] = button
                 container.stackView.addArrangedSubview(button)
             }
@@ -326,6 +366,8 @@ private final class SegmentedStripContainerView: NSView {
 private final class SegmentedStripButton: NSButton {
     let itemID: String
     var isSegmentSelected = false
+    var onHoverChange: ((SegmentedStripButton, Bool) -> Void)?
+    private var trackingAreaRef: NSTrackingArea?
     private let usesSymbolTint: Bool
     private let iconView: NSImageView?
 
@@ -367,7 +409,7 @@ private final class SegmentedStripButton: NSButton {
         wantsLayer = true
         layer?.cornerRadius = 13
         layer?.masksToBounds = true
-        toolTip = item.accessibilityLabel
+        toolTip = nil  // custom hover tooltip handles this
         setAccessibilityIdentifier(item.accessibilityID)
         setAccessibilityLabel(item.accessibilityLabel)
 
@@ -391,6 +433,17 @@ private final class SegmentedStripButton: NSButton {
 
         updateAppearance()
     }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingAreaRef { removeTrackingArea(trackingAreaRef) }
+        let area = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self, userInfo: nil)
+        addTrackingArea(area)
+        trackingAreaRef = area
+    }
+
+    override func mouseEntered(with event: NSEvent) { super.mouseEntered(with: event); onHoverChange?(self, true) }
+    override func mouseExited(with event: NSEvent) { super.mouseExited(with: event); onHoverChange?(self, false) }
 
     override var isHighlighted: Bool {
         didSet {
@@ -429,5 +482,37 @@ private final class SegmentedStripButton: NSButton {
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+}
+
+private final class SegmentedTooltipView: NSView {
+    private let label = NSTextField(labelWithString: "")
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor(calibratedWhite: 0.08, alpha: 0.96).cgColor
+        layer?.cornerRadius = 12
+        layer?.borderWidth = 1
+        layer?.borderColor = NSColor(calibratedWhite: 0.42, alpha: 1).cgColor
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.textColor = .white
+        label.font = .systemFont(ofSize: 12, weight: .medium)
+        addSubview(label)
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            label.topAnchor.constraint(equalTo: topAnchor, constant: 6),
+            label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    func setText(_ text: String) { label.stringValue = text; layoutSubtreeIfNeeded() }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override var fittingSize: NSSize {
+        let s = label.fittingSize
+        return NSSize(width: s.width + 20, height: max(s.height + 12, 28))
     }
 }
