@@ -39,6 +39,7 @@ json EntryToJsonObject(const TrafficEntry& entry, const std::string& category) {
       {"status_code", entry.status_code},
       {"content_type", entry.content_type},
       {"category", category},
+      {"initiator", entry.initiator},
       {"request_headers", entry.request_headers},
       {"response_headers", entry.response_headers},
       {"request_body", entry.request_body},
@@ -93,6 +94,7 @@ void NetworkTrafficStore::AppendDocumentNavigation(const std::string& url,
       start_time.empty() ? store_support::CurrentIso8601Utc() : start_time,
       std::max<std::int32_t>(0, duration),
       std::max<std::int64_t>(0, size),
+      "browser",
   });
 }
 
@@ -155,6 +157,7 @@ void NetworkTrafficStore::LoadJson(const std::string& json_text) {
                                          store_support::CurrentIso8601Utc()),
           std::max<std::int32_t>(0, store_support::IntOrDefault(item, {"duration"})),
           std::max<std::int64_t>(0, store_support::Int64OrDefault(item, {"size"})),
+          store_support::StringOrDefault(item, {"initiator"}, "browser"),
       });
     }
   }
@@ -223,6 +226,7 @@ std::string NetworkTrafficStore::ToSummaryJson(const std::optional<std::string>&
         {"status_code", entry.status_code},
         {"content_type", entry.content_type},
         {"category", entry_category},
+        {"initiator", entry.initiator},
         {"duration", entry.duration},
         {"size", entry.size},
     });

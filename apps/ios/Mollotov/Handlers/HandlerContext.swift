@@ -30,7 +30,8 @@ final class HandlerContext: NSObject, WKScriptMessageHandler {
                 responseBody: body["responseBody"] as? String,
                 startTime: Date(),
                 duration: body["duration"] as? Int ?? 0,
-                size: body["size"] as? Int ?? 0
+                size: body["size"] as? Int ?? 0,
+                initiator: "js"
             )
             NetworkTrafficStore.shared.append(entry)
 

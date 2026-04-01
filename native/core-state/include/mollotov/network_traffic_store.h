@@ -23,6 +23,7 @@ struct TrafficEntry {
   std::string start_time;
   std::int32_t duration = 0;
   std::int64_t size = 0;
+  std::string initiator = "browser";  // "browser" or "js"
 };
 
 class NetworkTrafficStore {

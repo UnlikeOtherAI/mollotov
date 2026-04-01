@@ -49,6 +49,7 @@ class JsBridge(
                 responseBody = obj.optString("responseBody", null),
                 duration = obj.optInt("duration", 0),
                 size = obj.optInt("size", 0),
+                initiator = "js",
             )
             NetworkTrafficStore.append(entry)
         } catch (_: Exception) {}

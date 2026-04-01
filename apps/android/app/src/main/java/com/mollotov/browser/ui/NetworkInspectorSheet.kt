@@ -40,6 +40,7 @@ fun NetworkInspectorSheet(onDismiss: () -> Unit) {
     val entries by NetworkTrafficStore.entries.collectAsState()
     var methodFilter by remember { mutableStateOf<String?>(null) }
     var categoryFilter by remember { mutableStateOf<String?>(null) }
+    var initiatorFilter by remember { mutableStateOf<String?>(null) }
     var selectedEntry by remember { mutableStateOf<Pair<Int, TrafficEntry>?>(null) }
 
     Column(modifier = Modifier.padding(16.dp)) {
@@ -59,12 +60,15 @@ fun NetworkInspectorSheet(onDismiss: () -> Unit) {
                 onMethodFilterChange = { methodFilter = it },
                 categoryFilter = categoryFilter,
                 onCategoryFilterChange = { categoryFilter = it },
+                initiatorFilter = initiatorFilter,
+                onInitiatorFilterChange = { initiatorFilter = it },
             )
             Spacer(Modifier.height(8.dp))
 
             val filtered = entries.withIndex().filter { (_, e) ->
                 (methodFilter == null || e.method == methodFilter) &&
-                    (categoryFilter == null || e.category == categoryFilter)
+                    (categoryFilter == null || e.category == categoryFilter) &&
+                    (initiatorFilter == null || e.initiator == initiatorFilter)
             }.toList()
 
             if (filtered.isEmpty()) {
@@ -119,11 +123,15 @@ private fun FilterRow(
     onMethodFilterChange: (String?) -> Unit,
     categoryFilter: String?,
     onCategoryFilterChange: (String?) -> Unit,
+    initiatorFilter: String?,
+    onInitiatorFilterChange: (String?) -> Unit,
 ) {
     val methodOptions = listOf<String?>(null, "GET", "POST", "PUT", "DELETE")
     val categoryOptions = listOf<String?>(null, "HTML", "JSON", "JS", "CSS", "Image", "Font", "XML", "Other")
+    val initiatorOptions = listOf<Pair<String?, String>>(null to "All Sources", "browser" to "Browser", "js" to "JS (fetch/XHR)")
     var methodExpanded by remember { mutableStateOf(false) }
     var categoryExpanded by remember { mutableStateOf(false) }
+    var initiatorExpanded by remember { mutableStateOf(false) }
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -152,6 +160,19 @@ private fun FilterRow(
                     DropdownMenuItem(
                         text = { Text(option ?: "All Types") },
                         onClick = { onCategoryFilterChange(option); categoryExpanded = false },
+                    )
+                }
+            }
+        }
+        Box {
+            OutlinedButton(onClick = { initiatorExpanded = true }, shape = RoundedCornerShape(8.dp)) {
+                Text(initiatorOptions.first { it.first == initiatorFilter }.second)
+            }
+            DropdownMenu(expanded = initiatorExpanded, onDismissRequest = { initiatorExpanded = false }) {
+                initiatorOptions.forEach { (value, label) ->
+                    DropdownMenuItem(
+                        text = { Text(label) },
+                        onClick = { onInitiatorFilterChange(value); initiatorExpanded = false },
                     )
                 }
             }

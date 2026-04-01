@@ -27,6 +27,7 @@ data class TrafficEntry(
     val startTime: String = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(Date()),
     val duration: Int = 0,
     val size: Int = 0,
+    val initiator: String = "browser",  // "browser" or "js"
 ) {
     val category: String
         get() = when {
@@ -123,6 +124,7 @@ object NetworkTrafficStore {
         "statusCode" to entry.statusCode,
         "contentType" to entry.contentType,
         "category" to entry.category,
+        "initiator" to entry.initiator,
         "requestHeaders" to entry.requestHeaders,
         "responseHeaders" to entry.responseHeaders,
         "requestBody" to (entry.requestBody ?: ""),
@@ -215,6 +217,7 @@ object NetworkTrafficStore {
             startTime = optString(this, "start_time", optString("startTime", "")),
             duration = optInt("duration"),
             size = optInt("size"),
+            initiator = optString("initiator", "browser"),
         )
     }
 
@@ -225,6 +228,7 @@ object NetworkTrafficStore {
             put("url", entry.url)
             put("statusCode", entry.statusCode)
             put("contentType", entry.contentType)
+            put("initiator", entry.initiator)
             put("requestHeaders", JSONObject(entry.requestHeaders))
             put("responseHeaders", JSONObject(entry.responseHeaders))
             put("requestBody", entry.requestBody ?: "")

@@ -6,10 +6,12 @@ struct NetworkInspectorView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var methodFilter: String?
     @State private var categoryFilter: String?
+    @State private var initiatorFilter: String?
     @State private var searchText = ""
 
     private let methodOptions = ["GET", "POST", "PUT", "DELETE"]
     private let categoryOptions = ["HTML", "JSON", "JS", "CSS", "Image", "Font", "XML", "Other"]
+    private let initiatorOptions = ["browser", "js"]
 
     var body: some View {
         NavigationStack {
@@ -57,6 +59,7 @@ struct NetworkInspectorView: View {
         var result = Array(store.entries.enumerated())
         if let m = methodFilter { result = result.filter { $0.element.method == m } }
         if let c = categoryFilter { result = result.filter { $0.element.category == c } }
+        if let i = initiatorFilter { result = result.filter { $0.element.initiator == i } }
         if !searchText.isEmpty { result = result.filter { $0.element.url.localizedCaseInsensitiveContains(searchText) } }
         return result
     }
@@ -77,6 +80,12 @@ struct NetworkInspectorView: View {
                 }
             }
             .pickerStyle(.menu)
+            Picker("Source", selection: selectedInitiatorBinding) {
+                Text("All Sources").tag("ALL")
+                Text("Browser").tag("browser")
+                Text("JS (fetch/XHR)").tag("js")
+            }
+            .pickerStyle(.menu)
             Spacer()
         }
         .padding(.horizontal, 16)
@@ -95,6 +104,13 @@ struct NetworkInspectorView: View {
         Binding(
             get: { categoryFilter ?? "ALL" },
             set: { categoryFilter = $0 == "ALL" ? nil : $0 }
+        )
+    }
+
+    private var selectedInitiatorBinding: Binding<String> {
+        Binding(
+            get: { initiatorFilter ?? "ALL" },
+            set: { initiatorFilter = $0 == "ALL" ? nil : $0 }
         )
     }
 
