@@ -2,7 +2,8 @@
         cli-build cli-link \
         ios-build ios-run \
         android-build android-run \
-        macos-build macos-run
+        macos-build macos-run \
+        gecko-runtime
 
 REPO_ROOT := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
@@ -47,6 +48,7 @@ help:
 	@echo "  make android non-interactive  Auto-select without prompting"
 	@echo "  make android <serial|avd>   Build + launch on specific target"
 	@echo "  make macos                  Build and launch macOS app"
+	@echo "  make gecko-runtime          Download and bundle Gecko (Firefox) runtime"
 	@echo "  make linux                  Build Linux app via CMake"
 	@echo "  make linux-headless-docker  Build Linux headless Docker image"
 	@echo "  make monitor                Start monitoring API + dashboard"
@@ -172,6 +174,10 @@ macos-run:
 	@APP_PATH=$$(find apps/macos/.build -name "Mollotov.app" 2>/dev/null | head -1); \
 	echo "→ Launching $$APP_PATH ..."; \
 	open "$$APP_PATH"
+
+gecko-runtime:
+	@echo "→ Downloading Gecko runtime..."
+	bash scripts/download-gecko-runtime.sh
 
 # ── Linux ──────────────────────────────────────────────────────────────────────
 

@@ -36,7 +36,7 @@ One-tap login using the device's saved passwords. On iOS, opens an ASWebAuthenti
 
 Switch between Safari (WebKit), Chrome (Chromium/CEF), and Firefox (Gecko) rendering engines at runtime. Available via the UI segmented control and the `set-renderer` / `get-renderer` HTTP endpoints. Cookies are migrated automatically when switching to preserve login sessions.
 
-Gecko spawns Firefox.app as a headless subprocess and drives it via the Firefox Remote Protocol (CDP-compatible WebSocket). Firefox must be installed at a standard path (`/Applications/Firefox.app` or `~/Applications/Firefox.app`). The live view shows the Firefox-rendered page via screenshots at ~5fps.
+Gecko uses a Firefox runtime bundled inside Mollotov.app (`Frameworks/MollotovGeckoHelper.app`) — no external Firefox installation required. Run `make gecko-runtime` once during setup to download and strip the runtime. The bundled binary is driven headless via the Firefox Remote Protocol (CDP-compatible WebSocket). The live view shows the Firefox-rendered page via screenshots at ~5fps.
 
 ## External Display — Apple TV (iOS)
 

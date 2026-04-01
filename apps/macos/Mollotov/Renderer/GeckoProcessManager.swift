@@ -9,7 +9,9 @@ final class GeckoProcessManager {
     private var process: Process?
     private var profileDir: URL?
 
-    static let firefoxPaths: [String] = [
+    /// System Firefox paths checked as a developer fallback when the bundled
+    /// runtime is absent (e.g. before running `make gecko-runtime`).
+    static let systemFirefoxPaths: [String] = [
         "/Applications/Firefox.app/Contents/MacOS/firefox",
         "/Applications/Firefox Developer Edition.app/Contents/MacOS/firefox",
         (NSHomeDirectory() as NSString).appendingPathComponent(
@@ -23,8 +25,22 @@ final class GeckoProcessManager {
         case startupTimeout
     }
 
+    /// Path to the Firefox binary bundled inside Mollotov.app.
+    /// Returns nil if `make gecko-runtime` has not been run.
+    static func bundledFirefoxPath() -> String? {
+        guard let executableURL = Bundle.main.executableURL else { return nil }
+        let path = executableURL
+            .deletingLastPathComponent()          // Contents/MacOS → Contents
+            .deletingLastPathComponent()          // Contents → Mollotov.app
+            .appendingPathComponent("Contents/Frameworks/MollotovGeckoHelper.app/Contents/MacOS/firefox")
+            .path
+        return FileManager.default.isExecutableFile(atPath: path) ? path : nil
+    }
+
+    /// Returns the Firefox binary to use: bundled runtime first, system Firefox as fallback.
     static func locateFirefox() -> String? {
-        firefoxPaths.first { FileManager.default.fileExists(atPath: $0) }
+        if let bundled = bundledFirefoxPath() { return bundled }
+        return systemFirefoxPaths.first { FileManager.default.fileExists(atPath: $0) }
     }
 
     func start() async throws {
@@ -39,6 +55,7 @@ final class GeckoProcessManager {
         let tempProfile = FileManager.default.temporaryDirectory
             .appendingPathComponent("com.mollotov.gecko-profile-\(port)")
         try? FileManager.default.createDirectory(at: tempProfile, withIntermediateDirectories: true)
+        writeProfilePrefs(to: tempProfile)
         profileDir = tempProfile
 
         let proc = Process()
@@ -70,6 +87,24 @@ final class GeckoProcessManager {
     }
 
     var isRunning: Bool { process?.isRunning == true }
+
+    private func writeProfilePrefs(to profileURL: URL) {
+        let userJS = """
+        user_pref("app.update.auto", false);
+        user_pref("app.update.enabled", false);
+        user_pref("browser.shell.checkDefaultBrowser", false);
+        user_pref("browser.startup.firstrunSkipsHomepage", true);
+        user_pref("browser.startup.homepage_override.mstone", "ignore");
+        user_pref("datareporting.healthreport.uploadEnabled", false);
+        user_pref("datareporting.policy.dataSubmissionEnabled", false);
+        user_pref("toolkit.telemetry.enabled", false);
+        user_pref("toolkit.telemetry.unified", false);
+        """
+        try? userJS.write(
+            to: profileURL.appendingPathComponent("user.js"),
+            atomically: true, encoding: .utf8
+        )
+    }
 
     private func waitForEndpoint(port: Int, retries: Int = 40) async throws {
         let url = URL(string: "http://localhost:\(port)/json/version")!

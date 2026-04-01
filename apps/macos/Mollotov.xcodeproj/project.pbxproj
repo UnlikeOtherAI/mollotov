@@ -377,6 +377,7 @@
 				DCD02691F673967519F5DDAC /* Frameworks */,
 				1D04DF0D46620C8E549FAB02 /* Embed CEF Framework */,
 				4C90643931740D7E422B9615 /* Embed MollotovHelper */,
+				34132CF9D4B139B897917E84 /* Embed Gecko Helper */,
 			);
 			buildRules = (
 			);
@@ -476,6 +477,25 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "CEF_SRC=\"${PROJECT_DIR}/Frameworks/Chromium Embedded Framework.framework\"\nCEF_DST=\"${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/Chromium Embedded Framework.framework\"\nrm -rf \"$CEF_DST\"\nmkdir -p \"$CEF_DST/Versions/A\"\ncp \"$CEF_SRC/Chromium Embedded Framework\" \"$CEF_DST/Versions/A/\"\nrsync -a \"$CEF_SRC/Resources/\" \"$CEF_DST/Versions/A/Resources/\"\nif [ -d \"$CEF_SRC/Libraries\" ]; then\n  rsync -a \"$CEF_SRC/Libraries/\" \"$CEF_DST/Versions/A/Libraries/\"\n  ln -sf Versions/Current/Libraries \"$CEF_DST/Libraries\"\nfi\nln -sf A \"$CEF_DST/Versions/Current\"\nln -sf \"Versions/Current/Chromium Embedded Framework\" \"$CEF_DST/Chromium Embedded Framework\"\nln -sf Versions/Current/Resources \"$CEF_DST/Resources\"\n";
+		};
+		34132CF9D4B139B897917E84 /* Embed Gecko Helper */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Embed Gecko Helper";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "GECKO_SRC=\"${PROJECT_DIR}/Frameworks/MollotovGeckoHelper.app\"\nGECKO_DST=\"${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/MollotovGeckoHelper.app\"\nif [ -d \"$GECKO_SRC\" ]; then\n  rm -rf \"$GECKO_DST\"\n  cp -R \"$GECKO_SRC\" \"$GECKO_DST\"\n  codesign -fs - \"$GECKO_DST\" 2>/dev/null || true\n  echo \"Gecko helper embedded at $GECKO_DST\"\nelse\n  echo \"warning: MollotovGeckoHelper.app not found — run 'make gecko-runtime' first\"\nfi\n";
 		};
 		4C90643931740D7E422B9615 /* Embed MollotovHelper */ = {
 			isa = PBXShellScriptBuildPhase;

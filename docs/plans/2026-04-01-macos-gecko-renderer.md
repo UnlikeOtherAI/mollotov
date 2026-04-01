@@ -1,5 +1,7 @@
 # macOS Gecko (Firefox) Renderer Implementation Plan
 
+> **Superseded** by `docs/plans/2026-04-01-macos-gecko-bundled.md`. The subprocess+CDP approach from this plan is retained but the binary is now bundled inside the app — no external Firefox.app required.
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Add Firefox/Gecko as a third renderer option on macOS alongside WebKit and Chromium (CEF), using Firefox's Remote Protocol (CDP-compatible WebSocket) to control a Firefox subprocess.

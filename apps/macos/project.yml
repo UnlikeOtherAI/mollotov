@@ -97,6 +97,19 @@ targets:
           stage_helper "Mollotov Helper (Plugin)" "com.mollotov.browser.helper.plugin"
           stage_helper "Mollotov Helper (Alerts)" "com.mollotov.browser.helper.alerts"
         basedOnDependencyAnalysis: false
+      - name: Embed Gecko Helper
+        script: |
+          GECKO_SRC="${PROJECT_DIR}/Frameworks/MollotovGeckoHelper.app"
+          GECKO_DST="${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/MollotovGeckoHelper.app"
+          if [ -d "$GECKO_SRC" ]; then
+            rm -rf "$GECKO_DST"
+            cp -R "$GECKO_SRC" "$GECKO_DST"
+            codesign -fs - "$GECKO_DST" 2>/dev/null || true
+            echo "Gecko helper embedded at $GECKO_DST"
+          else
+            echo "warning: MollotovGeckoHelper.app not found — run 'make gecko-runtime' first"
+          fi
+        basedOnDependencyAnalysis: false
     settings:
       base:
         SWIFT_OBJC_BRIDGING_HEADER: Mollotov/Mollotov-Bridging-Header.h
