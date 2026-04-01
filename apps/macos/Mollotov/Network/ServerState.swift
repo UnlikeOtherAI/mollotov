@@ -1,5 +1,7 @@
 import Foundation
 import AppKit
+import Network
+import Darwin
 
 /// Observable state for the HTTP server, mDNS, and renderer management.
 @MainActor
@@ -7,8 +9,10 @@ final class ServerState: ObservableObject {
     @Published var isServerRunning = false
     @Published var isMDNSAdvertising = false
     @Published var ipAddress: String = "0.0.0.0"
+    @Published var shellToastMessage: String?
+    @Published private(set) var deviceInfo: DeviceInfo
+    let viewportState = ViewportState()
 
-    let deviceInfo: DeviceInfo
     let router = Router()
     let handlerContext = HandlerContext()
 
@@ -19,7 +23,7 @@ final class ServerState: ObservableObject {
     private(set) var cefRenderer: CEFRenderer?
 
     private var httpServer: HTTPServer?
-    private var mdnsAdvertiser: MDNSAdvertiser?
+    private var toastDismissTask: Task<Void, Never>?
 
     init(port: UInt16 = 8420) {
         self.deviceInfo = DeviceInfo.current(port: Int(port))
@@ -27,32 +31,45 @@ final class ServerState: ObservableObject {
     }
 
     func startHTTPServer() {
-        // Initialize both renderers
-        let wk = WKWebViewRenderer()
-        let cef = CEFRenderer()
-        wkRenderer = wk
-        cefRenderer = cef
-
-        // Wire script message handling
-        wk.onScriptMessage = { [weak self] name, body in
-            self?.handlerContext.handleScriptMessage(name: name, body: body)
-        }
-        cef.onScriptMessage = { [weak self] name, body in
-            self?.handlerContext.handleScriptMessage(name: name, body: body)
+        let preferredPort = UInt16(deviceInfo.port)
+        let resolvedPort = Self.firstAvailablePort(startingAt: preferredPort)
+        if Int(resolvedPort) != deviceInfo.port {
+            print("[ServerState] Port \(preferredPort) in use, falling back to \(resolvedPort)")
+            deviceInfo = DeviceInfo.current(port: Int(resolvedPort))
         }
 
-        // Start with persisted renderer (or WebKit by default)
+        // Pre-initialize CEF so the Mach port rendezvous server is registered
+        // in the clean startup run loop context. cef_initialize() installs
+        // CFRunLoop observers that only work correctly when called from a
+        // top-level event loop iteration (not from an HTTP handler async chain).
+        // Browser creation is still deferred to the first Chromium switch.
+        CEFRenderer.ensureCEFInitialized()
+
+        // Start only the selected renderer (browser instance). CEF is
+        // initialized above but no Chromium browser is created yet.
         let startEngine = rendererState?.activeEngine ?? .webkit
-        let activeRenderer: any RendererEngine = startEngine == .chromium ? cef : wk
+        let activeRenderer = renderer(for: startEngine)
         handlerContext.renderer = activeRenderer
+        handlerContext.startSharedCookieSync()
         let homeURL = URL(string: UserDefaults.standard.string(forKey: "homeURL") ?? defaultHomeURL)!
-        activeRenderer.load(url: homeURL)
+        awaitSharedCookieImportThenLoad(url: homeURL)
 
         registerHandlers()
         router.registerStubs()
-        httpServer = HTTPServer(port: UInt16(deviceInfo.port), router: router)
+        let server = HTTPServer(port: resolvedPort, router: router)
+        server.onBonjourStateChange = { [weak self] isAdvertising in
+            Task { @MainActor in
+                self?.isMDNSAdvertising = isAdvertising
+            }
+        }
+        server.onStateChange = { [weak self] isRunning in
+            Task { @MainActor in
+                self?.isServerRunning = isRunning
+            }
+        }
+        httpServer = server
+        startMDNS()
         httpServer?.start()
-        isServerRunning = true
     }
 
     private func registerHandlers() {
@@ -82,7 +99,7 @@ final class ServerState: ObservableObject {
             guard let message = body["message"] as? String else {
                 return errorResponse(code: "MISSING_PARAM", message: "message is required")
             }
-            await ctx.showToast(message)
+            await self.showShellToast(message)
             return successResponse(["message": message])
         }
 
@@ -91,13 +108,18 @@ final class ServerState: ObservableObject {
         DOMHandler(context: ctx).register(on: router)
         InteractionHandler(context: ctx).register(on: router)
         ScrollHandler(context: ctx).register(on: router)
-        DeviceHandler(context: ctx, deviceInfo: deviceInfo, rendererState: rendererState!).register(on: router)
+        DeviceHandler(
+            context: ctx,
+            deviceInfo: deviceInfo,
+            rendererState: rendererState!,
+            viewportState: viewportState
+        ).register(on: router)
         EvaluateHandler(context: ctx).register(on: router)
         ConsoleHandler(context: ctx).register(on: router)
         NetworkHandler(context: ctx).register(on: router)
         MutationHandler(context: ctx).register(on: router)
         ShadowDOMHandler(context: ctx).register(on: router)
-        BrowserManagementHandler(context: ctx).register(on: router)
+        BrowserManagementHandler(context: ctx, viewportState: viewportState).register(on: router)
         LLMHandler(context: ctx).register(on: router)
         BookmarkHandler(context: ctx).register(on: router)
         HistoryHandler(context: ctx).register(on: router)
@@ -115,43 +137,82 @@ final class ServerState: ObservableObject {
 
     /// Switches active renderer with cookie migration.
     func switchRenderer(to engine: RendererState.Engine) async {
-        guard let rendererState, let wkRenderer, let cefRenderer else { return }
+        guard let rendererState else { return }
         guard engine != rendererState.activeEngine else { return }
 
         rendererState.isSwitching = true
 
         let source = handlerContext.renderer!
-        let target: any RendererEngine = engine == .webkit ? wkRenderer : cefRenderer
+        let target = renderer(for: engine)
 
-        // Migrate cookies
+        // Persist the source state into the shared jar, then migrate directly
+        // where safe so renderer switching preserves auth state.
+        await handlerContext.persistRendererCookiesToSharedJar()
         await CookieMigrator.migrate(from: source, to: target)
+        handlerContext.renderer = target
+        await handlerContext.syncSharedCookiesIntoRenderer(force: true)
 
         // Load the same URL in the target renderer
         if let url = source.currentURL, url.absoluteString != "about:blank" {
             target.load(url: url)
         }
 
-        // Swap
-        handlerContext.renderer = target
         rendererState.activeEngine = engine
         rendererState.isSwitching = false
 
-        // Update mDNS TXT record with new engine
-        mdnsAdvertiser?.restart(txtRecord: deviceInfo.txtRecord(engine: engine.rawValue))
+        // Update the advertised TXT record with the active engine.
+        startMDNS()
+    }
+
+    private func renderer(for engine: RendererState.Engine) -> any RendererEngine {
+        switch engine {
+        case .webkit:
+            if let wkRenderer {
+                return wkRenderer
+            }
+            let renderer = WKWebViewRenderer()
+            renderer.onScriptMessage = { [weak self] name, body in
+                self?.handlerContext.handleScriptMessage(name: name, body: body)
+            }
+            wkRenderer = renderer
+            return renderer
+        case .chromium:
+            if let cefRenderer {
+                return cefRenderer
+            }
+            let renderer = CEFRenderer()
+            renderer.onScriptMessage = { [weak self] name, body in
+                self?.handlerContext.handleScriptMessage(name: name, body: body)
+            }
+            cefRenderer = renderer
+            return renderer
+        }
     }
 
     func startMDNS() {
         let engine = rendererState?.activeEngine.rawValue ?? "webkit"
-        mdnsAdvertiser = MDNSAdvertiser(txtRecord: deviceInfo.txtRecord(engine: engine))
-        mdnsAdvertiser?.start()
-        isMDNSAdvertising = true
+        httpServer?.configureBonjourService(
+            name: deviceInfo.name,
+            type: "_mollotov._tcp",
+            txtRecord: NWTXTRecord(deviceInfo.txtRecord(engine: engine))
+        )
     }
 
     func stop() {
         httpServer?.stop()
-        mdnsAdvertiser?.stop()
         isServerRunning = false
         isMDNSAdvertising = false
+    }
+
+    func showShellToast(_ message: String) {
+        toastDismissTask?.cancel()
+        shellToastMessage = message
+
+        toastDismissTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            guard !Task.isCancelled else { return }
+            self?.shellToastMessage = nil
+        }
     }
 
     private static func getLocalIPAddress() -> String {
@@ -175,5 +236,51 @@ final class ServerState: ObservableObject {
             }
         }
         return address
+    }
+
+    private static func firstAvailablePort(startingAt preferredPort: UInt16, attempts: UInt16 = 32) -> UInt16 {
+        for offset in UInt16(0)..<attempts {
+            let candidate = preferredPort &+ offset
+            if reservedPorts.contains(candidate) {
+                continue
+            }
+            if canBind(port: candidate) {
+                return candidate
+            }
+        }
+        return preferredPort
+    }
+
+    private static func canBind(port: UInt16) -> Bool {
+        let fd = socket(AF_INET6, SOCK_STREAM, 0)
+        guard fd >= 0 else { return false }
+        defer { close(fd) }
+
+        var address = sockaddr_in6()
+        address.sin6_len = UInt8(MemoryLayout<sockaddr_in6>.size)
+        address.sin6_family = sa_family_t(AF_INET6)
+        address.sin6_port = port.bigEndian
+        address.sin6_addr = in6addr_any
+
+        return withUnsafePointer(to: &address) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { socketAddress in
+                bind(fd, socketAddress, socklen_t(MemoryLayout<sockaddr_in6>.size)) == 0
+            }
+        }
+    }
+
+    private static var reservedPorts: Set<UInt16> {
+        var ports: Set<UInt16> = []
+        #if DEBUG
+        ports.insert(8421) // Reserved for AppReveal on debug builds.
+        #endif
+        return ports
+    }
+
+    private func awaitSharedCookieImportThenLoad(url: URL) {
+        Task { @MainActor [weak self] in
+            await self?.handlerContext.syncSharedCookiesIntoRenderer(force: true)
+            self?.handlerContext.load(url: url)
+        }
     }
 }

@@ -55,18 +55,24 @@ final class CEFRenderer: RendererEngine {
     var onStateChange: (() -> Void)?
     var onScriptMessage: ((_ name: String, _ body: [String: Any]) -> Void)?
 
-    init() {
-        if !Self.cefInitialized {
-            let ok = CEFBridge.initializeCEF()
-            Self.cefInitialized = ok
-            if ok {
-                Self.messageLoopTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { _ in
-                    CEFBridge.doMessageLoopWork()
-                }
-            } else {
-                NSLog("[CEFRenderer] CEF initialization failed")
+    /// Initialize CEF on a clean run loop iteration. Must be called before
+    /// creating any CEFRenderer instance during a live renderer switch.
+    /// Safe to call multiple times — only the first call initializes.
+    static func ensureCEFInitialized() {
+        guard !cefInitialized else { return }
+        let ok = CEFBridge.initializeCEF()
+        cefInitialized = ok
+        if ok {
+            messageLoopTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { _ in
+                CEFBridge.doMessageLoopWork()
             }
+        } else {
+            NSLog("[CEFRenderer] CEF initialization failed")
         }
+    }
+
+    init() {
+        Self.ensureCEFInitialized()
 
         containerView = CEFHostView(frame: NSRect(x: 0, y: 0, width: 1280, height: 800))
         containerView.wantsLayer = true
