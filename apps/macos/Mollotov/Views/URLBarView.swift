@@ -117,7 +117,7 @@ struct URLBarView: View {
                     id: RendererState.Engine.webkit.rawValue,
                     imageName: "SafariLogo",
                     accessibilityID: "browser.renderer.webkit",
-                    accessibilityLabel: "Safari renderer",
+                    accessibilityLabel: "WebKit",
                     width: 54,
                     iconSize: 16
                 ),
@@ -125,7 +125,7 @@ struct URLBarView: View {
                     id: RendererState.Engine.chromium.rawValue,
                     imageName: "ChromeLogo",
                     accessibilityID: "browser.renderer.chromium",
-                    accessibilityLabel: "Chromium renderer",
+                    accessibilityLabel: "Chromium",
                     width: 54,
                     iconSize: 16
                 ),
