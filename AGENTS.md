@@ -66,6 +66,10 @@ Never use the macOS Keychain for storage. Use UserDefaults or file-based storage
 
 Never manually fix state to work around a bug. Fix the code so the system self-heals.
 
+### Kill Stale Browser Instances (CRITICAL)
+
+During debugging or verification, always terminate any existing Mollotov browser app instance that could block ports, AppReveal, or interaction testing before launching the build you intend to test. Do not work around stale processes by guessing which instance responded — ensure there is one known-good target.
+
 ### Documentation Alignment (CRITICAL)
 
 Feature work is incomplete until docs are updated. When adding or changing API endpoints, CLI commands, or MCP tools, update the relevant docs in the same commit. Every user-facing feature must be described in [docs/functionality.md](docs/functionality.md) — update it when adding or changing features.
@@ -89,6 +93,7 @@ Only commit permanent, hand-authored files. If it can be regenerated, do not com
 - CLI: `pnpm build && pnpm test` must pass before committing
 - iOS: Xcode build succeeds, no warnings
 - Android: `./gradlew build` succeeds
+- macOS: After every change, rebuild and launch the app to verify. Kill any stale instance first, then keep the new one running until the next build replaces it.
 
 ## Commits
 
