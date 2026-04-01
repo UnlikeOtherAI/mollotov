@@ -19,9 +19,8 @@ struct DOMHandler {
         let js = """
         (function() {
             var el = document.querySelector('\(selector.replacingOccurrences(of: "'", with: "\\'"))');
-            if (!el) return JSON.stringify({found: false});
-            var html = el.outerHTML;
-            return JSON.stringify({found: true, html: html, nodeCount: el.querySelectorAll('*').length + 1});
+            if (!el) return {found: false};
+            return {found: true, html: el.outerHTML, nodeCount: el.querySelectorAll('*').length + 1};
         })()
         """
         do {

@@ -48,11 +48,21 @@ export async function scanForDevices(
   });
 }
 
+/** Prefer IPv4, then global IPv6, then link-local IPv6 as last resort. */
+function pickAddress(addresses: string[], fallback?: string): string | undefined {
+  const all = fallback ? [...addresses, fallback] : addresses;
+  const ipv4 = all.find((a) => !a.includes(":"));
+  if (ipv4) return ipv4;
+  const globalV6 = all.find((a) => a.includes(":") && !a.startsWith("fe80"));
+  if (globalV6) return globalV6;
+  return all[0];
+}
+
 function parseService(service: Service): DiscoveredDevice | null {
   const txt = service.txt as Partial<MdnsTxtRecord> | undefined;
   if (!txt?.id) return null;
 
-  const ip = service.addresses?.[0] ?? service.referer?.address;
+  const ip = pickAddress(service.addresses ?? [], service.referer?.address);
   if (!ip) return null;
 
   return {

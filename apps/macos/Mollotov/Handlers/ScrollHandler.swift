@@ -15,7 +15,7 @@ struct ScrollHandler {
     private func scroll(_ body: [String: Any]) async -> [String: Any] {
         let dx = body["deltaX"] as? Double ?? 0
         let dy = body["deltaY"] as? Double ?? 0
-        let js = "window.scrollBy(\(dx), \(dy)); ({scrollX: window.scrollX, scrollY: window.scrollY})"
+        let js = "(function() { window.scrollBy(\(dx), \(dy)); return {scrollX: window.scrollX, scrollY: window.scrollY}; })()"
         do {
             let result = try await context.evaluateJSReturningJSON(js)
             return successResponse(result)
@@ -53,8 +53,8 @@ struct ScrollHandler {
     @MainActor
     private func scrollTo(top: Bool) async -> [String: Any] {
         let js = top
-            ? "window.scrollTo(0, 0); ({scrollY: 0})"
-            : "window.scrollTo(0, document.documentElement.scrollHeight); ({scrollY: window.scrollY})"
+            ? "(function() { window.scrollTo(0, 0); return {scrollY: 0}; })()"
+            : "(function() { window.scrollTo(0, document.documentElement.scrollHeight); return {scrollY: window.scrollY}; })()"
         do {
             let result = try await context.evaluateJSReturningJSON(js)
             return successResponse(result)

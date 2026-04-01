@@ -8,7 +8,10 @@ export interface HttpResponse<T = unknown> {
 }
 
 function toKebabCase(method: string): string {
-  return method.replace(/([a-z])([A-Z])/g, "$1-$2").toLowerCase();
+  return method
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1-$2")
+    .replace(/([a-z])([A-Z])/g, "$1-$2")
+    .toLowerCase();
 }
 
 export async function sendCommand<T = unknown>(
