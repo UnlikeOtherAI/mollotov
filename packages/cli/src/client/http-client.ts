@@ -18,7 +18,8 @@ export async function sendCommand<T = unknown>(
   timeout: number = 10000,
 ): Promise<HttpResponse<T>> {
   const kebabMethod = toKebabCase(method);
-  const url = `http://${device.ip}:${device.port}${API_VERSION_PREFIX}${kebabMethod}`;
+  const host = device.ip.includes(":") ? `[${device.ip}]` : device.ip;
+  const url = `http://${host}:${device.port}${API_VERSION_PREFIX}${kebabMethod}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
 

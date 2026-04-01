@@ -2,6 +2,7 @@ import type { DiscoveredDevice } from "../types.js";
 import { loadBrowserStore } from "../browser/store.js";
 
 const devices = new Map<string, DiscoveredDevice>();
+let autoScanned = false;
 
 export function addDevice(device: DiscoveredDevice): void {
   devices.set(device.id, device);
@@ -20,6 +21,13 @@ export function getAllDevices(): DiscoveredDevice[] {
 }
 
 export async function getDevice(query: string): Promise<DiscoveredDevice | undefined> {
+  // Auto-scan on first use so --device works without a prior `discover` call
+  if (!autoScanned && devices.size === 0) {
+    autoScanned = true;
+    const { scanForDevices } = await import("./scanner.js");
+    addDevices(await scanForDevices(2500));
+  }
+
   // Priority: ID exact > name exact > name fuzzy > IP exact
   const byId = devices.get(query);
   if (byId) return byId;
