@@ -11,7 +11,7 @@ const {
   MINIMAX_API_KEY,
   MINIMAX_BASE_URL = 'https://api.minimax.chat/v1',
   MINIMAX_MODEL = 'minimax-text-01',
-  FIRECRAWL_API_KEY = '',
+  FIRECRAWL_API_KEY,
   NVD_API_KEY,
   PORT = '3001',
   SCAN_CRON = '0 */2 * * *',
@@ -19,6 +19,7 @@ const {
 
 if (!GITHUB_TOKEN) throw new Error('GITHUB_TOKEN is required')
 if (!MINIMAX_API_KEY) throw new Error('MINIMAX_API_KEY is required')
+if (!FIRECRAWL_API_KEY) throw new Error('FIRECRAWL_API_KEY is required')
 
 const octokit = new Octokit({ auth: GITHUB_TOKEN })
 const deps = {

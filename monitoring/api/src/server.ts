@@ -16,14 +16,25 @@ export function createServer(deps: AgentDeps & { owner: string; repo: string }) 
   }))
 
   app.get('/api/v1/status', async c => {
-    const issues = await searchIssues(deps.octokit, deps.owner, deps.repo, [], '')
-    const records = issues
+    const [chromiumIssues, geckoIssues] = await Promise.all([
+      searchIssues(deps.octokit, deps.owner, deps.repo, ['engine:chromium'], undefined),
+      searchIssues(deps.octokit, deps.owner, deps.repo, ['engine:gecko'], undefined),
+    ])
+
+    const seen = new Set<number>()
+    const records = [...chromiumIssues, ...geckoIssues]
+      .filter(i => {
+        if (seen.has(i.number)) return false
+        seen.add(i.number)
+        return true
+      })
       .map(i => {
         const meta = parseMonitoringMetadata(i.body)
         if (!meta) return null
         return { ...meta, issueNumber: i.number, title: i.title }
       })
       .filter((r): r is NonNullable<typeof r> => r !== null)
+
     return c.json({ issues: records, fetchedAt: new Date().toISOString() })
   })
 

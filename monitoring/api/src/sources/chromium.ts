@@ -13,6 +13,7 @@ const RELEASE_NOTES_BASE = 'https://chromereleases.googleblog.com/'
 const DEADLINE_DAYS = 15
 
 export function parseChromiumRelease(raw: any[]): ChromiumRelease {
+  if (!raw?.length) throw new Error('Chromium Dash returned no releases')
   const r = raw[0]
   const releaseDate = new Date(r.time).toISOString().slice(0, 10)
   const releaseDateMs = new Date(releaseDate + 'T00:00:00Z').getTime()
