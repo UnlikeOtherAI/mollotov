@@ -1,4 +1,7 @@
 name: Mollotov
+packages:
+  AppReveal:
+    path: vendor/AppReveal/iOS
 options:
   bundleIdPrefix: com.mollotov
   deploymentTarget:
@@ -20,6 +23,8 @@ targets:
       - framework: Frameworks/Chromium Embedded Framework.framework
         embed: false
       - target: MollotovHelper
+      - package: AppReveal
+        product: AppReveal
     preBuildScripts:
       - name: Fix CEF Framework Structure
         script: |
@@ -48,22 +53,71 @@ targets:
       - name: Embed MollotovHelper
         script: |
           HELPER_EXE="${BUILT_PRODUCTS_DIR}/MollotovHelper"
-          HELPER_DST="${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/MollotovHelper.app/Contents/MacOS"
-          mkdir -p "$HELPER_DST"
-          cp "$HELPER_EXE" "$HELPER_DST/MollotovHelper"
-          cp "${PROJECT_DIR}/MollotovHelper/Info.plist" "${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/MollotovHelper.app/Contents/Info.plist"
-          # Fix CEF framework path — helper is nested 4 levels deep from Frameworks/
-          install_name_tool -change \
-            "@executable_path/../Frameworks/Chromium Embedded Framework.framework/Chromium Embedded Framework" \
-            "@executable_path/../../../Chromium Embedded Framework.framework/Chromium Embedded Framework" \
-            "$HELPER_DST/MollotovHelper" 2>/dev/null || true
-          codesign -fs - "$HELPER_DST/MollotovHelper" 2>/dev/null || true
+          HELPER_ROOT="${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}"
+
+          stage_helper() {
+            local helper_name="$1"
+            local bundle_id="$2"
+            local app_dir="${HELPER_ROOT}/${helper_name}.app"
+            local exe_dir="${app_dir}/Contents/MacOS"
+            local exe_path="${exe_dir}/${helper_name}"
+            local plist_path="${app_dir}/Contents/Info.plist"
+
+            mkdir -p "$exe_dir"
+            cp "$HELPER_EXE" "$exe_path"
+
+            /usr/libexec/PlistBuddy -c "Clear dict" "$plist_path" 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Add :CFBundleExecutable string ${helper_name}" "$plist_path"
+            /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string ${bundle_id}" "$plist_path"
+            /usr/libexec/PlistBuddy -c "Add :CFBundleName string ${helper_name}" "$plist_path"
+            /usr/libexec/PlistBuddy -c "Add :CFBundlePackageType string APPL" "$plist_path"
+            /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string 1" "$plist_path"
+            /usr/libexec/PlistBuddy -c "Add :LSUIElement bool true" "$plist_path"
+
+            # Fix CEF framework path — helper is nested 4 levels deep from Frameworks/
+            install_name_tool -change \
+              "@executable_path/../Frameworks/Chromium Embedded Framework.framework/Chromium Embedded Framework" \
+              "@executable_path/../../../Chromium Embedded Framework.framework/Chromium Embedded Framework" \
+              "$exe_path" 2>/dev/null || true
+
+            codesign -fs - "$exe_path" 2>/dev/null || true
+            codesign -fs - "$app_dir" 2>/dev/null || true
+          }
+
+          rm -rf \
+            "${HELPER_ROOT}/Mollotov Helper.app" \
+            "${HELPER_ROOT}/Mollotov Helper (Renderer).app" \
+            "${HELPER_ROOT}/Mollotov Helper (GPU).app" \
+            "${HELPER_ROOT}/Mollotov Helper (Plugin).app" \
+            "${HELPER_ROOT}/Mollotov Helper (Alerts).app"
+
+          stage_helper "Mollotov Helper" "com.mollotov.browser.helper"
+          stage_helper "Mollotov Helper (Renderer)" "com.mollotov.browser.helper.renderer"
+          stage_helper "Mollotov Helper (GPU)" "com.mollotov.browser.helper.gpu"
+          stage_helper "Mollotov Helper (Plugin)" "com.mollotov.browser.helper.plugin"
+          stage_helper "Mollotov Helper (Alerts)" "com.mollotov.browser.helper.alerts"
         basedOnDependencyAnalysis: false
     settings:
       base:
         SWIFT_OBJC_BRIDGING_HEADER: Mollotov/Mollotov-Bridging-Header.h
         FRAMEWORK_SEARCH_PATHS: "$(PROJECT_DIR)/Frameworks"
-        HEADER_SEARCH_PATHS: "$(PROJECT_DIR)/Frameworks/cef_include"
+        HEADER_SEARCH_PATHS:
+          - "$(PROJECT_DIR)/Frameworks/cef_include"
+          - "$(PROJECT_DIR)/../../native/core-state/include"
+          - "$(PROJECT_DIR)/../../native/core-protocol/include"
+          - "$(PROJECT_DIR)/../../native/core-automation/include"
+          - "$(PROJECT_DIR)/../../native/core-mcp/include"
+        LIBRARY_SEARCH_PATHS:
+          - "$(PROJECT_DIR)/../../native/.build/core-state"
+          - "$(PROJECT_DIR)/../../native/.build/core-protocol"
+          - "$(PROJECT_DIR)/../../native/.build/core-automation"
+          - "$(PROJECT_DIR)/../../native/.build/core-mcp"
+        OTHER_LDFLAGS:
+          - "-lmollotov_core_state"
+          - "-lmollotov_core_protocol"
+          - "-lmollotov_core_automation"
+          - "-lmollotov_core_mcp"
+          - "-lc++"
         LD_RUNPATH_SEARCH_PATHS: "@executable_path/../Frameworks"
         CODE_SIGN_ENTITLEMENTS: Mollotov/Mollotov.entitlements
         INFOPLIST_FILE: Mollotov/Info.plist
