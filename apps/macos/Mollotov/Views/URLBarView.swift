@@ -129,14 +129,6 @@ struct URLBarView: View {
                     width: 54,
                     iconSize: 16
                 ),
-                AppKitSegmentedStrip.Item(
-                    id: RendererState.Engine.gecko.rawValue,
-                    imageName: "FirefoxLogo",
-                    accessibilityID: "browser.renderer.gecko",
-                    accessibilityLabel: "Firefox renderer",
-                    width: 54,
-                    iconSize: 16
-                ),
             ],
             selectedID: rendererState.activeEngine.rawValue,
             accessibilityID: "browser.renderer.switch",
@@ -146,7 +138,7 @@ struct URLBarView: View {
                 onSwitchRenderer(engine)
             }
         )
-        .frame(width: 174, height: 34)
+        .frame(width: 118, height: 34)
     }
 
     @ViewBuilder

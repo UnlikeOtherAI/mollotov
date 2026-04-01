@@ -18,7 +18,7 @@ struct RendererHandler {
             return errorResponse(code: "MISSING_PARAM", message: "engine is required (webkit|chromium)")
         }
         guard let engine = RendererState.Engine(rawValue: engineStr) else {
-            return errorResponse(code: "INVALID_PARAM", message: "engine must be webkit, chromium, or gecko")
+            return errorResponse(code: "INVALID_PARAM", message: "engine must be webkit or chromium")
         }
         if engine == rendererState.activeEngine {
             return successResponse(["engine": engine.rawValue, "changed": false])

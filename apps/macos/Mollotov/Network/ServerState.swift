@@ -21,7 +21,6 @@ final class ServerState: ObservableObject {
     // Renderers are created on first use and cached for instant switching
     private(set) var wkRenderer: WKWebViewRenderer?
     private(set) var cefRenderer: CEFRenderer?
-    private(set) var geckoRenderer: GeckoRenderer?
 
     private var httpServer: HTTPServer?
     private var toastDismissTask: Task<Void, Never>?
@@ -146,6 +145,10 @@ final class ServerState: ObservableObject {
         let source = handlerContext.renderer!
         let target = renderer(for: engine)
 
+        // Stop any background activity on the outgoing renderer before async work
+        // so its tasks don't interleave with CEF's main-thread RunLoop source.
+        source.willDeactivate()
+
         // Persist the source state into the shared jar, then migrate directly
         // where safe so renderer switching preserves auth state.
         await handlerContext.persistRendererCookiesToSharedJar()
@@ -160,6 +163,7 @@ final class ServerState: ObservableObject {
 
         rendererState.activeEngine = engine
         rendererState.isSwitching = false
+        target.didActivate()
 
         // Update the advertised TXT record with the active engine.
         startMDNS()
@@ -186,16 +190,6 @@ final class ServerState: ObservableObject {
                 self?.handlerContext.handleScriptMessage(name: name, body: body)
             }
             cefRenderer = renderer
-            return renderer
-        case .gecko:
-            if let geckoRenderer {
-                return geckoRenderer
-            }
-            let renderer = GeckoRenderer()
-            renderer.onScriptMessage = { [weak self] name, body in
-                self?.handlerContext.handleScriptMessage(name: name, body: body)
-            }
-            geckoRenderer = renderer
             return renderer
         }
     }
