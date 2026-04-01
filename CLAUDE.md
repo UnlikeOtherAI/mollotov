@@ -16,6 +16,7 @@ Mollotov is an LLM-first browser for iOS and Android that enables language model
 
 - **Always check logs first** before diving into source code. Check device HTTP server logs, mDNS advertisement logs, and CLI output before analyzing code.
 - **Never manually fix state** — if the mDNS discovery, HTTP server, or MCP server is stuck, fix the code so it self-heals.
+- **Kill stale Mollotov app instances before verification** when they could block ports, AppReveal, or input testing. Debug against one known app process, not a mixture of old and new sessions.
 
 ## How to Run Parallel Adversarial Reviews
 
@@ -35,6 +36,17 @@ Bash tool:
 ```
 
 Both calls go in a **single message** so they execute in parallel.
+
+## Using Codex as an External Agent
+
+When dispatching work to Codex (`timeout 1800 codex exec "<prompt>"`), minimize Claude token spend:
+
+- **Launch with `run_in_background: true`** — you'll be notified on completion, no polling needed.
+- **Do not read the full output** — Codex output can be 50K+ lines. Only read the tail (last 20-30 lines) to check final status.
+- **Check if the process is still alive** with `wc -l` on the output file, not by reading content.
+- **After completion**: check what files were created (`find native -type f | sort`), then build and test. Don't review Codex's intermediate reasoning.
+- **If Codex times out** (exit 144): check created files — it usually finishes writing before the review pass that times out.
+- **Token discipline**: Codex does the implementation, Claude does orchestration + verification. Don't duplicate work by reading files Codex already analyzed.
 
 ## Task Management
 
