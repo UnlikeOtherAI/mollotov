@@ -20,10 +20,12 @@ export function parseBranchName(branch: string): {
   type: 'release' | 'cve'
   version: string
 } | null {
-  for (const [type, pattern] of Object.entries(BRANCH_PATTERNS)) {
-    const m = branch.match(pattern)
-    if (m) return { engine: m[1] as any, type: type as any, version: m[2] }
-  }
+  let m = branch.match(BRANCH_PATTERNS.release)
+  if (m) return { engine: m[1] as 'chromium' | 'gecko', type: 'release', version: m[2] }
+
+  m = branch.match(BRANCH_PATTERNS.cve)
+  if (m) return { engine: m[1] as 'chromium' | 'gecko', type: 'cve', version: m[2] }
+
   return null
 }
 
