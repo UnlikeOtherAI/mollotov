@@ -75,11 +75,14 @@ struct URLBarView: View {
 
     @ViewBuilder
     private var selectorsRow: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
+            deviceDropdown
+
+            orientationToggle
+                .disabled(viewportState.mode == .full)
+
             rendererSwitch
                 .disabled(rendererState.isSwitching)
-
-            presetSwitch
         }
     }
 
@@ -142,16 +145,6 @@ struct URLBarView: View {
     }
 
     @ViewBuilder
-    private var presetSwitch: some View {
-        HStack(spacing: 6) {
-            orientationToggle
-                .disabled(viewportState.mode == .full)
-
-            deviceDropdown
-        }
-    }
-
-    @ViewBuilder
     private var orientationToggle: some View {
         AppKitSegmentedStrip(
             items: [
@@ -206,20 +199,20 @@ struct URLBarView: View {
                     .font(.system(size: 10, weight: .semibold))
             }
             .foregroundStyle(.primary)
-            .padding(.horizontal, 12)
-            .frame(height: 34)
-            .background(
-                RoundedRectangle(cornerRadius: 15, style: .continuous)
-                    .fill(Color(nsColor: .controlBackgroundColor))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 15, style: .continuous)
-                    .stroke(Color(nsColor: .separatorColor), lineWidth: 0.5)
-            )
         }
         .menuStyle(.borderlessButton)
-        .fixedSize()
+        .menuIndicator(.hidden)
+        .padding(.horizontal, 12)
         .frame(height: 34)
+        .background(
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .stroke(Color(nsColor: .separatorColor), lineWidth: 0.5)
+        )
+        .fixedSize(horizontal: true, vertical: false)
         .accessibilityIdentifier("browser.preset.switch")
     }
 
