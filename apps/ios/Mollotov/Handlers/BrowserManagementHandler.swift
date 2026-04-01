@@ -25,6 +25,7 @@ struct BrowserManagementHandler {
         router.register("get-keyboard-state") { _ in await getKeyboardState() }
         router.register("resize-viewport") { body in await resizeViewport(body) }
         router.register("reset-viewport") { _ in await resetViewport() }
+        router.register("set-viewport-preset") { body in await setViewportPreset(body) }
         router.register("is-element-obscured") { body in await isElementObscured(body) }
 
         // Unsupported
@@ -188,12 +189,60 @@ struct BrowserManagementHandler {
     private func resizeViewport(_ body: [String: Any]) async -> [String: Any] {
         let width = body["width"] as? Int ?? 390
         let height = body["height"] as? Int ?? 844
-        return successResponse(["viewport": ["width": width, "height": height], "originalViewport": ["width": 390, "height": 844]])
+        UserDefaults.standard.set("", forKey: ipadMobileStagePresetDefaultsKey)
+        return successResponse([
+            "viewport": ["width": width, "height": height],
+            "originalViewport": ["width": 390, "height": 844],
+            "activePresetId": NSNull(),
+        ])
     }
 
     @MainActor
     private func resetViewport() async -> [String: Any] {
-        return successResponse(["viewport": ["width": 390, "height": 844]])
+        UserDefaults.standard.set("", forKey: ipadMobileStagePresetDefaultsKey)
+        return successResponse([
+            "viewport": ["width": 390, "height": 844],
+            "activePresetId": NSNull(),
+        ])
+    }
+
+    @MainActor
+    private func setViewportPreset(_ body: [String: Any]) async -> [String: Any] {
+        guard let presetID = body["presetId"] as? String, !presetID.isEmpty else {
+            return errorResponse(code: "MISSING_PARAM", message: "presetId is required")
+        }
+        guard let preset = tabletViewportPreset(id: presetID) else {
+            return errorResponse(code: "INVALID_PARAM", message: "Unknown viewport preset id: \(presetID)")
+        }
+
+        let availablePresetIDs = currentTabletViewportAvailablePresetIDs()
+        guard availablePresetIDs.contains(preset.id) else {
+            return [
+                "success": false,
+                "error": [
+                    "code": "INVALID_PARAM",
+                    "message": "Viewport preset \(presetID) is not available for the current device geometry",
+                    "reason": "unavailable",
+                ],
+            ]
+        }
+
+        UserDefaults.standard.set(preset.id, forKey: ipadMobileStagePresetDefaultsKey)
+        let viewportSize = tabletViewportSize(for: preset, availableSize: currentTabletViewportAvailableSize())
+
+        return successResponse([
+            "activePresetId": preset.id,
+            "preset": [
+                "id": preset.id,
+                "name": preset.name,
+                "inches": preset.displaySizeLabel,
+                "pixels": preset.pixelResolutionLabel,
+            ],
+            "viewport": [
+                "width": Int(viewportSize.width),
+                "height": Int(viewportSize.height),
+            ],
+        ])
     }
 
     @MainActor

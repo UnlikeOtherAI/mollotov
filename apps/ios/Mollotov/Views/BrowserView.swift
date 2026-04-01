@@ -17,6 +17,7 @@ struct TabletViewportPreset: Identifiable, Equatable {
     let id: String
     let name: String
     let label: String
+    let menuLabel: String
     let displaySizeLabel: String
     let pixelResolutionLabel: String
     let portraitSize: CGSize
@@ -27,22 +28,35 @@ private func _cstr(_ ptr: UnsafePointer<CChar>?) -> String {
     return String(cString: ptr)
 }
 
+private func viewportPresetSortValue(_ label: String) -> Double {
+    let pattern = #"[0-9]+(?:\.[0-9]+)?"#
+    guard let range = label.range(of: pattern, options: .regularExpression) else {
+        return .greatestFiniteMagnitude
+    }
+    return Double(label[range]) ?? .greatestFiniteMagnitude
+}
+
 let tabletViewportPresets: [TabletViewportPreset] = {
     var result: [TabletViewportPreset] = []
     let count = Int(mollotov_viewport_preset_count())
     for i in 0 ..< count {
-        guard let p = mollotov_viewport_preset_get(Int32(i))?.pointee,
-              p.kind == MOLLOTOV_DEVICE_KIND_PHONE else { continue }
+        guard let p = mollotov_viewport_preset_get(Int32(i))?.pointee else { continue }
         result.append(TabletViewportPreset(
             id:                   _cstr(p.id),
             name:                 _cstr(p.name),
             label:                _cstr(p.label),
+            menuLabel:            _cstr(p.menu_label),
             displaySizeLabel:     _cstr(p.display_size_label),
             pixelResolutionLabel: _cstr(p.pixel_resolution_label),
             portraitSize:         CGSize(width: CGFloat(p.portrait_width), height: CGFloat(p.portrait_height))
         ))
     }
-    return result
+    return result.sorted {
+        let lhs = viewportPresetSortValue($0.displaySizeLabel)
+        let rhs = viewportPresetSortValue($1.displaySizeLabel)
+        if lhs != rhs { return lhs < rhs }
+        return $0.name.localizedStandardCompare($1.name) == .orderedAscending
+    }
 }()
 
 let defaultTabletViewportPresetID = "compact-base"
@@ -244,6 +258,12 @@ struct BrowserView: View {
         .onReceive(NotificationCenter.default.publisher(for: .showWelcomeCard)) { _ in
             welcomePresentationSource = .helpMenu
             showWelcome = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .selectViewportPreset)) { notification in
+            guard isPad else { return }
+            let presetID = notification.userInfo?["presetId"] as? String ?? ""
+            guard presetID.isEmpty || availableIPadViewportPresetIDs.contains(presetID) else { return }
+            setTabletViewportPreset(presetID)
         }
     }
 

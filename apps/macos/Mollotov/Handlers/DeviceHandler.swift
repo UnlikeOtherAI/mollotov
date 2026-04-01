@@ -5,9 +5,11 @@ struct DeviceHandler {
     let context: HandlerContext
     let deviceInfo: DeviceInfo
     let rendererState: RendererState
+    let viewportState: ViewportState
 
     func register(on router: Router) {
         router.register("get-viewport") { _ in await getViewport() }
+        router.register("get-viewport-presets") { _ in await getViewportPresets() }
         router.register("get-device-info") { _ in await getDeviceInfoResponse() }
         router.register("get-capabilities") { _ in await getCapabilities() }
         router.register("set-orientation") { _ in
@@ -22,14 +24,43 @@ struct DeviceHandler {
     private func getViewport() async -> [String: Any] {
         let screen = NSScreen.main ?? NSScreen.screens.first!
         let scale = screen.backingScaleFactor
+        let viewport = viewportState.currentViewportDimensions
+        let orientation = viewport.width >= viewport.height ? "landscape" : "portrait"
         return [
-            "width": Int(screen.frame.width),
-            "height": Int(screen.frame.height),
+            "width": viewport.width,
+            "height": viewport.height,
             "devicePixelRatio": scale,
             "platform": "macos",
             "deviceName": deviceInfo.name,
-            "orientation": "landscape",
+            "orientation": orientation,
         ]
+    }
+
+    @MainActor
+    private func getViewportPresets() async -> [String: Any] {
+        successResponse([
+            "supportsViewportPresets": true,
+            "presets": allMacViewportPresets.map { preset in
+                [
+                    "id": preset.id,
+                    "name": preset.name,
+                    "inches": preset.displaySizeLabel,
+                    "pixels": preset.pixelResolutionLabel,
+                    "viewport": [
+                        "portrait": [
+                            "width": Int(preset.portraitSize.width),
+                            "height": Int(preset.portraitSize.height),
+                        ],
+                        "landscape": [
+                            "width": Int(preset.portraitSize.height),
+                            "height": Int(preset.portraitSize.width),
+                        ],
+                    ],
+                ]
+            },
+            "availablePresetIds": viewportState.availablePresets.map(\.id),
+            "activePresetId": viewportState.activePresetId as Any,
+        ])
     }
 
     @MainActor
@@ -82,6 +113,7 @@ struct DeviceHandler {
             "iframes": true,
             "dialogs": true,
             "rendererSwitching": true,
+            "viewportPresets": true,
         ]
     }
 }

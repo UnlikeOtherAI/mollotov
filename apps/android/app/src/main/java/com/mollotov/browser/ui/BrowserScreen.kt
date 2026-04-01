@@ -1,14 +1,31 @@
 package com.mollotov.browser.ui
 
 import android.app.Activity
+import android.content.Context
 import android.webkit.WebView
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Text
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -17,8 +34,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.mollotov.browser.browser.BrowserState
 import com.mollotov.browser.browser.HistoryStore
 import com.mollotov.browser.browser.WebViewContainer
@@ -48,9 +72,14 @@ fun BrowserScreen(
     var showHistory by remember { mutableStateOf(false) }
     var showNetworkInspector by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val isTablet = remember(context) { context.isTabletDevice() }
     var showWelcome by remember { mutableStateOf(shouldShowWelcome(context)) }
+    var forceShowWelcome by remember { mutableStateOf(false) }
+    var pendingWelcomeFromHelp by remember { mutableStateOf(false) }
     var webView by remember { mutableStateOf<WebView?>(null) }
     var lastRecordedUrl by remember { mutableStateOf("") }
+    val tabletMobileStagePresetId by TabletViewportPresetStore.selectedPresetId.collectAsState()
+    var availableTabletViewportPresets by remember { mutableStateOf(TABLET_VIEWPORT_PRESETS) }
 
     // Record history when URL changes
     if (currentUrl != lastRecordedUrl && currentUrl.isNotEmpty()) {
@@ -80,21 +109,77 @@ fun BrowserScreen(
                 onForward = { webView?.goForward() },
             )
 
-            WebViewContainer(
-                browserState = browserState,
+            BoxWithConstraints(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
-                onWebViewCreated = { wv ->
-                    webView = wv
-                    router.webView = wv
-                    handlerContext.webView = wv
-                },
-            )
+            ) {
+                val fittingPresets = tabletViewportPresetsThatFit(maxWidth = maxWidth, maxHeight = maxHeight)
+                val selectedPreset = fittingPresets.firstOrNull { it.id == tabletMobileStagePresetId }
+                val mobileStageActive = selectedPreset != null
+                val stageSize = selectedPreset?.let {
+                    tabletMobileStageSize(
+                        preset = it,
+                        maxWidth = maxWidth,
+                        maxHeight = maxHeight,
+                    )
+                }
+
+                LaunchedEffect(maxWidth, maxHeight) {
+                    availableTabletViewportPresets = fittingPresets
+                    TabletViewportPresetStore.updateAvailableState(
+                        availablePresetIds = fittingPresets.map { it.id },
+                        stageWidthDp = maxWidth.value,
+                        stageHeightDp = maxHeight.value,
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            if (mobileStageActive) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.background,
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (mobileStageActive && stageSize != null) {
+                        TabletViewportStage(
+                            preset = selectedPreset,
+                            stageSize = stageSize,
+                            onClose = { TabletViewportPresetStore.setSelectedPresetId(null) },
+                        ) {
+                            WebViewContainer(
+                                browserState = browserState,
+                                modifier = Modifier.fillMaxSize(),
+                                onWebViewCreated = { wv ->
+                                    webView = wv
+                                    router.webView = wv
+                                    handlerContext.webView = wv
+                                },
+                            )
+                        }
+                    } else {
+                        WebViewContainer(
+                            browserState = browserState,
+                            modifier = Modifier.fillMaxSize(),
+                            onWebViewCreated = { wv ->
+                                webView = wv
+                                router.webView = wv
+                                handlerContext.webView = wv
+                            },
+                        )
+                    }
+                }
+            }
         }
 
-        if (showWelcome) {
-            WelcomeCard(onDismiss = { showWelcome = false })
+        if (showWelcome && (forceShowWelcome || shouldShowWelcome(context))) {
+            WelcomeCard(
+                onDismiss = {
+                    showWelcome = false
+                    forceShowWelcome = false
+                },
+            )
         }
 
         // Floating action menu overlay
@@ -109,6 +194,15 @@ fun BrowserScreen(
             onBookmarks = { showBookmarks = true },
             onHistory = { showHistory = true },
             onNetworkInspector = { showNetworkInspector = true },
+            showMobileViewportToggle = isTablet,
+            mobileViewportPresets = availableTabletViewportPresets,
+            selectedMobileViewportPresetId = availableTabletViewportPresets
+                .firstOrNull { it.id == tabletMobileStagePresetId }
+                ?.id,
+            onSelectMobileViewportPreset = { presetId ->
+                val nextPresetId = if (tabletMobileStagePresetId == presetId) null else presetId
+                TabletViewportPresetStore.setSelectedPresetId(nextPresetId)
+            },
         )
     }
 
@@ -121,7 +215,19 @@ fun BrowserScreen(
                 deviceInfo = deviceInfo,
                 isServerRunning = isServerRunning,
                 isMDNSAdvertising = isMDNSAdvertising,
+                onShowWelcome = {
+                    showSettings = false
+                    pendingWelcomeFromHelp = true
+                },
             )
+        }
+    }
+
+    LaunchedEffect(showSettings, pendingWelcomeFromHelp) {
+        if (!showSettings && pendingWelcomeFromHelp) {
+            pendingWelcomeFromHelp = false
+            forceShowWelcome = true
+            showWelcome = true
         }
     }
 
@@ -177,6 +283,81 @@ fun BrowserScreen(
             "bookmarks" -> showBookmarks = true
             "network-inspector" -> showNetworkInspector = true
             "settings" -> showSettings = true
+        }
+    }
+}
+
+private fun Context.isTabletDevice(): Boolean =
+    resources.configuration.smallestScreenWidthDp >= 600
+
+@Composable
+private fun TabletViewportStage(
+    preset: TabletViewportPreset,
+    stageSize: Pair<Dp, Dp>,
+    onClose: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .size(stageSize.first, stageSize.second + 48.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .size(height = 38.dp, width = stageSize.first),
+        ) {
+            Text(
+                text = "${preset.displaySizeLabel} • ${preset.pixelResolutionLabel}",
+                color = Color.White,
+                fontSize = 11.sp,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(Color.Black.copy(alpha = 0.9f))
+                    .border(1.dp, Color.White.copy(alpha = 0.9f), RoundedCornerShape(18.dp))
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(start = 0.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.9f))
+                        .border(1.dp, Color.White.copy(alpha = 0.9f), CircleShape)
+                        .clickable { onClose() },
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = "Close staged viewport",
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+                Spacer(modifier = Modifier.weight(1f))
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .padding(top = 10.dp)
+                .size(stageSize.first, stageSize.second)
+                .shadow(18.dp, RoundedCornerShape(26.dp)),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(26.dp))
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f), RoundedCornerShape(26.dp)),
+            ) {
+                content()
+            }
         }
     }
 }

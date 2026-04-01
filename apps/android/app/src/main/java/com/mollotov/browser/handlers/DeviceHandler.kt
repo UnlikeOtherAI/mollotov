@@ -6,6 +6,8 @@ import com.mollotov.browser.device.DeviceInfo
 import com.mollotov.browser.network.Router
 import com.mollotov.browser.network.errorResponse
 import com.mollotov.browser.network.successResponse
+import com.mollotov.browser.ui.TABLET_VIEWPORT_PRESETS
+import com.mollotov.browser.ui.TabletViewportPresetStore
 
 class DeviceHandler(
     private val ctx: HandlerContext,
@@ -14,6 +16,7 @@ class DeviceHandler(
 ) {
     fun register(router: Router) {
         router.register("get-viewport") { getViewport() }
+        router.register("get-viewport-presets") { getViewportPresets() }
         router.register("get-device-info") { getDeviceInfo() }
         router.register("get-capabilities") { getCapabilities() }
         router.register("set-orientation") { body -> setOrientation(body) }
@@ -40,6 +43,30 @@ class DeviceHandler(
         "app" to mapOf("version" to deviceInfo.version, "build" to "1"),
         "system" to mapOf("os" to "Android", "osVersion" to android.os.Build.VERSION.RELEASE),
     )
+
+    private fun getViewportPresets(): Map<String, Any?> {
+        val availablePresetIds = TabletViewportPresetStore.availablePresetIds.value
+        val activePresetId = TabletViewportPresetStore.selectedPresetId.value
+            ?.takeIf { it in availablePresetIds }
+
+        return successResponse(mapOf(
+            "supportsViewportPresets" to true,
+            "presets" to TABLET_VIEWPORT_PRESETS.map { preset ->
+                mapOf(
+                    "id" to preset.id,
+                    "name" to preset.name,
+                    "inches" to preset.displaySizeLabel,
+                    "pixels" to preset.pixelResolutionLabel,
+                    "viewport" to mapOf(
+                        "portrait" to mapOf("width" to preset.portraitWidth.value.toInt(), "height" to preset.portraitHeight.value.toInt()),
+                        "landscape" to mapOf("width" to preset.portraitHeight.value.toInt(), "height" to preset.portraitWidth.value.toInt()),
+                    ),
+                )
+            },
+            "availablePresetIds" to availablePresetIds,
+            "activePresetId" to activePresetId,
+        ))
+    }
 
     private fun getOrientation(): Map<String, Any?> {
         val wv = ctx.webView
@@ -91,5 +118,6 @@ class DeviceHandler(
         "tabs" to true,
         "iframes" to true,
         "dialogs" to true,
+        "viewportPresets" to true,
     )
 }

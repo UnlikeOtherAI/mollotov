@@ -6,6 +6,10 @@ import android.content.Context
 import com.mollotov.browser.network.Router
 import com.mollotov.browser.network.errorResponse
 import com.mollotov.browser.network.successResponse
+import com.mollotov.browser.ui.TabletViewportPresetStore
+import com.mollotov.browser.ui.tabletMobileStageSize
+import com.mollotov.browser.ui.tabletViewportPreset
+import androidx.compose.ui.unit.dp
 
 class BrowserManagementHandler(private val ctx: HandlerContext, private val appContext: Context) {
     fun register(router: Router) {
@@ -27,6 +31,7 @@ class BrowserManagementHandler(private val ctx: HandlerContext, private val appC
         // Viewport
         router.register("resize-viewport") { resizeViewport(it) }
         router.register("reset-viewport") { resetViewport() }
+        router.register("set-viewport-preset") { setViewportPreset(it) }
         router.register("is-element-obscured") { isElementObscured(it) }
         // Iframes
         router.register("get-iframes") { getIframes() }
@@ -146,10 +151,65 @@ class BrowserManagementHandler(private val ctx: HandlerContext, private val appC
     private fun resizeViewport(body: Map<String, Any?>): Map<String, Any?> {
         val w = (body["width"] as? Int) ?: 360
         val h = (body["height"] as? Int) ?: 800
-        return successResponse(mapOf("viewport" to mapOf("width" to w, "height" to h)))
+        TabletViewportPresetStore.setSelectedPresetId(null)
+        return successResponse(mapOf(
+            "viewport" to mapOf("width" to w, "height" to h),
+            "activePresetId" to null,
+        ))
     }
 
-    private fun resetViewport(): Map<String, Any?> = successResponse(mapOf("viewport" to mapOf("width" to 360, "height" to 800)))
+    private fun resetViewport(): Map<String, Any?> {
+        TabletViewportPresetStore.setSelectedPresetId(null)
+        return successResponse(mapOf(
+            "viewport" to mapOf("width" to 360, "height" to 800),
+            "activePresetId" to null,
+        ))
+    }
+
+    private fun setViewportPreset(body: Map<String, Any?>): Map<String, Any?> {
+        val presetId = body["presetId"] as? String
+            ?: return errorResponse("MISSING_PARAM", "presetId is required")
+        val preset = tabletViewportPreset(presetId)
+            ?: return errorResponse("INVALID_PARAM", "Unknown viewport preset id: $presetId")
+        val availablePresetIds = TabletViewportPresetStore.availablePresetIds.value
+        if (preset.id !in availablePresetIds) {
+            return mapOf(
+                "success" to false,
+                "error" to mapOf(
+                    "code" to "INVALID_PARAM",
+                    "message" to "Viewport preset $presetId is not available for the current device geometry",
+                    "reason" to "unavailable",
+                ),
+            )
+        }
+
+        val stageMetrics = TabletViewportPresetStore.stageMetrics.value
+        if (stageMetrics.widthDp <= 0f || stageMetrics.heightDp <= 0f) {
+            return errorResponse("INVALID_PARAM", "Viewport preset geometry is not ready yet")
+        }
+
+        TabletViewportPresetStore.setSelectedPresetId(preset.id)
+        val viewportSize = tabletMobileStageSize(
+            preset = preset,
+            maxWidth = stageMetrics.widthDp.dp,
+            maxHeight = stageMetrics.heightDp.dp,
+        )
+        val density = appContext.resources.displayMetrics.density
+
+        return successResponse(mapOf(
+            "activePresetId" to preset.id,
+            "preset" to mapOf(
+                "id" to preset.id,
+                "name" to preset.name,
+                "inches" to preset.displaySizeLabel,
+                "pixels" to preset.pixelResolutionLabel,
+            ),
+            "viewport" to mapOf(
+                "width" to (viewportSize.first.value * density).toInt(),
+                "height" to (viewportSize.second.value * density).toInt(),
+            ),
+        ))
+    }
 
     private suspend fun isElementObscured(body: Map<String, Any?>): Map<String, Any?> {
         val selector = body["selector"] as? String ?: return errorResponse("MISSING_PARAM", "selector is required")

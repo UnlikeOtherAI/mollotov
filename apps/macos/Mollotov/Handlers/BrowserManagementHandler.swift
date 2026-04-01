@@ -241,7 +241,7 @@ struct BrowserManagementHandler {
         guard let presetID = body["presetId"] as? String, !presetID.isEmpty else {
             return errorResponse(code: "MISSING_PARAM", message: "presetId is required")
         }
-        guard let preset = macViewportPresets.first(where: { $0.id == presetID }) else {
+        guard let preset = allMacViewportPresets.first(where: { $0.id == presetID }) else {
             return errorResponse(code: "INVALID_PARAM", message: "Unknown viewport preset id: \(presetID)")
         }
         guard viewportState.availablePresets.contains(where: { $0.id == presetID }) else {

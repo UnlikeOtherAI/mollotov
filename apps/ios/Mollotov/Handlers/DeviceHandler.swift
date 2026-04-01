@@ -8,11 +8,16 @@ struct DeviceHandler {
 
     func register(on router: Router) {
         router.register("get-viewport") { _ in await getViewport() }
+        router.register("get-viewport-presets") { _ in await getViewportPresets() }
         router.register("get-device-info") { _ in await getDeviceInfoResponse() }
         router.register("get-capabilities") { _ in getCapabilities() }
         router.register("set-orientation") { body in await setOrientation(body) }
         router.register("get-orientation") { _ in await getOrientation() }
         router.register("debug-screens") { _ in await debugScreens() }
+        router.register("debug-attach-local-tv") { _ in await debugAttachLocalTV() }
+        router.register("debug-detach-tv") { _ in await debugDetachTV() }
+        router.register("set-tv-sync") { body in await setTVSync(body) }
+        router.register("get-tv-sync") { _ in await getTVSync() }
         router.register("set-debug-overlay") { body in setDebugOverlay(body) }
         router.register("get-debug-overlay") { _ in getDebugOverlay() }
     }
@@ -31,6 +36,20 @@ struct DeviceHandler {
             "deviceName": deviceInfo.name,
             "orientation": orientation,
         ]
+    }
+
+    @MainActor
+    private func getViewportPresets() async -> [String: Any] {
+        let availablePresetIDs = currentTabletViewportAvailablePresetIDs()
+        let storedPresetID = UserDefaults.standard.string(forKey: ipadMobileStagePresetDefaultsKey) ?? ""
+        let activePresetID: Any = availablePresetIDs.contains(storedPresetID) ? storedPresetID : NSNull()
+
+        return successResponse([
+            "supportsViewportPresets": true,
+            "presets": tabletViewportPresets.map(viewportPresetPayload),
+            "availablePresetIds": availablePresetIDs,
+            "activePresetId": activePresetID,
+        ])
     }
 
     private func getDeviceInfoResponse() async -> [String: Any] {
@@ -208,11 +227,47 @@ struct DeviceHandler {
                 "connected": mgr.isConnected,
                 "attachPath": mgr.attachPath ?? "none",
                 "port": mgr.externalPort,
+                "syncEnabled": mgr.isSyncEnabled,
             ],
             "window": windowInfo,
             "vcView": vcViewInfo,
             "webView": webViewInfo,
             "html": htmlInfo,
+        ])
+    }
+
+    @MainActor
+    private func debugAttachLocalTV() async -> [String: Any] {
+        ExternalDisplayManager.shared.attachDebugLocalTV()
+        return successResponse([
+            "connected": ExternalDisplayManager.shared.isConnected,
+            "attachPath": ExternalDisplayManager.shared.attachPath ?? "none",
+            "port": ExternalDisplayManager.shared.externalPort,
+        ])
+    }
+
+    @MainActor
+    private func debugDetachTV() async -> [String: Any] {
+        ExternalDisplayManager.shared.detach()
+        return successResponse(["connected": false])
+    }
+
+    @MainActor
+    private func setTVSync(_ body: [String: Any]) -> [String: Any] {
+        let enabled = body["enabled"] as? Bool ?? true
+        ExternalDisplayManager.shared.setSyncEnabled(enabled)
+        return successResponse([
+            "enabled": enabled,
+            "connected": ExternalDisplayManager.shared.isConnected,
+        ])
+    }
+
+    @MainActor
+    private func getTVSync() -> [String: Any] {
+        successResponse([
+            "enabled": ExternalDisplayManager.shared.isSyncEnabled,
+            "connected": ExternalDisplayManager.shared.isConnected,
+            "attachPath": ExternalDisplayManager.shared.attachPath as Any,
         ])
     }
 
@@ -246,6 +301,26 @@ struct DeviceHandler {
             "tabs": true,
             "iframes": true,
             "dialogs": true,
+            "viewportPresets": true,
+        ]
+    }
+
+    private func viewportPresetPayload(_ preset: TabletViewportPreset) -> [String: Any] {
+        [
+            "id": preset.id,
+            "name": preset.name,
+            "inches": preset.displaySizeLabel,
+            "pixels": preset.pixelResolutionLabel,
+            "viewport": [
+                "portrait": [
+                    "width": Int(preset.portraitSize.width),
+                    "height": Int(preset.portraitSize.height),
+                ],
+                "landscape": [
+                    "width": Int(preset.portraitSize.height),
+                    "height": Int(preset.portraitSize.width),
+                ],
+            ],
         ]
     }
 }
