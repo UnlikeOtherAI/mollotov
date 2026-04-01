@@ -13,7 +13,7 @@ export function registerPing(program: Command): void {
       const timeout = globals.timeout;
 
       if (globals.device) {
-        const device = getDevice(globals.device);
+        const device = await getDevice(globals.device);
         if (!device) {
           print(
             { success: false, error: { code: "DEVICE_NOT_FOUND", message: `No device matching "${globals.device}"` } },

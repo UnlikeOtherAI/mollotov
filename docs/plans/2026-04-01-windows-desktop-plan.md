@@ -157,8 +157,9 @@ Mitigation:
 
 ## Cross-Provider Review
 
-Pending before implementation. Review should challenge:
+Fallback review completed against the current repo state. Accepted findings:
 
-- whether Windows should remain GUI-only initially
-- whether the shell scope is sufficiently thin
-- whether any Windows-specific runtime concerns have been pushed too far down into the shared core
+- Keep Windows GUI-first for the first cut because the shared desktop headless/runtime module does not exist yet.
+- Keep the Windows app shell-thin but explicit: Win32 windowing, settings, panels, device info, HTTP bootstrap, and mDNS glue stay in `apps/windows/` until the shared desktop core lands.
+- Keep unsupported shared browser methods deterministic with `PLATFORM_NOT_SUPPORTED` instead of inventing partial Windows-only behavior.
+- Keep CEF optional at build time so the repo can compile the shell structure before a real Windows CEF SDK path is wired in.

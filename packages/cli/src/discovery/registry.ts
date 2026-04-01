@@ -1,4 +1,5 @@
 import type { DiscoveredDevice } from "../types.js";
+import { loadBrowserStore } from "../browser/store.js";
 
 const devices = new Map<string, DiscoveredDevice>();
 
@@ -18,10 +19,13 @@ export function getAllDevices(): DiscoveredDevice[] {
   return Array.from(devices.values());
 }
 
-export function getDevice(query: string): DiscoveredDevice | undefined {
+export async function getDevice(query: string): Promise<DiscoveredDevice | undefined> {
   // Priority: ID exact > name exact > name fuzzy > IP exact
   const byId = devices.get(query);
   if (byId) return byId;
+
+  const browserAlias = await getBrowserAliasDevice(query);
+  if (browserAlias) return browserAlias;
 
   const all = getAllDevices();
   const lowerQuery = query.toLowerCase();
@@ -38,6 +42,27 @@ export function getDevice(query: string): DiscoveredDevice | undefined {
   if (byIp) return byIp;
 
   return undefined;
+}
+
+async function getBrowserAliasDevice(query: string): Promise<DiscoveredDevice | undefined> {
+  const store = await loadBrowserStore();
+  const running = store.running[query];
+  if (!running) {
+    return undefined;
+  }
+
+  return {
+    id: `browser:${query}`,
+    name: query,
+    ip: "127.0.0.1",
+    port: running.port,
+    platform: "macos",
+    model: "Mollotov macOS",
+    width: 0,
+    height: 0,
+    version: "0.0.0",
+    lastSeen: Date.now(),
+  };
 }
 
 export function clearDevices(): void {

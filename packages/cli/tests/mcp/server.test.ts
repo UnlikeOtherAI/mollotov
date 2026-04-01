@@ -27,10 +27,10 @@ describe("createMcpServer", () => {
     expect(server).toBeDefined();
   });
 
-  it("registers 103 tools total (83 browser + 20 CLI)", () => {
-    expect(browserTools).toHaveLength(83);
+  it("registers 110 tools total (90 browser + 20 CLI)", () => {
+    expect(browserTools).toHaveLength(90);
     expect(cliTools).toHaveLength(20);
-    expect(browserTools.length + cliTools.length).toBe(103);
+    expect(browserTools.length + cliTools.length).toBe(110);
   });
 });
 
@@ -39,20 +39,20 @@ describe("MCP tool routing logic", () => {
     clearDevices();
   });
 
-  it("getDevice returns undefined for unknown device", () => {
-    expect(getDevice("nonexistent")).toBeUndefined();
+  it("getDevice returns undefined for unknown device", async () => {
+    expect(await getDevice("nonexistent")).toBeUndefined();
   });
 
-  it("getDevice resolves by name", () => {
+  it("getDevice resolves by name", async () => {
     addDevice(makeDevice());
-    const d = getDevice("TestPhone");
+    const d = await getDevice("TestPhone");
     expect(d).toBeDefined();
     expect(d!.id).toBe("test-device");
   });
 
-  it("getDevice resolves by ID", () => {
+  it("getDevice resolves by ID", async () => {
     addDevice(makeDevice());
-    const d = getDevice("test-device");
+    const d = await getDevice("test-device");
     expect(d).toBeDefined();
   });
 
@@ -66,9 +66,11 @@ describe("MCP tool routing logic", () => {
     const devices = [
       makeDevice({ id: "d1", platform: "ios" }),
       makeDevice({ id: "d2", platform: "android" }),
+      makeDevice({ id: "d3", platform: "linux" }),
+      makeDevice({ id: "d4", platform: "windows" }),
     ];
-    const ios = filterDevices(devices, { platform: "ios" });
-    expect(ios).toHaveLength(1);
-    expect(ios[0].platform).toBe("ios");
+    const linux = filterDevices(devices, { platform: "linux" });
+    expect(linux).toHaveLength(1);
+    expect(linux[0].platform).toBe("linux");
   });
 });

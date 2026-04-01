@@ -7,6 +7,7 @@ import { executeGroup, executeSmartQuery } from "../group/orchestrator.js";
 import { browserTools, cliTools } from "./tools.js";
 import type { BrowserToolDef, CliToolDef } from "./tools.js";
 import type { DiscoveredDevice } from "../types.js";
+import type { Platform } from "@unlikeotherai/mollotov-shared";
 
 export function createMcpServer(): McpServer {
   const server = new McpServer(
@@ -27,7 +28,7 @@ export function createMcpServer(): McpServer {
 function registerBrowserTool(server: McpServer, tool: BrowserToolDef): void {
   server.registerTool(tool.name, { description: tool.description, inputSchema: tool.schema }, async (args) => {
     const deviceId = args.device as string;
-    const device = getDevice(deviceId);
+    const device = await getDevice(deviceId);
     if (!device) {
       return { content: [{ type: "text", text: JSON.stringify({ success: false, error: { code: "DEVICE_NOT_FOUND", message: `No device matching "${deviceId}"` } }) }] };
     }
@@ -78,7 +79,7 @@ async function handleDiscovery(method: string, params: Record<string, unknown>):
 
 function getFilteredDevices(params: Record<string, unknown>): DiscoveredDevice[] {
   return filterDevices(getAllDevices(), {
-    platform: params.platform as "ios" | "android" | undefined,
+    platform: params.platform as Platform | undefined,
     include: params.include as string | undefined,
     exclude: params.exclude as string | undefined,
   });

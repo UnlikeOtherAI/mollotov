@@ -7,6 +7,7 @@ import {
   ErrorCode,
   ErrorHttpStatus,
   BrowserMcpTools,
+  BrowserToolUnsupportedPlatforms,
   CliMcpTools,
   httpToMcp,
 } from "../src/index.js";
@@ -70,7 +71,7 @@ describe("MCP tools", () => {
   });
 
   it("has correct count of browser tools", () => {
-    expect(BrowserMcpTools.length).toBe(79);
+    expect(BrowserMcpTools.length).toBe(90);
   });
 
   it("has correct count of CLI tools", () => {
@@ -83,5 +84,12 @@ describe("MCP tools", () => {
     for (const tool of BrowserMcpTools) {
       expect(mappedTools).toContain(tool);
     }
+  });
+
+  it("tracks linux and windows unsupported browser tools", () => {
+    expect(BrowserToolUnsupportedPlatforms.mollotov_show_keyboard).toEqual(["linux", "windows"]);
+    expect(BrowserToolUnsupportedPlatforms.mollotov_hide_keyboard).toEqual(["linux", "windows"]);
+    expect(BrowserToolUnsupportedPlatforms.mollotov_set_orientation).toEqual(["linux", "windows"]);
+    expect(BrowserToolUnsupportedPlatforms.mollotov_safari_auth).toEqual(["linux", "windows"]);
   });
 });

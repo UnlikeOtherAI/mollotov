@@ -2,6 +2,13 @@ import chalk from "chalk";
 import Table from "cli-table3";
 import type { OutputFormat, DiscoveredDevice } from "../types.js";
 
+function formatPlatform(device: DiscoveredDevice): string {
+  if (device.platform === "linux" && device.runtimeMode) {
+    return `${device.platform} (${device.runtimeMode})`;
+  }
+  return device.platform;
+}
+
 export function formatOutput(data: unknown, format: OutputFormat): string {
   switch (format) {
     case "json":
@@ -33,6 +40,11 @@ function formatTable(data: unknown): string {
     return formatDeviceTable(list);
   }
 
+  if ("browsers" in (data as Record<string, unknown>)) {
+    const list = (data as { browsers: Array<Record<string, unknown>> }).browsers;
+    return formatBrowserTable(list);
+  }
+
   // Generic object
   const table = new Table();
   for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
@@ -52,12 +64,34 @@ export function formatDeviceTable(devices: DiscoveredDevice[]): string {
   for (const d of devices) {
     table.push([
       d.name,
-      d.platform,
+      formatPlatform(d),
       d.model,
       d.ip,
       d.port,
       `${d.width}x${d.height}`,
       d.id.slice(0, 8) + "...",
+    ]);
+  }
+
+  return table.toString();
+}
+
+function formatBrowserTable(browsers: Array<Record<string, unknown>>): string {
+  if (browsers.length === 0) return chalk.yellow("No browsers found");
+
+  const table = new Table({
+    head: ["Name", "Platform", "Port", "Reachable", "App Path", "Last Launched"],
+    style: { head: ["cyan"] },
+  });
+
+  for (const browser of browsers) {
+    table.push([
+      String(browser.name ?? ""),
+      String(browser.platform ?? ""),
+      String(browser.port ?? ""),
+      String(browser.reachable ?? false),
+      String(browser.appPath ?? ""),
+      String(browser.lastLaunchedAt ?? ""),
     ]);
   }
 

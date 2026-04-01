@@ -7,6 +7,7 @@
 | **iOS App** | SwiftUI + WKWebView | Swift | Native WebKit browser, Bonjour for mDNS |
 | **Android App** | Jetpack Compose + WebView | Kotlin | Chrome DevTools Protocol for DOM access |
 | **macOS App** | SwiftUI + WKWebView + CEF | Swift | Dual Safari/WebKit and Chrome/Chromium renderers, macOS 14+ |
+| **Linux App** | C++17 + GTK3 + CEF + Avahi | C++ | Chromium-only desktop shell with optional headless mode |
 | **CLI** | Node.js | TypeScript | Published as `@unlikeotherai/mollotov` |
 | **MCP Servers** | MCP SDK | Per-platform | Browser-embedded + CLI standalone |
 
@@ -154,6 +155,7 @@ packages/
 | **mDNS TXT Records** | `id`, `name`, `model`, `platform`, `width`, `height`, `port`, `version` | Device metadata for discovery |
 | **API Versioning** | URL prefix `/v1/` | Forward-compatible |
 | **Image Format** | PNG (screenshots) | Lossless, LLM-friendly |
+| **Shared Native Core** | C++17 static libraries under `native/` | Shared protocol, state, automation, MCP, and desktop Chromium engine foundations |
 | **Monorepo** | pnpm workspaces | CLI, shared types, and native app projects all in one repo |
 
 ---
@@ -162,6 +164,12 @@ packages/
 
 ```
 mollotov/
+  native/
+    core-protocol/        # Shared native protocol constants and enums
+    core-state/           # Shared native bookmark/history/console/network stores
+    core-automation/      # Shared handler context and renderer abstraction
+    core-mcp/             # Shared browser-side MCP registry
+    engine-chromium-desktop/ # Shared CEF-based desktop engine for Linux/Windows shells
   packages/
     cli/                  # Node.js CLI — @unlikeotherai/mollotov
     shared/               # Shared TypeScript types and constants
@@ -169,6 +177,8 @@ mollotov/
     ios/                  # Xcode project — Mollotov Browser
     android/              # Android Studio project — Mollotov Browser
     macos/                # Xcode project — Mollotov Browser for macOS
+    linux/                # Linux app shell consuming the shared desktop engine
+    windows/              # Windows app shell consuming the shared desktop engine
   docs/                   # This documentation
 ```
 

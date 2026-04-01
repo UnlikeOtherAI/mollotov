@@ -6,7 +6,7 @@ describe("generateLlmHelp", () => {
     const output = generateLlmHelp();
     const parsed = JSON.parse(output);
     expect(Array.isArray(parsed)).toBe(true);
-    expect(parsed.length).toBe(103); // 80 browser + 20 CLI
+    expect(parsed.length).toBe(116);
   });
 
   it("each command entry has required fields", () => {
@@ -61,5 +61,12 @@ describe("generateLlmHelp", () => {
     }
     const selectorParam = parsed.params.find((p: { name: string }) => p.name === "selector");
     expect(selectorParam?.required).toBe(true);
+  });
+
+  it("returns help for browser launch", () => {
+    const output = generateLlmHelp("browser launch");
+    const parsed = JSON.parse(output);
+    expect(parsed.command).toBe("browser launch");
+    expect(parsed.params.some((p: { name: string }) => p.name === "port")).toBe(true);
   });
 });

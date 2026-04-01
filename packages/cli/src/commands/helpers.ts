@@ -8,14 +8,14 @@ export function getGlobals(program: Command): GlobalOptions {
   return program.opts<GlobalOptions>();
 }
 
-export function requireDevice(program: Command): DiscoveredDevice | null {
+export async function requireDevice(program: Command): Promise<DiscoveredDevice | null> {
   const globals = getGlobals(program);
   if (!globals.device) {
     print({ success: false, error: { code: "MISSING_DEVICE", message: "Use --device to specify a target device" } }, globals.format);
     process.exitCode = 1;
     return null;
   }
-  const device = getDevice(globals.device);
+  const device = await getDevice(globals.device);
   if (!device) {
     print({ success: false, error: { code: "DEVICE_NOT_FOUND", message: `No device matching "${globals.device}"` } }, globals.format);
     process.exitCode = 4;
@@ -30,7 +30,7 @@ export async function deviceCommand(
   body?: Record<string, unknown>,
 ): Promise<void> {
   const globals = getGlobals(program);
-  const device = requireDevice(program);
+  const device = await requireDevice(program);
   if (!device) return;
   const result = await sendCommand(device, method, body, globals.timeout);
   print(result.data, globals.format);

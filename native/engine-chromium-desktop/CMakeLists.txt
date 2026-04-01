@@ -1,0 +1,85 @@
+include(FetchContent)
+find_package(Threads REQUIRED)
+
+find_path(CPP_HTTPLIB_INCLUDE_DIR
+  NAMES httplib.h
+)
+
+if(CPP_HTTPLIB_INCLUDE_DIR)
+  add_library(httplib INTERFACE)
+  target_include_directories(httplib INTERFACE "${CPP_HTTPLIB_INCLUDE_DIR}")
+  add_library(httplib::httplib ALIAS httplib)
+else()
+  FetchContent_Declare(
+    cpp_httplib
+    URL https://github.com/yhirose/cpp-httplib/archive/refs/tags/v0.18.5.tar.gz
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+  )
+  FetchContent_MakeAvailable(cpp_httplib)
+endif()
+
+set(MOLOTOV_DESKTOP_ENGINE_SOURCES
+  src/desktop_app.cpp
+  src/desktop_bridge.cpp
+  src/desktop_http_server.cpp
+  src/desktop_mcp_server.cpp
+  src/desktop_router.cpp
+  src/cef_renderer.cpp
+  src/handlers/navigation_handler.cpp
+  src/handlers/interaction_handler.cpp
+  src/handlers/dom_handler.cpp
+  src/handlers/evaluate_handler.cpp
+  src/handlers/screenshot_handler.cpp
+  src/handlers/scroll_handler.cpp
+  src/handlers/console_handler.cpp
+  src/handlers/network_handler.cpp
+  src/handlers/device_handler.cpp
+  src/handlers/bookmark_handler.cpp
+  src/handlers/history_handler.cpp
+  src/handlers/browser_mgmt_handler.cpp
+  src/handlers/renderer_handler.cpp
+  src/handlers/viewport_handler.cpp
+  src/handlers/cookie_handler.cpp
+)
+
+option(MOLLOTOV_ENABLE_CHROMIUM_DESKTOP "Build the Chromium desktop engine with CEF" OFF)
+set(CEF_ROOT "" CACHE PATH "Path to an extracted CEF SDK root")
+
+if(MOLLOTOV_ENABLE_CHROMIUM_DESKTOP)
+  if(NOT CEF_ROOT)
+    message(FATAL_ERROR "MOLLOTOV_ENABLE_CHROMIUM_DESKTOP requires CEF_ROOT to point at a CEF SDK")
+  endif()
+  list(APPEND MOLOTOV_DESKTOP_ENGINE_SOURCES src/desktop_engine.cpp)
+else()
+  list(APPEND MOLOTOV_DESKTOP_ENGINE_SOURCES src/desktop_engine_stub.cpp)
+endif()
+
+add_library(mollotov_engine_chromium_desktop STATIC
+  ${MOLOTOV_DESKTOP_ENGINE_SOURCES}
+)
+
+target_include_directories(mollotov_engine_chromium_desktop
+  PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+  PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+if(MOLLOTOV_ENABLE_CHROMIUM_DESKTOP)
+  target_include_directories(mollotov_engine_chromium_desktop PRIVATE ${CEF_ROOT})
+endif()
+
+target_link_libraries(mollotov_engine_chromium_desktop
+  PUBLIC
+    mollotov_core_protocol
+    mollotov_core_state
+    mollotov_core_automation
+    mollotov_core_mcp
+    nlohmann_json::nlohmann_json
+    httplib::httplib
+    Threads::Threads
+)
+
+if(BUILD_TESTING)
+  add_subdirectory(tests)
+endif()

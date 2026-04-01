@@ -1,10 +1,12 @@
-export type Platform = "ios" | "android" | "macos";
+export type Platform = "ios" | "android" | "macos" | "linux" | "windows";
+export type RuntimeMode = "gui" | "headless";
 
 export interface MdnsTxtRecord {
   id: string;
   name: string;
   model: string;
   platform: Platform;
+  runtime_mode?: RuntimeMode;
   engine?: string;
   width: string;
   height: string;
@@ -43,6 +45,7 @@ export interface DeviceBrowser {
 export interface DeviceApp {
   version: string;
   build: string;
+  headless?: boolean;
   httpServerActive: boolean;
   mcpServerActive: boolean;
   mdnsActive: boolean;

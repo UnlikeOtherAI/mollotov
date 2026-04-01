@@ -26,5 +26,8 @@ struct ToolAvailability {
 
 const char* PlatformToString(Platform platform);
 std::optional<Platform> PlatformFromString(std::string_view value);
+bool IsAlternativeEngineRegion(std::string_view value);
+
+extern const StringSet kAlternativeEngineRegions;
 
 }  // namespace mollotov

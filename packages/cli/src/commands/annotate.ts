@@ -20,7 +20,7 @@ export function registerAnnotate(program: Command): void {
       interactableOnly?: boolean;
     }) => {
       const globals = getGlobals(program);
-      const device = requireDevice(program);
+      const device = await requireDevice(program);
       if (!device) return;
 
       const body: Record<string, unknown> = {

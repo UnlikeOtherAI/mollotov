@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+const platforms = ["ios", "android", "macos", "linux", "windows"] as const;
+
 // --- Shared schema fragments ---
 
 const device = z.string().describe("Device ID, name, or IP address");
@@ -9,7 +11,7 @@ const timeout = z.number().optional().describe("Timeout in milliseconds");
 const message = z.string().optional().describe("Optional message to show on device screen as a toast overlay while this action runs. Use this to narrate what you are doing, e.g. 'Clicking the login button' or 'Scrolling to pricing section'. The toast appears at the bottom of the viewport with a semi-transparent background.");
 
 const filterProps = {
-  platform: z.enum(["ios", "android", "macos"]).optional().describe("Filter by platform"),
+  platform: z.enum(platforms).optional().describe("Filter by platform"),
   include: z.string().optional().describe("Comma-separated device IDs or names to include"),
   exclude: z.string().optional().describe("Comma-separated device IDs or names to exclude"),
 };
@@ -177,7 +179,7 @@ export const browserTools: BrowserToolDef[] = [
   { name: "mollotov_clear_geolocation", description: "Clear geolocation override", method: "clearGeolocation", schema: { device }, bodyFromArgs: passthrough },
 
   // Request interception
-  { name: "mollotov_set_request_interception", description: "Set request interception rules", method: "setRequestInterception", schema: { device, rules: z.array(z.object({ pattern: z.string(), action: z.enum(["block", "mock", "allow"]), mockResponse: z.object({ status: z.number(), headers: z.record(z.string()), body: z.string() }).optional() })).describe("Interception rules") }, bodyFromArgs: passthrough },
+  { name: "mollotov_set_request_interception", description: "Set request interception rules", method: "setRequestInterception", schema: { device, rules: z.array(z.object({ pattern: z.string(), action: z.enum(["block", "mock", "allow"]), mockResponse: z.object({ status: z.number(), headers: z.record(z.string(), z.string()), body: z.string() }).optional() })).describe("Interception rules") }, bodyFromArgs: passthrough },
   { name: "mollotov_get_intercepted_requests", description: "Get intercepted requests", method: "getInterceptedRequests", schema: { device, since: z.string().optional(), limit: z.number().optional() }, bodyFromArgs: passthrough },
   { name: "mollotov_clear_request_interception", description: "Clear all interception rules", method: "clearRequestInterception", schema: { device }, bodyFromArgs: passthrough },
 

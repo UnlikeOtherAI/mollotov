@@ -1,3 +1,5 @@
+import type { Platform } from "./device-types.js";
+
 /** All browser-level MCP tool names */
 export const BrowserMcpTools = [
   "mollotov_navigate",
@@ -5,6 +7,11 @@ export const BrowserMcpTools = [
   "mollotov_forward",
   "mollotov_reload",
   "mollotov_get_current_url",
+  "mollotov_set_home",
+  "mollotov_get_home",
+  "mollotov_debug_screens",
+  "mollotov_set_debug_overlay",
+  "mollotov_get_debug_overlay",
   "mollotov_screenshot",
   "mollotov_get_dom",
   "mollotov_query_selector",
@@ -89,6 +96,13 @@ export const BrowserMcpTools = [
 
 export type BrowserMcpTool = (typeof BrowserMcpTools)[number];
 
+export const BrowserToolUnsupportedPlatforms = {
+  mollotov_show_keyboard: ["linux", "windows"],
+  mollotov_hide_keyboard: ["linux", "windows"],
+  mollotov_set_orientation: ["linux", "windows"],
+  mollotov_safari_auth: ["linux", "windows"],
+} satisfies Partial<Record<BrowserMcpTool, readonly Platform[]>>;
+
 /** CLI-level MCP tools (discovery + group commands) */
 export const CliMcpTools = [
   "mollotov_discover",
@@ -124,6 +138,11 @@ export const httpToMcp: Record<string, BrowserMcpTool> = {
   "forward": "mollotov_forward",
   "reload": "mollotov_reload",
   "get-current-url": "mollotov_get_current_url",
+  "set-home": "mollotov_set_home",
+  "get-home": "mollotov_get_home",
+  "debug-screens": "mollotov_debug_screens",
+  "set-debug-overlay": "mollotov_set_debug_overlay",
+  "get-debug-overlay": "mollotov_get_debug_overlay",
   "screenshot": "mollotov_screenshot",
   "get-dom": "mollotov_get_dom",
   "query-selector": "mollotov_query_selector",

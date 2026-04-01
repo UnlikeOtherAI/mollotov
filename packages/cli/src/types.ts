@@ -1,4 +1,4 @@
-import type { Platform } from "@unlikeotherai/mollotov-shared";
+import type { Platform, RuntimeMode } from "@unlikeotherai/mollotov-shared";
 
 export interface DiscoveredDevice {
   id: string;
@@ -6,6 +6,7 @@ export interface DiscoveredDevice {
   ip: string;
   port: number;
   platform: Platform;
+  runtimeMode?: RuntimeMode;
   model: string;
   width: number;
   height: number;

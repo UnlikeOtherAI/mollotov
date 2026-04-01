@@ -8,7 +8,7 @@ For information about browser engine availability by platform and Apple's regula
 
 ## How It Works
 
-Mollotov has two parts: **native browser apps** (iOS, Android, and macOS) and a **Node.js CLI**. The apps run real browsers with embedded HTTP and MCP servers. The CLI discovers them on the local network via mDNS and sends commands. An LLM can control everything through the CLI's MCP server — or talk to device MCP servers directly.
+Mollotov has two parts: **native browser apps** (iOS, Android, macOS, Linux, and an in-progress Windows shell) and a **Node.js CLI**. The apps run real browsers with embedded HTTP and MCP servers. The CLI discovers them on the local network via mDNS and sends commands. An LLM can control everything through the CLI's MCP server — or talk to device MCP servers directly.
 
 No emulators, no cloud, no persistent scripts. Real browsers on real devices, fully controllable by language models.
 
@@ -20,9 +20,13 @@ Works identically with real devices, iOS Simulators, and Android Emulators — a
 
 ## Browser Control
 
-Full navigation control: go to any URL, go back/forward, reload, get the current page URL and title. The browser uses Safari's user agent on iOS, Chrome's on Android, and on macOS can switch between Safari/WebKit and Chrome/Chromium behavior so sites behave normally — Google OAuth, banking sites, and similar services work without being blocked as a WebView.
+Full navigation control: go to any URL, go back/forward, reload, get the current page URL and title. The browser uses Safari's user agent on iOS, Chrome's on Android, Chromium on Linux, and on macOS can switch between Safari/WebKit and Chrome/Chromium behavior so sites behave normally — Google OAuth, banking sites, and similar services work without being blocked as a WebView.
 
 On macOS, the desktop URL bar stays synced with both API/MCP-triggered navigation and user-driven page navigation, and uses compact Safari-style rounded chrome with coloured browser-brand renderer switches.
+
+On Linux, the desktop shell runs in either GUI or headless mode. Both modes expose the same HTTP surface, advertise themselves over mDNS, persist profile-backed bookmarks/history/network/console state, and degrade cleanly when the CEF runtime is unavailable.
+
+On Windows, the first desktop shell now exists under `apps/windows/`: Win32 main window, URL bar, native settings dialog, bookmarks/history/network inspector windows, native toast overlay, device info provider, optional CEF child host, and embedded `/v1/` HTTP server. Until the shared `engine-chromium-desktop` runtime lands, navigation and shell-state endpoints work, but screenshot/eval/DOM-heavy Chromium automation endpoints still return `PLATFORM_NOT_SUPPORTED` instead of faking incomplete behavior.
 
 ### Safari / Chrome Authentication
 

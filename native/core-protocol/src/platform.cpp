@@ -1,11 +1,19 @@
 #include "mollotov/platform.h"
 
+#include <algorithm>
+#include <cctype>
 #include <string_view>
 
 #include "mollotov/constants.h"
 #include "mollotov/protocol.h"
 
 namespace mollotov {
+
+const StringSet kAlternativeEngineRegions = {
+    "AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "GB",
+    "GR", "HR", "HU", "IE", "IT", "JP", "LT", "LU", "LV", "MT", "NL", "PL",
+    "PT", "RO", "SE", "SI", "SK",
+};
 
 const char* PlatformToString(Platform platform) {
   switch (platform) {
@@ -40,6 +48,13 @@ std::optional<Platform> PlatformFromString(std::string_view value) {
     return Platform::kWindows;
   }
   return std::nullopt;
+}
+
+bool IsAlternativeEngineRegion(std::string_view value) {
+  std::string normalized(value);
+  std::transform(normalized.begin(), normalized.end(), normalized.begin(),
+                 [](unsigned char character) { return static_cast<char>(std::toupper(character)); });
+  return kAlternativeEngineRegions.find(normalized) != kAlternativeEngineRegions.end();
 }
 
 }  // namespace mollotov

@@ -21,9 +21,12 @@ registerAllCommands(program);
 const llmHelpIdx = process.argv.indexOf("--llm-help");
 if (llmHelpIdx !== -1) {
   const { generateLlmHelp } = await import("./help/llm-help.js");
-  // Check if there's a command before --llm-help
-  const commandArg = process.argv.slice(2).find((a) => !a.startsWith("-") && a !== "--llm-help");
-  console.log(generateLlmHelp(commandArg));
+  const commandArg = process.argv
+    .slice(2, llmHelpIdx)
+    .filter((arg) => !arg.startsWith("-"))
+    .join(" ")
+    .trim();
+  console.log(generateLlmHelp(commandArg || undefined));
   process.exit(0);
 }
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { browserTools, cliTools } from "../../src/mcp/tools.js";
-import { BrowserMcpTools, CliMcpTools } from "@unlikeotherai/mollotov-shared";
+import { BrowserMcpTools, CliMcpTools } from "../../../shared/src/index.js";
 
 describe("MCP tool definitions", () => {
   it("has correct number of browser tools", () => {
@@ -46,6 +46,13 @@ describe("MCP tool definitions", () => {
       expect(tool.schema).toHaveProperty("include");
       expect(tool.schema).toHaveProperty("exclude");
     }
+  });
+
+  it("group tool platform filters accept linux and windows", () => {
+    const groupNav = cliTools.find((t) => t.name === "mollotov_group_navigate")!;
+    expect(groupNav.schema.platform.safeParse("linux").success).toBe(true);
+    expect(groupNav.schema.platform.safeParse("windows").success).toBe(true);
+    expect(groupNav.schema.platform.safeParse("unknown").success).toBe(false);
   });
 
   it("group tools do NOT have device property", () => {

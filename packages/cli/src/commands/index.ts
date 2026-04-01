@@ -33,12 +33,14 @@ import { registerGroup } from "./group.js";
 import { registerMcp } from "./mcp.js";
 import { registerExplain } from "./explain.js";
 import { registerHome } from "./home.js";
+import { registerBrowser } from "./browser.js";
 
 export function registerAllCommands(program: Command): void {
   // Discovery
   registerDiscover(program);
   registerDevices(program);
   registerPing(program);
+  registerBrowser(program);
 
   // Core: Navigation
   registerNavigate(program);

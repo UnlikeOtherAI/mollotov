@@ -18,6 +18,59 @@ interface CommandHelpOutput {
   related?: string[];
 }
 
+const manualCommandHelp: Record<string, CommandHelpOutput> = {
+  browser: {
+    command: "browser",
+    purpose: "Manage local macOS browser aliases",
+    when: "You need to register, launch, inspect, or remove named local Mollotov app instances",
+    params: [],
+    related: ["browser register", "browser launch", "browser list", "browser inspect", "browser remove"],
+  },
+  "browser register": {
+    command: "browser register",
+    purpose: "Register a named local macOS browser alias",
+    when: "You need a stable local identifier before launching a browser instance",
+    params: [
+      { name: "name", type: "string", required: true, description: "Browser alias name" },
+      { name: "app", type: "string", required: false, description: "Optional path to Mollotov.app" },
+    ],
+    related: ["browser launch", "browser inspect", "browser remove"],
+  },
+  "browser launch": {
+    command: "browser launch",
+    purpose: "Launch a named local macOS browser instance",
+    when: "You want a fresh local Mollotov.app process for a saved alias",
+    params: [
+      { name: "name", type: "string", required: true, description: "Browser alias name" },
+      { name: "port", type: "number", required: false, description: "Optional explicit HTTP port" },
+      { name: "wait", type: "boolean", required: false, description: "Wait until the local browser becomes reachable" },
+    ],
+    errors: ["BROWSER_NOT_REGISTERED", "APP_NOT_INSTALLED", "BROWSER_LAUNCH_FAILED"],
+    related: ["browser register", "browser list", "browser inspect"],
+  },
+  "browser list": {
+    command: "browser list",
+    purpose: "List local macOS browser aliases",
+    when: "You need to see saved aliases and their current runtime state",
+    params: [],
+    related: ["browser inspect", "browser launch"],
+  },
+  "browser inspect": {
+    command: "browser inspect",
+    purpose: "Inspect one local macOS browser alias",
+    when: "You need to inspect one saved alias and its live port",
+    params: [{ name: "name", type: "string", required: true, description: "Browser alias name" }],
+    related: ["browser list", "browser launch", "browser remove"],
+  },
+  "browser remove": {
+    command: "browser remove",
+    purpose: "Remove a local macOS browser alias",
+    when: "A saved alias is no longer needed",
+    params: [{ name: "name", type: "string", required: true, description: "Browser alias name" }],
+    related: ["browser list", "browser register"],
+  },
+};
+
 /** Convert a MCP tool name to CLI kebab-case command name */
 function mcpToCommand(name: string): string {
   return name
@@ -53,6 +106,11 @@ function toolToHelp(tool: BrowserToolDef | CliToolDef): CommandHelpOutput {
 /** Generate help for a specific command or all commands. */
 export function generateLlmHelp(commandFilter?: string): string {
   if (commandFilter) {
+    const manualMatch = manualCommandHelp[commandFilter];
+    if (manualMatch) {
+      return JSON.stringify(manualMatch, null, 2);
+    }
+
     const all = [...browserTools, ...cliTools];
     const match = all.find((t) => mcpToCommand(t.name) === commandFilter || t.name === commandFilter);
     if (match) {
@@ -68,6 +126,6 @@ export function generateLlmHelp(commandFilter?: string): string {
   }
 
   // All commands
-  const allHelp = [...browserTools, ...cliTools].map(toolToHelp);
+  const allHelp = [...browserTools, ...cliTools].map(toolToHelp).concat(Object.values(manualCommandHelp));
   return JSON.stringify(allHelp, null, 2);
 }

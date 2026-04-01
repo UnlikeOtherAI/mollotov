@@ -32,4 +32,10 @@ describe("explainCommand", () => {
     expect(output).toContain("form");
     expect(output).toContain("fields");
   });
+
+  it("explains browser launch", () => {
+    const output = explainCommand("browser launch");
+    expect(output).toContain("browser launch");
+    expect(output).toContain("launches a new macOS app instance");
+  });
 });

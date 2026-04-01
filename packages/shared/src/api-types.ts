@@ -1,4 +1,4 @@
-import type { DeviceInfoFull, DeviceCapabilities } from "./device-types.js";
+import type { DeviceInfoFull, DeviceCapabilities, Platform } from "./device-types.js";
 
 // --- Base ---
 
@@ -200,7 +200,7 @@ export interface GetViewportResponse {
   width: number;
   height: number;
   devicePixelRatio: number;
-  platform: string;
+  platform: Platform;
   deviceName: string;
   orientation: "portrait" | "landscape";
 }
@@ -891,7 +891,7 @@ export interface IsElementObscuredResponse extends SuccessResponse {
 
 export interface DeviceMeta {
   name: string;
-  platform: string;
+  platform: Platform;
   resolution: string;
 }
 
