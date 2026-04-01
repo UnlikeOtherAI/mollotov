@@ -34,10 +34,10 @@ export function buildLabelRequests() {
 }
 
 export async function seedLabels(octokit: Octokit, owner: string, repo: string) {
-  const existing = await octokit.issues.listLabelsForRepo({ owner, repo, per_page: 100 })
-  const existingNames = new Set(existing.data.map(l => l.name))
+  const existingItems = await octokit.paginate(octokit.issues.listLabelsForRepo, { owner, repo, per_page: 100 })
+  const existingNames = new Set(existingItems.map(l => l.name))
 
-  for (const label of LABELS) {
+  for (const label of buildLabelRequests()) {
     if (existingNames.has(label.name)) {
       await octokit.issues.updateLabel({ owner, repo, ...label })
     } else {
