@@ -67,13 +67,8 @@ final class GeckoProcessManager {
             "--headless",
             "about:blank",
         ]
-        let logPath = FileManager.default.temporaryDirectory
-            .appendingPathComponent("mollotov-gecko-\(port).log").path
-        FileManager.default.createFile(atPath: logPath, contents: nil)
-        let logHandle = FileHandle(forWritingAtPath: logPath)
-        proc.standardOutput = logHandle ?? FileHandle.nullDevice
-        proc.standardError = logHandle ?? FileHandle.nullDevice
-        NSLog("[GeckoProcessManager] Firefox log: %@", logPath)
+        proc.standardOutput = FileHandle.nullDevice
+        proc.standardError = FileHandle.nullDevice
         try proc.run()
         process = proc
         NSLog("[GeckoProcessManager] Firefox PID=%d port=%d", proc.processIdentifier, port)
