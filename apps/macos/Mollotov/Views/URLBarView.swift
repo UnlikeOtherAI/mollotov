@@ -143,26 +143,42 @@ struct URLBarView: View {
 
     @ViewBuilder
     private var presetSwitch: some View {
-        AppKitSegmentedStrip(
-            items: DevicePreset.allCases.map { preset in
-                AppKitSegmentedStrip.Item(
-                    id: preset.rawValue,
-                    systemImageName: preset.icon,
-                    accessibilityID: "browser.preset.\(preset.rawValue.replacingOccurrences(of: " ", with: "-").lowercased())",
-                    accessibilityLabel: preset.rawValue,
-                    width: 44,
-                    iconSize: 12
-                )
-            },
-            selectedID: viewportState.selectedPreset.rawValue,
-            accessibilityID: "browser.preset.switch",
-            isEnabled: true,
-            onSelect: { selectedID in
-                guard let preset = DevicePreset(rawValue: selectedID) else { return }
-                viewportState.selectPreset(preset)
+        Menu {
+            Button("Full") {
+                viewportState.selectFullViewport()
             }
-        )
-        .frame(width: 290, height: 34)
+
+            Divider()
+
+            ForEach(viewportState.availablePresets) { preset in
+                Button(preset.name) {
+                    _ = viewportState.selectPreset(preset.id)
+                }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Text(viewportState.selectedPresetMenuLabel)
+                    .font(.system(size: 12, weight: .semibold))
+                    .lineLimit(1)
+
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 10, weight: .semibold))
+            }
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 12)
+            .frame(height: 34)
+            .background(
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .fill(Color(nsColor: .controlBackgroundColor))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .stroke(Color(nsColor: .separatorColor), lineWidth: 0.5)
+            )
+        }
+        .menuStyle(.borderlessButton)
+        .frame(width: 168, height: 34)
+        .accessibilityIdentifier("browser.preset.switch")
     }
 
     @ViewBuilder
@@ -244,7 +260,7 @@ private struct AppKitSegmentedStrip: NSViewRepresentable {
         var onSelect: (String) -> Void
         private weak var container: SegmentedStripContainerView?
         private var buttonsByID: [String: SegmentedStripButton] = [:]
-        private var tooltipView: SegmentedTooltipView?
+        private var tooltipPanel: NSPanel?
         private var hideWorkItem: DispatchWorkItem?
 
         init(onSelect: @escaping (String) -> Void) {
@@ -252,35 +268,48 @@ private struct AppKitSegmentedStrip: NSViewRepresentable {
         }
 
         fileprivate func showTooltip(_ text: String, for button: SegmentedStripButton) {
-            guard let window = button.window, let contentView = window.contentView else { return }
+            guard let parentWindow = button.window else { return }
             hideWorkItem?.cancel(); hideWorkItem = nil
-            if tooltipView == nil || tooltipView?.window !== window {
-                tooltipView?.removeFromSuperview()
-                let tv = SegmentedTooltipView()
-                contentView.addSubview(tv)
-                tooltipView = tv
+
+            // NSPanel child window — always above GPU-composited WebView layers.
+            let tv: SegmentedTooltipView
+            if let panel = tooltipPanel, panel.parent === parentWindow,
+               let existing = panel.contentView as? SegmentedTooltipView {
+                tv = existing
+            } else {
+                tooltipPanel?.close()
+                tv = SegmentedTooltipView()
+                let panel = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel],
+                                    backing: .buffered, defer: true)
+                panel.isOpaque = false
+                panel.backgroundColor = .clear
+                panel.hasShadow = false
+                panel.contentView = tv
+                parentWindow.addChildWindow(panel, ordered: .above)
+                tooltipPanel = panel
             }
-            guard let tv = tooltipView else { return }
+
             tv.setText(text)
-            let rect = button.convert(button.bounds, to: contentView)
             let size = tv.fittingSize
-            let x = (rect.midX - size.width / 2).rounded()
-            let y = contentView.isFlipped ? (rect.maxY + 6).rounded() : (rect.minY - size.height - 6).rounded()
-            tv.frame = CGRect(x: x, y: y, width: size.width, height: size.height)
-            tv.alphaValue = 0; tv.isHidden = false
-            NSAnimationContext.runAnimationGroup { ctx in
+            let btnOnScreen = parentWindow.convertToScreen(button.convert(button.bounds, to: nil))
+            let x = (btnOnScreen.midX - size.width / 2).rounded()
+            let y = (btnOnScreen.minY - size.height - 6).rounded()
+            tooltipPanel?.setFrame(CGRect(x: x, y: y, width: size.width, height: size.height), display: false)
+            tooltipPanel?.alphaValue = 0
+            tooltipPanel?.orderFront(nil)
+            NSAnimationContext.runAnimationGroup { [weak self] ctx in
                 ctx.duration = 0.15; ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                tv.animator().alphaValue = 1
+                self?.tooltipPanel?.animator().alphaValue = 1
             }
         }
 
         fileprivate func hideTooltip(for button: SegmentedStripButton) {
-            guard let tv = tooltipView else { return }
-            let workItem = DispatchWorkItem { [weak tv] in
+            let workItem = DispatchWorkItem { [weak self] in
+                guard let panel = self?.tooltipPanel else { return }
                 NSAnimationContext.runAnimationGroup({ ctx in
                     ctx.duration = 0.15; ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                    tv?.animator().alphaValue = 0
-                }) { tv?.isHidden = true }
+                    panel.animator().alphaValue = 0
+                }) { panel.orderOut(nil) }
             }
             hideWorkItem = workItem
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: workItem)
