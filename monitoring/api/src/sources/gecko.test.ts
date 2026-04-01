@@ -25,4 +25,9 @@ describe('parseGeckoRelease', () => {
     const diff = (deadline.getTime() - releaseDate.getTime()) / (1000 * 60 * 60 * 24)
     expect(diff).toBe(15)
   })
+
+  it('releaseDate is a YYYY-MM-DD string', () => {
+    const release = parseGeckoRelease(raw)
+    expect(release.releaseDate).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  })
 })

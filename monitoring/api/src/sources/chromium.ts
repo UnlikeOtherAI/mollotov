@@ -15,7 +15,8 @@ const DEADLINE_DAYS = 15
 export function parseChromiumRelease(raw: any[]): ChromiumRelease {
   const r = raw[0]
   const releaseDate = new Date(r.time).toISOString().slice(0, 10)
-  const deadline = new Date(r.time + DEADLINE_DAYS * 864e5).toISOString().slice(0, 10)
+  const releaseDateMs = new Date(releaseDate + 'T00:00:00Z').getTime()
+  const deadline = new Date(releaseDateMs + DEADLINE_DAYS * 864e5).toISOString().slice(0, 10)
 
   return {
     engine: 'chromium',
