@@ -3,8 +3,9 @@ import Foundation
 struct PlatformAIEngine {
     static var isAvailable: Bool {
         if #available(iOS 26, *) {
-            // Will use: SystemLanguageModel.isAvailable
-            return true
+            // TODO: return SystemLanguageModel.isAvailable when Foundation Models SDK is linked.
+            // Until then, return false so ai-status doesn't claim platform AI works.
+            return false
         }
         return false
     }

@@ -408,7 +408,7 @@ private final class StubAudioRecorder {
         let durationMs: Int
     }
 
-    let engine = AVAudioEngine()
+    private var engine: AVAudioEngine?
     private(set) var isRecording = false
     private var startedAt: Date?
 
@@ -419,7 +419,9 @@ private final class StubAudioRecorder {
 
     func start() throws {
         guard !isRecording else { throw RecorderError.alreadyRecording }
-        engine.prepare()
+        let newEngine = AVAudioEngine()
+        newEngine.prepare()
+        engine = newEngine
         startedAt = Date()
         isRecording = true
     }
@@ -427,7 +429,8 @@ private final class StubAudioRecorder {
     func stop() throws -> Result {
         guard isRecording else { throw RecorderError.notRecording }
         let duration = elapsedMs
-        engine.stop()
+        engine?.stop()
+        engine = nil
         startedAt = nil
         isRecording = false
         return Result(audio: Data(), durationMs: duration)
