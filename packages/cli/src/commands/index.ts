@@ -34,6 +34,7 @@ import { registerMcp } from "./mcp.js";
 import { registerExplain } from "./explain.js";
 import { registerHome } from "./home.js";
 import { registerBrowser } from "./browser.js";
+import { registerAI } from "./ai.js";
 
 export function registerAllCommands(program: Command): void {
   // Discovery
@@ -85,6 +86,9 @@ export function registerAllCommands(program: Command): void {
 
   // MCP Server
   registerMcp(program);
+
+  // AI
+  registerAI(program);
 
   // Help
   registerExplain(program);

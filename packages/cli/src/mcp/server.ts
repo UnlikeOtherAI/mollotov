@@ -8,6 +8,10 @@ import { browserTools, cliTools } from "./tools.js";
 import type { BrowserToolDef, CliToolDef } from "./tools.js";
 import type { DiscoveredDevice } from "../types.js";
 import type { Platform } from "@unlikeotherai/mollotov-shared";
+import { getApprovedModels, findModel } from "../ai/models.js";
+import { ModelStore } from "../ai/store.js";
+import { downloadModel } from "../ai/download.js";
+import { detectOllama, listOllamaModels } from "../ai/ollama.js";
 
 export function createMcpServer(): McpServer {
   const server = new McpServer(
@@ -65,6 +69,55 @@ function registerCliTool(server: McpServer, tool: CliToolDef): void {
 }
 
 async function handleDiscovery(method: string, params: Record<string, unknown>): Promise<{ content: Array<{ type: "text"; text: string }> }> {
+  if (method === "aiModels") {
+    const store = new ModelStore();
+    const approved = getApprovedModels();
+    const downloaded = store.listDownloaded();
+    const rows = approved.map((m) => ({
+      id: m.id,
+      name: m.name,
+      quantization: m.quantization,
+      sizeGB: m.sizeGB,
+      downloaded: downloaded.some((d) => d.id === m.id),
+    }));
+    const result: Record<string, unknown> = { success: true, models: rows };
+    const ollama = await detectOllama();
+    if (ollama) {
+      const ollamaModels = await listOllamaModels();
+      result.ollama = { endpoint: "http://localhost:11434", models: ollamaModels };
+    }
+    return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+  }
+
+  if (method === "aiPull") {
+    const modelId = params.model as string;
+    const model = findModel(modelId);
+    if (!model) {
+      return { content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: { code: "MODEL_NOT_FOUND", message: `Unknown model "${modelId}"` } }) }] };
+    }
+    const store = new ModelStore();
+    if (store.isDownloaded(modelId)) {
+      return { content: [{ type: "text" as const, text: JSON.stringify({ success: true, message: "Already downloaded", path: store.getModelPath(modelId) }) }] };
+    }
+    try {
+      const result = await downloadModel(model);
+      store.register(modelId, result.path, result.sha256);
+      return { content: [{ type: "text" as const, text: JSON.stringify({ success: true, model: modelId, path: result.path }) }] };
+    } catch (err) {
+      return { content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: { code: "DOWNLOAD_FAILED", message: (err as Error).message } }) }] };
+    }
+  }
+
+  if (method === "aiRemove") {
+    const modelId = params.model as string;
+    const store = new ModelStore();
+    if (!store.isDownloaded(modelId)) {
+      return { content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: { code: "MODEL_NOT_FOUND", message: `Model "${modelId}" is not downloaded` } }) }] };
+    }
+    store.remove(modelId);
+    return { content: [{ type: "text" as const, text: JSON.stringify({ success: true, message: `Model ${modelId} removed` }) }] };
+  }
+
   if (method === "discover") {
     const timeout = (params.timeout as number) ?? 3000;
     const found = await scanForDevices(timeout);

@@ -203,6 +203,13 @@ export const browserTools: BrowserToolDef[] = [
   // Renderer (macOS only)
   { name: "mollotov_set_renderer", description: "Switch the browser rendering engine (macOS only). Available engines: 'webkit' (Safari/WebKit), 'chromium' (Chrome/CEF), 'gecko' (Firefox — requires Firefox.app installed). Cookies are migrated automatically so login sessions are preserved.", method: "setRenderer", schema: { device, engine: z.enum(["webkit", "chromium", "gecko"]).describe("Rendering engine to activate"), message }, bodyFromArgs: passthrough },
   { name: "mollotov_get_renderer", description: "Get the current rendering engine and available engines (macOS only)", method: "getRenderer", schema: { device }, bodyFromArgs: passthrough },
+
+  // AI / Local Inference
+  { name: "mollotov_ai_status", description: "Get the local inference engine status — whether a model is loaded, which model, its capabilities, and memory usage", method: "ai-status", schema: { device }, bodyFromArgs: passthrough },
+  { name: "mollotov_ai_load", description: "Load a model on a device for local inference. Pass a model ID or an ollama: prefixed ID. Only one model at a time — auto-unloads the current model.", method: "ai-load", schema: { device, model: z.string().describe("Model ID (e.g. 'gemma-4-e2b-q4') or Ollama model (e.g. 'ollama:llava:7b')") }, bodyFromArgs: passthrough },
+  { name: "mollotov_ai_unload", description: "Unload the current model from a device, freeing memory", method: "ai-unload", schema: { device }, bodyFromArgs: passthrough },
+  { name: "mollotov_ai_ask", description: "Ask the locally-loaded model a question about the current page. Use 'context' to auto-gather page data or provide 'text' directly. Runs entirely on-device.", method: "ai-infer", schema: { device, prompt: z.string().optional().describe("Question or instruction"), audio: z.string().optional().describe("Base64 WAV audio (16kHz mono, max 30s)"), context: z.enum(["page_text", "screenshot", "dom", "accessibility"]).optional().describe("Auto-gather page context"), text: z.string().optional().describe("Raw text input"), maxTokens: z.number().optional().describe("Max tokens (default 512)"), temperature: z.number().optional().describe("Temperature (default 0.7)") }, bodyFromArgs: passthrough },
+  { name: "mollotov_ai_record", description: "Control audio recording on the device for voice input to the AI model", method: "ai-record", schema: { device, action: z.enum(["start", "stop", "status"]).optional().describe("Recording action (default: start)") }, bodyFromArgs: passthrough },
 ];
 
 // --- CLI tool definitions (20 tools) ---
@@ -231,4 +238,9 @@ export const cliTools: CliToolDef[] = [
   { name: "mollotov_group_visible", description: "Get visible elements from all devices", method: "getVisibleElements", kind: "group", schema: { ...filterProps }, bodyFromArgs: filterBody },
   { name: "mollotov_group_keyboard_show", description: "Show keyboard on all devices", method: "showKeyboard", kind: "group", schema: { ...filterProps }, bodyFromArgs: filterBody },
   { name: "mollotov_group_keyboard_hide", description: "Hide keyboard on all devices", method: "hideKeyboard", kind: "group", schema: { ...filterProps }, bodyFromArgs: filterBody },
+
+  // AI Model Management
+  { name: "mollotov_ai_models", description: "List all approved models and their download status", method: "aiModels", kind: "discovery", schema: {}, bodyFromArgs: filterBody },
+  { name: "mollotov_ai_pull", description: "Download a model from HuggingFace to the local model store", method: "aiPull", kind: "discovery", schema: { model: z.string().describe("Model ID or HuggingFace repo path") }, bodyFromArgs: filterBody },
+  { name: "mollotov_ai_remove", description: "Delete a downloaded model from the local store", method: "aiRemove", kind: "discovery", schema: { model: z.string().describe("Model ID to remove") }, bodyFromArgs: filterBody },
 ];
