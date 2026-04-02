@@ -46,6 +46,16 @@ struct SettingsView: View {
                     row("Build", "Release")
                     #endif
                 }
+
+                Section("Experimental") {
+                    Toggle("3D DOM Inspector", isOn: Binding(
+                        get: { UserDefaults.standard.bool(forKey: "enable3DInspector") },
+                        set: { UserDefaults.standard.set($0, forKey: "enable3DInspector") }
+                    ))
+                    Text("Explode the page into 3D layers to debug element stacking. Restart not required.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
             .formStyle(.grouped)
 
