@@ -27,6 +27,7 @@ struct FloatingMenuView: View {
     let onBookmarks: () -> Void
     let onHistory: () -> Void
     let onNetworkInspector: () -> Void
+    let onSnapshot3D: () -> Void
 
     var body: some View {
         GeometryReader { geo in
@@ -55,7 +56,7 @@ struct FloatingMenuView: View {
     }
 
     private var actions: [AppKitFloatingMenuOverlay.Item] {
-        [
+        var items: [AppKitFloatingMenuOverlay.Item] = [
             .init(id: "reload", icon: "arrow.clockwise", accessibilityID: "browser.floating-menu.arrow-clockwise", tooltip: "Reload", action: onReload),
             .init(id: "safari-auth", icon: "safari", accessibilityID: "browser.floating-menu.safari", tooltip: "Safari Auth", action: onSafariAuth),
             .init(id: "bookmarks", icon: "bookmark.fill", accessibilityID: "browser.floating-menu.bookmark-fill", tooltip: "Bookmarks", action: onBookmarks),
@@ -63,6 +64,21 @@ struct FloatingMenuView: View {
             .init(id: "network-inspector", icon: "antenna.radiowaves.left.and.right", accessibilityID: "browser.floating-menu.antenna-radiowaves-left-and-right", tooltip: "Network", action: onNetworkInspector),
             .init(id: "settings", icon: "gear", accessibilityID: "browser.floating-menu.gear", tooltip: "Settings", action: onSettings),
         ]
+
+        if FeatureFlags.is3DInspectorEnabled {
+            items.insert(
+                .init(
+                    id: "snapshot-3d",
+                    icon: "cube.transparent",
+                    accessibilityID: "browser.floating-menu.cube-transparent",
+                    tooltip: "3D Inspector",
+                    action: onSnapshot3D
+                ),
+                at: max(items.count - 1, 0)
+            )
+        }
+
+        return items
     }
 }
 

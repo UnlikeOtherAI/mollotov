@@ -11,6 +11,7 @@ struct BrowserView: View {
     @State private var showHistory = false
     @State private var showNetworkInspector = false
     @State private var isFloatingMenuOpen = false
+    @State private var isIn3DInspector = false
     @AppStorage("hideWelcomeCard") private var hideWelcome = false
     @State private var showWelcome = true
     @State private var welcomePresentationSource: WelcomeCardPresentationSource = .automatic
@@ -66,7 +67,27 @@ struct BrowserView: View {
                 onSettings: { showSettings = true },
                 onBookmarks: { showBookmarks = true },
                 onHistory: { showHistory = true },
-                onNetworkInspector: { showNetworkInspector = true }
+                onNetworkInspector: { showNetworkInspector = true },
+                onSnapshot3D: {
+                    Task { @MainActor in
+                        let context = serverState.handlerContext
+                        let isActive = context.isIn3DInspector || isIn3DInspector
+
+                        if isActive {
+                            try? await context.evaluateJS(Snapshot3DBridge.exitScript)
+                            context.mark3DInspectorInactive(notify: true)
+                            isIn3DInspector = false
+                            return
+                        }
+
+                        try? await context.evaluateJS(Snapshot3DBridge.enterScript)
+                        let active = try? await context.evaluateJSReturningString("!!window.__m3d")
+                        if active == "true" {
+                            context.isIn3DInspector = true
+                            isIn3DInspector = true
+                        }
+                    }
+                }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
 
@@ -101,6 +122,12 @@ struct BrowserView: View {
         }
         .onChange(of: browserState.pageTitle) { _, newTitle in
             HistoryStore.shared.updateLatestTitle(for: browserState.currentURL, title: newTitle)
+        }
+        .onChange(of: browserState.isLoading) { _, isLoading in
+            guard isLoading else { return }
+            guard serverState.handlerContext.isIn3DInspector || isIn3DInspector else { return }
+            serverState.handlerContext.mark3DInspectorInactive(notify: false)
+            isIn3DInspector = false
         }
         .animation(.easeOut(duration: 0.2), value: serverState.shellToastMessage != nil)
         .background(
@@ -169,6 +196,9 @@ struct BrowserView: View {
                 welcomePresentationSource = source
                 showWelcome = true
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .snapshot3DExited)) { _ in
+            isIn3DInspector = false
         }
     }
 
