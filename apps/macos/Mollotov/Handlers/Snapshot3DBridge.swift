@@ -1,0 +1,526 @@
+enum Snapshot3DBridge {
+    static let enterScript = #"""
+    (function() {
+        'use strict';
+        // Guard: clean up any stale partial state first
+        if (window.__m3d) {
+            // Previous enter failed or wasn't cleaned up — run exit
+            var staleState = window.__m3d;
+            for (var i = 0; i < staleState.listeners.length; i++) {
+                var listener = staleState.listeners[i];
+                try { listener[0].removeEventListener(listener[1], listener[2], listener[3]); } catch(e) {}
+            }
+            var staleOverlay = document.getElementById('__m3d_overlay');
+            if (staleOverlay) staleOverlay.remove();
+            var staleSuppress = document.getElementById('__m3d_suppress');
+            if (staleSuppress) staleSuppress.remove();
+
+            for (var j = 0; j < staleState.modifiedElements.length; j++) {
+                var staleEl = staleState.modifiedElements[j];
+                var staleOrig = staleState.origStyles.get(staleEl);
+                if (staleOrig) {
+                    var staleProps = Object.keys(staleOrig);
+                    for (var k = 0; k < staleProps.length; k++) {
+                        try { staleEl.style[staleProps[k]] = staleOrig[staleProps[k]]; } catch(e) {}
+                    }
+                }
+                staleEl.removeAttribute('data-m3d-depth');
+            }
+
+            var staleHtml = document.documentElement;
+            staleHtml.style.perspective = staleState.origHtmlStyles.perspective;
+            staleHtml.style.perspectiveOrigin = staleState.origHtmlStyles.perspectiveOrigin;
+            staleHtml.style.overflow = staleState.origHtmlStyles.overflow;
+
+            var staleBody = document.body;
+            staleBody.style.transformStyle = staleState.origBodyStyles.transformStyle;
+            staleBody.style.transform = staleState.origBodyStyles.transform;
+            staleBody.style.overflow = staleState.origBodyStyles.overflow;
+
+            window.scrollTo(staleState.scrollX, staleState.scrollY);
+            for (var s = 0; s < staleState.scrollPositions.length; s++) {
+                var staleScroll = staleState.scrollPositions[s];
+                try {
+                    staleScroll.el.scrollTop = staleScroll.top;
+                    staleScroll.el.scrollLeft = staleScroll.left;
+                } catch(e) {}
+            }
+
+            for (var m = 0; m < staleState.pausedMedia.length; m++) {
+                try { staleState.pausedMedia[m].play(); } catch(e) {}
+            }
+
+            delete window.__m3d;
+        }
+
+        var LAYER_SPACING = 30;
+        var MAX_ELEMENTS = 5000;
+        var MIN_SIZE = 4;
+        var SKIP_TAGS = {SCRIPT:1, STYLE:1, META:1, LINK:1, HEAD:1, BR:1, WBR:1, NOSCRIPT:1};
+
+        // ---- State object ----
+        var state = {
+            origStyles: new WeakMap(),
+            origHtmlStyles: {},
+            origBodyStyles: {},
+            modifiedElements: [],
+            scrollPositions: [],
+            pausedMedia: [],
+            listeners: [],
+            spacing: LAYER_SPACING,
+            scrollX: window.scrollX,
+            scrollY: window.scrollY
+        };
+        window.__m3d = state;
+
+        // ---- Phase 0: Save scroll positions for custom scroll containers ----
+        var allEls = document.body.querySelectorAll('*');
+        for (var s = 0; s < allEls.length; s++) {
+            var se = allEls[s];
+            if (se.scrollTop > 0 || se.scrollLeft > 0) {
+                state.scrollPositions.push({
+                    el: se,
+                    top: se.scrollTop,
+                    left: se.scrollLeft
+                });
+            }
+        }
+
+        // ---- Phase 0b: Pause media ----
+        var media = document.querySelectorAll('video, audio');
+        for (var m = 0; m < media.length; m++) {
+            if (!media[m].paused) {
+                media[m].pause();
+                state.pausedMedia.push(media[m]);
+            }
+        }
+
+        // ---- Phase 0c: Inject suppression stylesheet ----
+        var suppressStyle = document.createElement('style');
+        suppressStyle.id = '__m3d_suppress';
+        suppressStyle.textContent = [
+            '*, *::before, *::after {',
+            '  animation-play-state: paused !important;',
+            '  transition-duration: 0s !important;',
+            '  transition-delay: 0s !important;',
+            '}'
+        ].join('\n');
+        document.head.appendChild(suppressStyle);
+
+        // ---- Phase 1: Read pass (no writes) ----
+        // Collect elements, compute depths, read styles
+
+        var OVERRIDE_PROPS = [
+            'transform', 'transformStyle', 'overflow', 'outline',
+            'outlineOffset', 'opacity', 'filter', 'clipPath',
+            'mask', 'webkitMask', 'mixBlendMode', 'isolation',
+            'contain', 'contentVisibility', 'backdropFilter',
+            'webkitBackdropFilter', 'position', 'background'
+        ];
+
+        function getDepth(el) {
+            var d = 0;
+            var p = el.parentElement;
+            while (p && p !== document.documentElement) {
+                d++;
+                p = p.parentElement;
+            }
+            return d;
+        }
+
+        function shouldProcess(el) {
+            if (!el || !el.tagName) return false;
+            if (SKIP_TAGS[el.tagName]) return false;
+            var rect = el.getBoundingClientRect();
+            if (rect.width < MIN_SIZE && rect.height < MIN_SIZE) return false;
+            var cs = window.getComputedStyle(el);
+            if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+            return true;
+        }
+
+        function isInsideSVG(el) {
+            var p = el.parentElement;
+            while (p) {
+                if (p.tagName === 'svg' || p.tagName === 'SVG') return true;
+                p = p.parentElement;
+            }
+            return false;
+        }
+
+        function isLeafPlane(el) {
+            var tag = el.tagName;
+            if (tag === 'CANVAS' || tag === 'VIDEO' || tag === 'AUDIO') return true;
+            if (tag === 'svg' || tag === 'SVG') return true;
+            if (tag === 'IFRAME') return true;
+            return false;
+        }
+
+        // Collect processable elements (light DOM + open shadow roots + same-origin iframes)
+        var collected = [];
+
+        function collectElements(root, baseDepth) {
+            var els = root.querySelectorAll('*');
+            for (var i = 0; i < els.length && collected.length < MAX_ELEMENTS; i++) {
+                var el = els[i];
+                if (!shouldProcess(el)) continue;
+                if (isInsideSVG(el) && el.tagName !== 'svg' && el.tagName !== 'SVG') continue;
+
+                var depth = getDepth(el) + baseDepth;
+                collected.push({ el: el, depth: depth, isLeaf: isLeafPlane(el) });
+
+                // Recurse into open shadow roots
+                if (el.shadowRoot && collected.length < MAX_ELEMENTS) {
+                    collectElements(el.shadowRoot, depth);
+                }
+
+                // Recurse into same-origin iframes
+                if (el.tagName === 'IFRAME') {
+                    try {
+                        var idoc = el.contentDocument;
+                        if (idoc && idoc.body && collected.length < MAX_ELEMENTS) {
+                            collectElements(idoc.body, depth);
+                        }
+                    } catch(e) { /* cross-origin — skip */ }
+                }
+            }
+        }
+
+        collectElements(document.body, 0);
+
+        // Read original styles for each element
+        for (var r = 0; r < collected.length; r++) {
+            var entry = collected[r];
+            var orig = {};
+            for (var p = 0; p < OVERRIDE_PROPS.length; p++) {
+                orig[OVERRIDE_PROPS[p]] = entry.el.style[OVERRIDE_PROPS[p]] || '';
+            }
+            state.origStyles.set(entry.el, orig);
+        }
+
+        // Save html/body original inline styles
+        var htmlEl = document.documentElement;
+        var bodyEl = document.body;
+        state.origHtmlStyles = {
+            perspective: htmlEl.style.perspective || '',
+            perspectiveOrigin: htmlEl.style.perspectiveOrigin || '',
+            overflow: htmlEl.style.overflow || ''
+        };
+        state.origBodyStyles = {
+            transformStyle: bodyEl.style.transformStyle || '',
+            transform: bodyEl.style.transform || '',
+            overflow: bodyEl.style.overflow || ''
+        };
+
+        // ---- Phase 2: Write pass (batch all modifications) ----
+
+        // Apply perspective to html (not body — no transform on html)
+        htmlEl.style.perspective = '3000px';
+        htmlEl.style.perspectiveOrigin = '50% 30%';
+        htmlEl.style.overflow = 'visible';
+
+        // Apply preserve-3d + rotation base to body
+        bodyEl.style.transformStyle = 'preserve-3d';
+        bodyEl.style.overflow = 'visible';
+
+        // Process each collected element
+        for (var w = 0; w < collected.length; w++) {
+            var item = collected[w];
+            var el = item.el;
+            var depth = item.depth;
+
+            el.style.transformStyle = item.isLeaf ? 'flat' : 'preserve-3d';
+            el.style.transform = 'translateZ(' + (depth * LAYER_SPACING) + 'px)';
+            el.style.outline = '1px solid rgba(0, 150, 255, 0.25)';
+            el.style.outlineOffset = '-1px';
+
+            // Override preserve-3d flattening properties
+            el.style.opacity = '1';
+            el.style.filter = 'none';
+            el.style.clipPath = 'none';
+            el.style.mixBlendMode = 'normal';
+            el.style.isolation = 'auto';
+            el.style.contain = 'none';
+            el.style.backdropFilter = 'none';
+            try { el.style.webkitBackdropFilter = 'none'; } catch(e) {}
+            try { el.style.contentVisibility = 'visible'; } catch(e) {}
+            try { el.style.webkitMask = 'none'; } catch(e) {}
+            try { el.style.mask = 'none'; } catch(e) {}
+
+            // Only override overflow on ancestors of 3D children (not leaf nodes)
+            if (!item.isLeaf) {
+                el.style.overflow = 'visible';
+            }
+
+            // Convert fixed/sticky to absolute
+            var cs = window.getComputedStyle(el);
+            if (cs.position === 'fixed' || cs.position === 'sticky') {
+                el.style.position = 'absolute';
+            }
+
+            // Subtle background for transparent containers
+            if (!item.isLeaf && el.children.length > 0) {
+                var bg = cs.backgroundColor;
+                if (!bg || bg === 'rgba(0, 0, 0, 0)' || bg === 'transparent') {
+                    el.style.background = 'rgba(200, 210, 220, 0.04)';
+                }
+            }
+
+            el.setAttribute('data-m3d-depth', String(depth));
+            state.modifiedElements.push(el);
+        }
+
+        // ---- Phase 3: Create overlay (outside 3D tree) ----
+
+        var overlay = document.createElement('div');
+        overlay.id = '__m3d_overlay';
+        overlay.style.cssText = [
+            'position: fixed', 'top: 0', 'left: 0',
+            'width: 100vw', 'height: 100vh',
+            'z-index: 2147483647',
+            'pointer-events: none',
+            'transform: none'
+        ].join(';');
+        // Append to <html> as sibling of <body> — outside the 3D tree
+        document.documentElement.appendChild(overlay);
+
+        // Input capture layer
+        var inputCapture = document.createElement('div');
+        inputCapture.id = '__m3d_input';
+        inputCapture.style.cssText = [
+            'position: absolute', 'top: 0', 'left: 0',
+            'width: 100%', 'height: 100%',
+            'pointer-events: auto', 'cursor: grab'
+        ].join(';');
+        overlay.appendChild(inputCapture);
+
+        // Close button
+        var closeBtn = document.createElement('div');
+        closeBtn.id = '__m3d_close';
+        closeBtn.textContent = '\u00D7 Exit 3D';
+        closeBtn.style.cssText = [
+            'position: absolute', 'top: 16px', 'right: 16px',
+            'padding: 8px 16px', 'border-radius: 10px',
+            'background: rgba(0,0,0,0.85)', 'color: #fff',
+            'font: 600 13px/1 -apple-system, system-ui, sans-serif',
+            'cursor: pointer', 'pointer-events: auto',
+            'border: 1px solid rgba(255,255,255,0.3)',
+            'backdrop-filter: blur(8px)', '-webkit-backdrop-filter: blur(8px)',
+            'user-select: none'
+        ].join(';');
+        overlay.appendChild(closeBtn);
+
+        // Info panel
+        var infoPanel = document.createElement('div');
+        infoPanel.id = '__m3d_info';
+        infoPanel.style.cssText = [
+            'position: absolute', 'bottom: 16px', 'left: 16px',
+            'padding: 8px 14px', 'border-radius: 10px',
+            'background: rgba(0,0,0,0.85)', 'color: #fff',
+            'font: 12px/1.4 SF Mono, ui-monospace, monospace',
+            'pointer-events: none', 'opacity: 0',
+            'border: 1px solid rgba(255,255,255,0.2)',
+            'backdrop-filter: blur(8px)', '-webkit-backdrop-filter: blur(8px)',
+            'transition: opacity 0.15s',
+            'max-width: 400px', 'white-space: nowrap',
+            'overflow: hidden', 'text-overflow: ellipsis'
+        ].join(';');
+        overlay.appendChild(infoPanel);
+
+        // ---- Phase 4: Input handling ----
+
+        var rotX = 15, rotY = -25, scale = 0.85;
+        var isDragging = false, lastX = 0, lastY = 0;
+        var hoveredEl = null;
+
+        function applyTransform() {
+            bodyEl.style.transform = 'scale(' + scale + ') rotateX(' + rotX + 'deg) rotateY(' + rotY + 'deg)';
+        }
+        applyTransform();
+
+        function addListener(target, type, fn, opts) {
+            target.addEventListener(type, fn, opts);
+            state.listeners.push([target, type, fn, opts]);
+        }
+
+        addListener(inputCapture, 'mousedown', function(e) {
+            isDragging = true;
+            lastX = e.clientX;
+            lastY = e.clientY;
+            inputCapture.style.cursor = 'grabbing';
+            e.preventDefault();
+        }, false);
+
+        addListener(document, 'mousemove', function(e) {
+            if (isDragging) {
+                rotY += (e.clientX - lastX) * 0.4;
+                rotX -= (e.clientY - lastY) * 0.4;
+                rotX = Math.max(-90, Math.min(90, rotX));
+                lastX = e.clientX;
+                lastY = e.clientY;
+                applyTransform();
+                return;
+            }
+
+            // Hover detection (best-effort — degrades at steep angles)
+            // Temporarily hide overlay to hit-test the 3D scene
+            overlay.style.display = 'none';
+            var target = document.elementFromPoint(e.clientX, e.clientY);
+            overlay.style.display = '';
+
+            if (target === hoveredEl) return;
+
+            // Remove previous highlight
+            if (hoveredEl && state.origStyles.has(hoveredEl)) {
+                hoveredEl.style.outline = '1px solid rgba(0, 150, 255, 0.25)';
+            }
+            hoveredEl = target;
+
+            if (hoveredEl && state.origStyles.has(hoveredEl)) {
+                hoveredEl.style.outline = '2px solid rgba(0, 150, 255, 0.8)';
+
+                var tag = hoveredEl.tagName.toLowerCase();
+                var id = hoveredEl.id ? '#' + hoveredEl.id : '';
+                var cls = hoveredEl.classList && hoveredEl.classList.length
+                    ? '.' + Array.from(hoveredEl.classList).join('.') : '';
+                var depthAttr = hoveredEl.getAttribute('data-m3d-depth') || '?';
+
+                // Show original dimensions (pre-transform)
+                var origRect = state.origStyles.get(hoveredEl);
+                var rect = hoveredEl.getBoundingClientRect();
+                var dim = Math.round(rect.width) + '\u00D7' + Math.round(rect.height);
+
+                // Stacking context info
+                var cs = window.getComputedStyle(hoveredEl);
+                var pos = cs.position;
+                var zIdx = cs.zIndex;
+                var meta = pos !== 'static' ? ' pos:' + pos : '';
+                meta += zIdx !== 'auto' ? ' z:' + zIdx : '';
+
+                infoPanel.textContent = '<' + tag + id + cls + '> ' + dim + ' depth:' + depthAttr + meta;
+                infoPanel.style.opacity = '1';
+            } else {
+                infoPanel.style.opacity = '0';
+            }
+        }, false);
+
+        addListener(document, 'mouseup', function() {
+            if (isDragging) {
+                isDragging = false;
+                inputCapture.style.cursor = 'grab';
+            }
+        }, false);
+
+        addListener(inputCapture, 'wheel', function(e) {
+            e.preventDefault();
+            scale += e.deltaY * -0.002;
+            scale = Math.max(0.15, Math.min(2.5, scale));
+            applyTransform();
+        }, { passive: false });
+
+        // ---- Phase 5: Keyboard controls ----
+
+        function exitViaMessage() {
+            if (window.webkit && window.webkit.messageHandlers &&
+                window.webkit.messageHandlers.mollotov3DSnapshot) {
+                window.webkit.messageHandlers.mollotov3DSnapshot.postMessage({action: 'exit'});
+            } else {
+                console.log('__mollotov_3d_exit__');
+            }
+        }
+
+        function reapplyDepths() {
+            for (var i = 0; i < state.modifiedElements.length; i++) {
+                var el = state.modifiedElements[i];
+                var d = parseInt(el.getAttribute('data-m3d-depth')) || 0;
+                el.style.transform = 'translateZ(' + (d * state.spacing) + 'px)';
+            }
+            applyTransform();
+        }
+
+        addListener(document, 'keydown', function(e) {
+            if (e.key === 'Escape') {
+                exitViaMessage();
+            } else if (e.key === '=' || e.key === '+') {
+                state.spacing = Math.min(80, state.spacing + 5);
+                reapplyDepths();
+            } else if (e.key === '-') {
+                state.spacing = Math.max(5, state.spacing - 5);
+                reapplyDepths();
+            } else if (e.key === 'r' || e.key === 'R') {
+                rotX = 15; rotY = -25; scale = 0.85;
+                applyTransform();
+            }
+            e.preventDefault();
+            e.stopPropagation();
+        }, true);
+
+        // Close button
+        addListener(closeBtn, 'click', function(e) {
+            e.stopPropagation();
+            exitViaMessage();
+        }, false);
+    })();
+    """#
+
+    static let exitScript = #"""
+    (function() {
+        'use strict';
+        var state = window.__m3d;
+        if (!state) return;
+
+        // Remove event listeners
+        for (var i = 0; i < state.listeners.length; i++) {
+            var entry = state.listeners[i];
+            try { entry[0].removeEventListener(entry[1], entry[2], entry[3]); } catch(e) {}
+        }
+
+        // Remove overlay and suppression style
+        var overlay = document.getElementById('__m3d_overlay');
+        if (overlay) overlay.remove();
+        var suppress = document.getElementById('__m3d_suppress');
+        if (suppress) suppress.remove();
+
+        // Restore element styles from WeakMap
+        for (var j = 0; j < state.modifiedElements.length; j++) {
+            var el = state.modifiedElements[j];
+            var orig = state.origStyles.get(el);
+            if (orig) {
+                var props = Object.keys(orig);
+                for (var k = 0; k < props.length; k++) {
+                    try { el.style[props[k]] = orig[props[k]]; } catch(e) {}
+                }
+            }
+            el.removeAttribute('data-m3d-depth');
+        }
+
+        // Restore html
+        var htmlEl = document.documentElement;
+        htmlEl.style.perspective = state.origHtmlStyles.perspective;
+        htmlEl.style.perspectiveOrigin = state.origHtmlStyles.perspectiveOrigin;
+        htmlEl.style.overflow = state.origHtmlStyles.overflow;
+
+        // Restore body
+        var bodyEl = document.body;
+        bodyEl.style.transformStyle = state.origBodyStyles.transformStyle;
+        bodyEl.style.transform = state.origBodyStyles.transform;
+        bodyEl.style.overflow = state.origBodyStyles.overflow;
+
+        // Restore scroll positions
+        window.scrollTo(state.scrollX, state.scrollY);
+        for (var s = 0; s < state.scrollPositions.length; s++) {
+            var sp = state.scrollPositions[s];
+            try {
+                sp.el.scrollTop = sp.top;
+                sp.el.scrollLeft = sp.left;
+            } catch(e) {}
+        }
+
+        // Resume paused media
+        for (var m = 0; m < state.pausedMedia.length; m++) {
+            try { state.pausedMedia[m].play(); } catch(e) {}
+        }
+
+        delete window.__m3d;
+    })();
+    """#
+}
