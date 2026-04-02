@@ -82,7 +82,6 @@ struct InferenceHarness {
 
                 let toolResult = await executeTool(toolCall.name, args: toolCall.args)
                 transcript.append("Tool \(toolCall.name) returned: \(toolResult)")
-                pendingImage = nil
                 continue
             }
 
@@ -441,7 +440,9 @@ struct InferenceHarness {
         value
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "'", with: "\\'")
+            .replacingOccurrences(of: "\"", with: "\\\"")
             .replacingOccurrences(of: "\n", with: "\\n")
+            .replacingOccurrences(of: "\r", with: "\\r")
     }
 
     private func elapsedMs(since startedAt: DispatchTime) -> Int {

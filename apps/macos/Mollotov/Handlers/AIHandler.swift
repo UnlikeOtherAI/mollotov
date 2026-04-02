@@ -281,9 +281,7 @@ struct AIHandler {
             }
 
             do {
-                try await MainActor.run {
-                    try AIHandler.recorder.start()
-                }
+                try await AIHandler.recorder.start()
                 return successResponse(["recording": true])
             } catch let error as AudioRecorder.RecordingError {
                 return mapRecordingError(error)

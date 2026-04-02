@@ -31,12 +31,12 @@ final class AudioRecorder: ObservableObject {
         finalizedAudio != nil
     }
 
-    func start() throws {
+    func start() async throws {
         if isRecording {
             throw RecordingError.alreadyActive
         }
 
-        let permission = microphonePermission()
+        let permission = await microphonePermission()
         guard permission else {
             throw RecordingError.permissionDenied
         }
@@ -148,19 +148,12 @@ final class AudioRecorder: ObservableObject {
         return wav
     }
 
-    private func microphonePermission() -> Bool {
+    private func microphonePermission() async -> Bool {
         switch AVCaptureDevice.authorizationStatus(for: .audio) {
         case .authorized:
             return true
         case .notDetermined:
-            let semaphore = DispatchSemaphore(value: 0)
-            var granted = false
-            AVCaptureDevice.requestAccess(for: .audio) { allowed in
-                granted = allowed
-                semaphore.signal()
-            }
-            semaphore.wait()
-            return granted
+            return await AVCaptureDevice.requestAccess(for: .audio)
         default:
             return false
         }
