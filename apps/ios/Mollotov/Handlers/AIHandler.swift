@@ -6,7 +6,8 @@ struct AIHandler {
 
     private let platformEngine = PlatformAIEngine()
     private static let ollamaPrefix = "ollama:"
-    private static let recorder = StubAudioRecorder()
+    @MainActor
+    static let recorder = AudioRecorder()
 
     func register(on router: Router) {
         router.register("ai-status") { _ in await status() }
@@ -213,28 +214,25 @@ struct AIHandler {
         do {
             switch action {
             case "start":
-                try Self.recorder.start()
+                try await Self.recorder.start()
                 return successResponse(["recording": true, "elapsedMs": 0])
             case "stop":
-                let result = try Self.recorder.stop()
+                let result = try await Self.recorder.stop()
                 return successResponse([
                     "recording": false,
                     "audio": result.audio.base64EncodedString(),
                     "durationMs": result.durationMs,
                 ])
             case "status":
-                let snapshot: [String: Any] = [
-                    "recording": Self.recorder.isRecording,
-                    "elapsedMs": Self.recorder.elapsedMs,
-                ]
-                return successResponse(snapshot)
+                return successResponse(await Self.recorder.snapshot())
             default:
                 return errorResponse(code: "INVALID_PARAM", message: "action must be start, stop, or status")
             }
         } catch let error as RecorderError {
             return error.response
         } catch {
-            return errorResponse(code: "RECORDING_FAILED", message: "Audio recording is unavailable")
+            let message = error.localizedDescription.isEmpty ? "Audio recording is unavailable" : error.localizedDescription
+            return errorResponse(code: "RECORDING_FAILED", message: message)
         }
     }
 
@@ -399,54 +397,5 @@ private struct AIHandlerError: Error {
 
     var response: [String: Any] {
         errorResponse(code: code, message: message)
-    }
-}
-
-private final class StubAudioRecorder {
-    struct Result {
-        let audio: Data
-        let durationMs: Int
-    }
-
-    private var engine: AVAudioEngine?
-    private(set) var isRecording = false
-    private var startedAt: Date?
-
-    var elapsedMs: Int {
-        guard let startedAt else { return 0 }
-        return Int(Date().timeIntervalSince(startedAt) * 1000)
-    }
-
-    func start() throws {
-        guard !isRecording else { throw RecorderError.alreadyRecording }
-        let newEngine = AVAudioEngine()
-        newEngine.prepare()
-        engine = newEngine
-        startedAt = Date()
-        isRecording = true
-    }
-
-    func stop() throws -> Result {
-        guard isRecording else { throw RecorderError.notRecording }
-        let duration = elapsedMs
-        engine?.stop()
-        engine = nil
-        startedAt = nil
-        isRecording = false
-        return Result(audio: Data(), durationMs: duration)
-    }
-}
-
-private enum RecorderError: Error {
-    case alreadyRecording
-    case notRecording
-
-    var response: [String: Any] {
-        switch self {
-        case .alreadyRecording:
-            return errorResponse(code: "RECORDING_ALREADY_ACTIVE", message: "Recording is already active")
-        case .notRecording:
-            return errorResponse(code: "NO_RECORDING_ACTIVE", message: "No recording is active")
-        }
     }
 }

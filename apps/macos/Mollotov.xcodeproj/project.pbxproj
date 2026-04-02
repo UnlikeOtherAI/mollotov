@@ -672,6 +672,7 @@
 					"$(PROJECT_DIR)/../../native/core-protocol/include",
 					"$(PROJECT_DIR)/../../native/core-automation/include",
 					"$(PROJECT_DIR)/../../native/core-mcp/include",
+					"$(PROJECT_DIR)/vendor/llama.cpp/include",
 				);
 				INFOPLIST_FILE = Mollotov/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
@@ -680,16 +681,26 @@
 					"$(PROJECT_DIR)/../../native/.build/core-protocol",
 					"$(PROJECT_DIR)/../../native/.build/core-automation",
 					"$(PROJECT_DIR)/../../native/.build/core-mcp",
+					"$(PROJECT_DIR)/vendor/llama.cpp/lib",
 				);
 				OTHER_LDFLAGS = (
 					"-lmollotov_core_state",
 					"-lmollotov_core_protocol",
 					"-lmollotov_core_automation",
 					"-lmollotov_core_mcp",
+					"-lllama",
+					"-lggml",
+					"-lggml-base",
+					"-lggml-cpu",
+					"-lggml-metal",
+					"-lggml-blas",
 					"-lc++",
+					"-framework Metal",
+					"-framework Accelerate",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.mollotov.browser.macos;
 				SDKROOT = macosx;
+				SWIFT_IMPORT_PATHS = "$(PROJECT_DIR)/vendor/llama.cpp/include";
 				SWIFT_OBJC_BRIDGING_HEADER = "Mollotov/Mollotov-Bridging-Header.h";
 				VALIDATE_PRODUCT = NO;
 			};
@@ -863,6 +874,7 @@
 					"$(PROJECT_DIR)/../../native/core-protocol/include",
 					"$(PROJECT_DIR)/../../native/core-automation/include",
 					"$(PROJECT_DIR)/../../native/core-mcp/include",
+					"$(PROJECT_DIR)/vendor/llama.cpp/include",
 				);
 				INFOPLIST_FILE = Mollotov/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
@@ -871,16 +883,26 @@
 					"$(PROJECT_DIR)/../../native/.build/core-protocol",
 					"$(PROJECT_DIR)/../../native/.build/core-automation",
 					"$(PROJECT_DIR)/../../native/.build/core-mcp",
+					"$(PROJECT_DIR)/vendor/llama.cpp/lib",
 				);
 				OTHER_LDFLAGS = (
 					"-lmollotov_core_state",
 					"-lmollotov_core_protocol",
 					"-lmollotov_core_automation",
 					"-lmollotov_core_mcp",
+					"-lllama",
+					"-lggml",
+					"-lggml-base",
+					"-lggml-cpu",
+					"-lggml-metal",
+					"-lggml-blas",
 					"-lc++",
+					"-framework Metal",
+					"-framework Accelerate",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.mollotov.browser.macos;
 				SDKROOT = macosx;
+				SWIFT_IMPORT_PATHS = "$(PROJECT_DIR)/vendor/llama.cpp/include";
 				SWIFT_OBJC_BRIDGING_HEADER = "Mollotov/Mollotov-Bridging-Header.h";
 				VALIDATE_PRODUCT = NO;
 			};

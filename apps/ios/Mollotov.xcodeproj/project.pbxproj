@@ -52,6 +52,7 @@
 		A100000051 /* AIState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000051 /* AIState.swift */; };
 		A100000052 /* PlatformAIEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000052 /* PlatformAIEngine.swift */; };
 		A100000053 /* AIHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000053 /* AIHandler.swift */; };
+		A100000054 /* AudioRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000054 /* AudioRecorder.swift */; };
 		A100000050 /* AppReveal in Frameworks */ = {isa = PBXBuildFile; productRef = C400000001 /* AppReveal */; };
 		B8938E567C074345A7356BE6 /* BookmarkHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E330B8CE19B4B3EAE902E58 /* BookmarkHandler.swift */; };
 		D2474B135EE9443A9A60289B /* NetworkTrafficStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E8CCB2224B44E128F3A4D13 /* NetworkTrafficStore.swift */; };
@@ -106,6 +107,7 @@
 		B100000051 /* AIState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIState.swift; sourceTree = "<group>"; };
 		B100000052 /* PlatformAIEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformAIEngine.swift; sourceTree = "<group>"; };
 		B100000053 /* AIHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIHandler.swift; sourceTree = "<group>"; };
+		B100000054 /* AudioRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorder.swift; sourceTree = "<group>"; };
 		B100000099 /* Mollotov.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Mollotov.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B18084C632DD449F8D789F86 /* BookmarksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookmarksView.swift; sourceTree = "<group>"; };
 		D43743BF12FB4153846B26F0 /* NetworkInspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkInspectorView.swift; sourceTree = "<group>"; };
@@ -185,6 +187,7 @@
 			isa = PBXGroup;
 			children = (
 				B100000051 /* AIState.swift */,
+				B100000054 /* AudioRecorder.swift */,
 				B100000052 /* PlatformAIEngine.swift */,
 			);
 			path = AI;
@@ -372,6 +375,7 @@
 				A100000051 /* AIState.swift in Sources */,
 				A100000052 /* PlatformAIEngine.swift in Sources */,
 				A100000053 /* AIHandler.swift in Sources */,
+				A100000054 /* AudioRecorder.swift in Sources */,
 				DFDB1F217CF14213A9FB5CCE /* BookmarkStore.swift in Sources */,
 				557BEEFEC864450EB89DE351 /* HistoryStore.swift in Sources */,
 				D2474B135EE9443A9A60289B /* NetworkTrafficStore.swift in Sources */,

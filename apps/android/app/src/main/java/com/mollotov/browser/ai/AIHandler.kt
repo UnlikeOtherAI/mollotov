@@ -28,6 +28,7 @@ private val aiJson = Json { ignoreUnknownKeys = true; isLenient = true }
 
 class AIHandler(private val appContext: Context) {
     private val platformEngine by lazy { PlatformAIEngine(appContext) }
+    private val recorder by lazy { AudioRecorder(appContext) }
 
     fun register(router: Router) {
         router.register("ai-status") { aiStatus() }
@@ -141,8 +142,43 @@ class AIHandler(private val appContext: Context) {
     }
 
     private fun aiRecord(body: Map<String, Any?>): Map<String, Any?> {
-        val action = (body["action"] as? String)?.trim().orEmpty().ifEmpty { "start" }
-        return errorResponse("NOT_IMPLEMENTED", "ai-record $action is not yet implemented on Android")
+        val action = (body["action"] as? String)?.trim().orEmpty().ifEmpty { "status" }
+        return try {
+            when (action) {
+                "start" -> {
+                    recorder.start()
+                    successResponse(mapOf("recording" to true, "elapsedMs" to 0))
+                }
+                "stop" -> {
+                    val result = recorder.stop()
+                    successResponse(
+                        mapOf(
+                            "recording" to false,
+                            "audio" to android.util.Base64.encodeToString(result.audio, android.util.Base64.NO_WRAP),
+                            "durationMs" to result.durationMs,
+                        ),
+                    )
+                }
+                "status" -> {
+                    successResponse(
+                        mapOf(
+                            "recording" to recorder.isRecording,
+                            "elapsedMs" to recorder.elapsedMs,
+                        ),
+                    )
+                }
+                else -> errorResponse("INVALID_PARAM", "action must be start, stop, or status")
+            }
+        } catch (e: SecurityException) {
+            errorResponse("MIC_PERMISSION_DENIED", "Microphone permission not granted")
+        } catch (e: IllegalStateException) {
+            val code = when {
+                e.message?.contains("ALREADY_ACTIVE") == true -> "RECORDING_ALREADY_ACTIVE"
+                e.message?.contains("NO_RECORDING") == true -> "NO_RECORDING_ACTIVE"
+                else -> "RECORDING_FAILED"
+            }
+            errorResponse(code, e.message ?: "Recording failed")
+        }
     }
 
     private suspend fun inferWithPlatform(body: Map<String, Any?>): Map<String, Any?> {
@@ -221,13 +257,6 @@ class AIHandler(private val appContext: Context) {
             } else {
                 response["response"] as? String
             }?.trim().orEmpty()
-
-            if (responseText.isEmpty()) {
-                return errorResponse(
-                    "OLLAMA_DISCONNECTED",
-                    "Lost connection to Ollama during inference",
-                )
-            }
 
             val tokensUsed = (response["eval_count"] as? Number)?.toInt() ?: estimateTokens(responseText)
             successResponse(

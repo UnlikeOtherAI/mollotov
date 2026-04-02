@@ -14,5 +14,7 @@
 		<string>_mollotov._tcp</string>
 		<string>_appreveal._tcp</string>
 	</array>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Mollotov uses the microphone to capture voice prompts for local AI.</string>
 </dict>
 </plist>

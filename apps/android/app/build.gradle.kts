@@ -94,5 +94,6 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0")
 
-    // TODO: Add when implementing Gemini Nano: implementation("com.google.ai.edge:generative-ai:x.x.x")
+    // Gemini Nano (AI Edge) — accessed via reflection in PlatformAIEngine to avoid hard dependency.
+    // Uncomment when the SDK stabilizes: implementation("com.google.ai.edge.aicore:aicore:0.0.1-exp02")
 }
