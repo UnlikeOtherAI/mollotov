@@ -4,6 +4,7 @@ import CoreText
 
 /// Provides Font Awesome Brand icons for use in SwiftUI views.
 enum FontAwesome {
+    static let brandsFontName = "FontAwesome6Brands-Regular"
     private static var _font: CTFont?
     private static var registered = false
 
@@ -46,29 +47,22 @@ enum FontAwesome {
             return CTFontCreateCopyWithAttributes(base, size, nil, nil) as NSFont
         }
         // If pre-load failed, try system font manager
-        if let font = NSFont(name: "FontAwesome6Brands-Regular", size: size) {
+        if let font = NSFont(name: brandsFontName, size: size) {
             return font
         }
         return NSFont.systemFont(ofSize: size)
     }
 }
 
-/// A SwiftUI view that renders a Font Awesome Brands icon via NSTextField (bypasses SwiftUI font bugs).
-struct FAIcon: NSViewRepresentable {
+/// A SwiftUI view that renders a Font Awesome Brands glyph directly.
+struct FAIcon: View {
     let icon: String
     var size: CGFloat = 14
 
-    func makeNSView(context: Context) -> NSTextField {
-        let field = NSTextField(labelWithString: icon)
-        field.font = FontAwesome.brandsFont(size: size)
-        field.alignment = .center
-        field.setContentHuggingPriority(.required, for: .horizontal)
-        field.setContentHuggingPriority(.required, for: .vertical)
-        return field
-    }
-
-    func updateNSView(_ field: NSTextField, context: Context) {
-        field.stringValue = icon
-        field.font = FontAwesome.brandsFont(size: size)
+    var body: some View {
+        Text(icon)
+            .font(.custom(FontAwesome.brandsFontName, size: size))
+            .frame(width: size + 4, height: size + 4)
+            .drawingGroup()
     }
 }

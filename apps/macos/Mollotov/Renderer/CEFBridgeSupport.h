@@ -12,8 +12,10 @@
 #include "include/capi/cef_client_capi.h"
 #include "include/capi/cef_callback_capi.h"
 #include "include/capi/cef_cookie_capi.h"
+#include "include/capi/cef_devtools_message_observer_capi.h"
 #include "include/capi/cef_request_context_capi.h"
 #include "include/capi/cef_frame_capi.h"
+#include "include/capi/cef_registration_capi.h"
 #include "include/internal/cef_time.h"
 
 typedef struct BridgeClient BridgeClient;
@@ -44,6 +46,10 @@ void CEFBridgeSetCookie(cef_cookie_manager_t *manager,
                         void (^completion)(BOOL success));
 void CEFBridgeDeleteAllCookies(cef_cookie_manager_t *manager, void (^completion)(NSInteger deleted));
 void CEFBridgeFlushCookieStore(cef_cookie_manager_t *manager, void (^completion)(void));
+void CEFBridgeCaptureScreenshot(cef_browser_host_t *host,
+                                CGSize logicalSize,
+                                void (^completion)(NSData * _Nullable pngData));
+void CEFBridgeInvalidateScreenshotCapture(cef_browser_t *browser);
 
 @interface CEFBridge (SupportCallbacks)
 - (void)cefBridgeDidCreateBrowser:(cef_browser_t *)browser;

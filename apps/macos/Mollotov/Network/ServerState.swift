@@ -162,8 +162,19 @@ final class ServerState: ObservableObject {
         }
 
         rendererState.activeEngine = engine
-        rendererState.isSwitching = false
+        await waitForRendererAttachment(target)
         target.didActivate()
+        if engine == .webkit {
+            try? await Task.sleep(nanoseconds: 250_000_000)
+        }
+        rendererState.isSwitching = false
+
+        if engine == .chromium {
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: 120_000_000)
+                _ = self?.viewportState.reapplyCurrentConfiguration()
+            }
+        }
 
         // Update the advertised TXT record with the active engine.
         startMDNS()
@@ -191,6 +202,16 @@ final class ServerState: ObservableObject {
             }
             cefRenderer = renderer
             return renderer
+        }
+    }
+
+    private func waitForRendererAttachment(_ renderer: any RendererEngine) async {
+        let view = renderer.makeView()
+        for _ in 0..<20 {
+            if view.window != nil {
+                return
+            }
+            try? await Task.sleep(nanoseconds: 50_000_000)
         }
     }
 

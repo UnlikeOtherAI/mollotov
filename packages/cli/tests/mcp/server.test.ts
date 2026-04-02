@@ -27,10 +27,10 @@ describe("createMcpServer", () => {
     expect(server).toBeDefined();
   });
 
-  it("registers 110 tools total (90 browser + 20 CLI)", () => {
-    expect(browserTools).toHaveLength(90);
+  it("registers 112 tools total (92 browser + 20 CLI)", () => {
+    expect(browserTools).toHaveLength(92);
     expect(cliTools).toHaveLength(20);
-    expect(browserTools.length + cliTools.length).toBe(110);
+    expect(browserTools.length + cliTools.length).toBe(112);
   });
 });
 

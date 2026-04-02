@@ -83,6 +83,135 @@ static void FinishEval(CEFBridge *owner, NSString *identifier, NSString *result,
     [owner _finishEvalWithIdentifier:identifier result:result error:error];
 }
 
+static NSData *WindowCropPNGData(NSView *view, NSWindow *window, BOOL *fullyCaptured) {
+    if (fullyCaptured != nullptr) {
+        *fullyCaptured = NO;
+    }
+    if (view == nil || window == nil) {
+        return nil;
+    }
+
+    NSView *frameView = window.contentView.superview;
+    if (frameView == nil) {
+        return nil;
+    }
+
+    CGImageRef windowImage = CGWindowListCreateImage(
+        CGRectNull,
+        kCGWindowListOptionIncludingWindow,
+        (CGWindowID)window.windowNumber,
+        kCGWindowImageBoundsIgnoreFraming | kCGWindowImageBestResolution
+    );
+    if (windowImage == nullptr) {
+        return nil;
+    }
+
+    NSRect rectInFrameView = [view convertRect:view.bounds toView:frameView];
+    NSRect backingRect = [frameView convertRectToBacking:rectInFrameView];
+    CGFloat imageWidth = (CGFloat)CGImageGetWidth(windowImage);
+    CGFloat imageHeight = (CGFloat)CGImageGetHeight(windowImage);
+    CGRect desiredCropRect = CGRectMake(
+        backingRect.origin.x,
+        imageHeight - NSMaxY(backingRect),
+        backingRect.size.width,
+        backingRect.size.height
+    );
+    CGRect imageBounds = CGRectMake(0, 0, imageWidth, imageHeight);
+    CGRect cropRect = CGRectIntersection(desiredCropRect, imageBounds);
+    if (fullyCaptured != nullptr) {
+        *fullyCaptured = CGRectEqualToRect(cropRect, desiredCropRect);
+    }
+
+    NSData *pngData = nil;
+    if (!CGRectIsEmpty(cropRect)) {
+        CGImageRef croppedImage = CGImageCreateWithImageInRect(windowImage, cropRect);
+        if (croppedImage != nullptr) {
+            NSBitmapImageRep *bitmap = [[NSBitmapImageRep alloc] initWithCGImage:croppedImage];
+            pngData = [bitmap representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
+            CGImageRelease(croppedImage);
+        }
+    }
+
+    CGImageRelease(windowImage);
+    return pngData;
+}
+
+static NSRect ExpandedWindowFrameIfNeeded(NSView *view, NSWindow *window) {
+    if (view == nil || window == nil) {
+        return NSZeroRect;
+    }
+    NSView *frameView = window.contentView.superview;
+    if (frameView == nil) {
+        return window.frame;
+    }
+
+    NSRect rectInFrameView = [view convertRect:view.bounds toView:frameView];
+    NSRect currentFrame = window.frame;
+    CGFloat requiredWidth = ceil(NSMaxX(rectInFrameView));
+    CGFloat requiredHeight = ceil(NSMaxY(rectInFrameView));
+
+    if (requiredWidth <= currentFrame.size.width + 0.5 &&
+        requiredHeight <= currentFrame.size.height + 0.5) {
+        return currentFrame;
+    }
+
+    NSRect expandedFrame = currentFrame;
+    CGFloat widthDelta = fmax(requiredWidth - currentFrame.size.width, 0.0);
+    CGFloat heightDelta = fmax(requiredHeight - currentFrame.size.height, 0.0);
+    expandedFrame.size.width += widthDelta;
+    expandedFrame.size.height += heightDelta;
+    expandedFrame.origin.y -= heightDelta;
+    return expandedFrame;
+}
+
+static NSData *CachedViewPNGData(NSView *view) {
+    if (view == nil) {
+        return nil;
+    }
+
+    NSRect bounds = view.bounds;
+    NSBitmapImageRep *bitmap = [view bitmapImageRepForCachingDisplayInRect:bounds];
+    if (bitmap == nil) {
+        return nil;
+    }
+    [view cacheDisplayInRect:bounds toBitmapImageRep:bitmap];
+    return [bitmap representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
+}
+
+static void CaptureWithExpandedWindowIfNeeded(NSView *view,
+                                              NSWindow *window,
+                                              void (^completion)(NSData * _Nullable pngData)) {
+    if (view == nil || completion == nil) {
+        if (completion != nil) {
+            completion(nil);
+        }
+        return;
+    }
+    if (window == nil || (window.styleMask & NSWindowStyleMaskFullScreen) != 0) {
+        completion(CachedViewPNGData(view));
+        return;
+    }
+
+    NSRect originalFrame = window.frame;
+    NSRect expandedFrame = ExpandedWindowFrameIfNeeded(view, window);
+    if (NSEqualRects(originalFrame, expandedFrame)) {
+        completion(WindowCropPNGData(view, window, nil) ?: CachedViewPNGData(view));
+        return;
+    }
+
+    [window setFrame:expandedFrame display:YES];
+    [window layoutIfNeeded];
+    [window.contentView layoutSubtreeIfNeeded];
+
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.05 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        NSData *resizedPNG = WindowCropPNGData(view, window, nil);
+        [window setFrame:originalFrame display:YES];
+        [window layoutIfNeeded];
+        [window.contentView layoutSubtreeIfNeeded];
+        completion(resizedPNG ?: CachedViewPNGData(view));
+    });
+}
+
 static cef_browser_host_t *CopyBrowserHost(cef_browser_t *browser) {
     if (browser == nullptr || browser->get_host == nullptr) {
         return nullptr;
@@ -318,8 +447,6 @@ static void LogBrowserHandles(const char *event, cef_browser_t *callbackBrowser,
     cef_browser_settings_t settings = {};
     settings.size = sizeof(settings);
 
-    NSLog(@"[CEFBridge] init parent=%@ frame=%@ bounds=%@ url=%@", parentView, NSStringFromRect(parentView.frame), NSStringFromRect(parentView.bounds), _currentURL);
-
     cef_string_t initialURL = CEFBridgeStringCreate(_currentURL);
     cef_browser_t *createdBrowser =
         cef_browser_host_create_browser_sync(&windowInfo, CEFBridgeClientHandle(_client), &initialURL, &settings, nullptr, nullptr);
@@ -340,6 +467,35 @@ static void LogBrowserHandles(const char *event, cef_browser_t *callbackBrowser,
     return self;
 }
 
+- (void)closeBrowser {
+    // Force-close the browser so CEF can tear down CrBrowserMain and all
+    // internal threads cleanly before this bridge is released. Without this,
+    // releasing the browser handle leaves CEF's internal state half-alive,
+    // and creating a new browser (on renderer switch) collides with it.
+    cef_browser_t *browser = [self activeBrowser];
+    if (browser == nullptr) { return; }
+    cef_browser_host_t *host = browser->get_host ? browser->get_host(browser) : nullptr;
+    if (host == nullptr) { return; }
+    host->close_browser(host, 1); // force=1: skip JS unload, close immediately
+    host->base.release(&host->base);
+    // Drain CEF's message queue so the close events are processed before
+    // the caller releases this object.
+    for (int i = 0; i < 30; i++) {
+        cef_do_message_loop_work();
+    }
+}
+
+- (void)setHidden:(BOOL)hidden {
+    cef_browser_t *browser = [self activeBrowser];
+    if (browser == nullptr) { return; }
+    cef_browser_host_t *host = browser->get_host ? browser->get_host(browser) : nullptr;
+    if (host == nullptr) { return; }
+    if (host->was_hidden != nullptr) {
+        host->was_hidden(host, hidden ? 1 : 0);
+    }
+    host->base.release(&host->base);
+}
+
 - (void)dealloc {
     @synchronized (self) {
         // Nil out all owner back-pointers before releasing CEF handles.
@@ -348,6 +504,12 @@ static void LogBrowserHandles(const char *event, cef_browser_t *callbackBrowser,
         // through these pointers. Clearing them first turns those callbacks
         // into safe no-ops instead of dangling-pointer crashes.
         CEFBridgeNullifyClientOwner(_client);
+        if (_callbackBrowser != nullptr) {
+            CEFBridgeInvalidateScreenshotCapture(_callbackBrowser);
+        }
+        if (_createdBrowser != nullptr) {
+            CEFBridgeInvalidateScreenshotCapture(_createdBrowser);
+        }
         if (_cookieManager != nullptr) {
             _cookieManager->base.release(&_cookieManager->base);
             _cookieManager = nullptr;
@@ -427,6 +589,15 @@ static void LogBrowserHandles(const char *event, cef_browser_t *callbackBrowser,
         cef_browser_t *browser = [self activeBrowser];
         if (browser != nullptr && browser->reload != nullptr) {
             browser->reload(browser);
+        }
+    }
+}
+
+- (void)reloadIgnoringCache {
+    @synchronized (self) {
+        cef_browser_t *browser = [self activeBrowser];
+        if (browser != nullptr && browser->reload_ignore_cache != nullptr) {
+            browser->reload_ignore_cache(browser);
         }
     }
 }
@@ -516,14 +687,36 @@ static void LogBrowserHandles(const char *event, cef_browser_t *callbackBrowser,
     }
 
     dispatch_async(dispatch_get_main_queue(), ^{
-        NSRect bounds = view.bounds;
-        NSBitmapImageRep *bitmap = [view bitmapImageRepForCachingDisplayInRect:bounds];
-        if (bitmap == nil) {
-            completion(nil);
+        NSWindow *window = view.window;
+        cef_browser_host_t *host = CopyBrowserHost([self activeBrowser]);
+        if (host != nullptr) {
+            const CGSize logicalSize = view.bounds.size;
+            CEFBridgeCaptureScreenshot(host, logicalSize, ^(NSData * _Nullable pngData) {
+                if (pngData != nil) {
+                    completion(pngData);
+                } else if (window != nil && (window.styleMask & NSWindowStyleMaskFullScreen) == 0) {
+                    CaptureWithExpandedWindowIfNeeded(view, window, completion);
+                } else if (window != nil) {
+                    completion(WindowCropPNGData(view, window, nil) ?: CachedViewPNGData(view));
+                } else {
+                    completion(CachedViewPNGData(view));
+                }
+            });
+            host->base.release(&host->base);
             return;
         }
-        [view cacheDisplayInRect:bounds toBitmapImageRep:bitmap];
-        completion([bitmap representationUsingType:NSBitmapImageFileTypePNG properties:@{}]);
+
+        if (window != nil && (window.styleMask & NSWindowStyleMaskFullScreen) == 0) {
+            CaptureWithExpandedWindowIfNeeded(view, window, completion);
+            return;
+        } else if (window != nil) {
+            if (NSData *pngData = WindowCropPNGData(view, window, nil)) {
+                completion(pngData);
+                return;
+            }
+        }
+
+        completion(CachedViewPNGData(view));
     });
 }
 
@@ -539,9 +732,19 @@ static void LogBrowserHandles(const char *event, cef_browser_t *callbackBrowser,
             subview.frame = view.bounds;
             subview.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
         }
+        [view layoutSubtreeIfNeeded];
 
         cef_browser_host_t *host = CopyBrowserHost([self activeBrowser]);
         if (host != nullptr) {
+            if (host->notify_move_or_resize_started != nullptr) {
+                host->notify_move_or_resize_started(host);
+            }
+            if (host->notify_screen_info_changed != nullptr) {
+                host->notify_screen_info_changed(host);
+            }
+            if (host->was_resized != nullptr) {
+                host->was_resized(host);
+            }
             if (host->set_focus != nullptr) {
                 host->set_focus(host, 1);
             }
@@ -578,6 +781,12 @@ static void LogBrowserHandles(const char *event, cef_browser_t *callbackBrowser,
 
 - (void)cefBridgeWillCloseBrowser {
     @synchronized (self) {
+        if (_callbackBrowser != nullptr) {
+            CEFBridgeInvalidateScreenshotCapture(_callbackBrowser);
+        }
+        if (_createdBrowser != nullptr) {
+            CEFBridgeInvalidateScreenshotCapture(_createdBrowser);
+        }
         if (_callbackBrowser != nullptr) {
             _callbackBrowser->base.release(&_callbackBrowser->base);
             _callbackBrowser = nullptr;

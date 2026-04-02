@@ -1,5 +1,6 @@
 import UIKit
 import WebKit
+import Combine
 
 /// Manages an external display (Apple TV via AirPlay).
 /// Uses UIScreen notifications to detect AirPlay, then scans connected scenes
@@ -9,16 +10,23 @@ extension Notification.Name {
 }
 
 @MainActor
-final class ExternalDisplayManager {
+final class ExternalDisplayManager: ObservableObject {
     static let shared = ExternalDisplayManager()
+    static let debugTVSize = CGSize(width: 1920, height: 1080)
 
-    var isConnected = false
+    @Published private(set) var isConnected = false
+    @Published private(set) var isSyncEnabled = UserDefaults.standard.bool(forKey: "tvSyncEnabled")
     let externalPort: UInt16 = 8421
     var attachPath: String?
 
     var serverState: ServerState?
     var browserState: BrowserState?
     var externalWindow: UIWindow?
+    weak var phoneWebView: WKWebView?
+
+    private var syncTask: Task<Void, Never>?
+    private var lastSyncedScrollRatio: Double?
+    private var pendingTVURL: String?
 
     private init() {}
 
@@ -53,25 +61,13 @@ final class ExternalDisplayManager {
         let screen = windowScene.screen
         let screenBounds = screen.bounds
 
-        let info = DeviceInfo.externalDisplay(
+        let bs = BrowserState()
+        let ss = ServerState(deviceInfo: DeviceInfo.externalDisplay(
             port: Int(externalPort),
             screenSize: screenBounds.size,
             scale: screen.scale
-        )
-        let bs = BrowserState()
-        let ss = ServerState(deviceInfo: info)
-
-        // Build WKWebView directly in UIKit — avoids SwiftUI layout confusion
-        // about which screen's coordinate space to use.
-        let config = WKWebViewConfiguration()
-        config.allowsInlineMediaPlayback = true
-
-        // Inject bridge scripts
-        let ucc = config.userContentController
-        ucc.addUserScript(NetworkBridge.bridgeScript)
-        ucc.add(ss.handlerContext, name: "mollotovNetwork")
-        ucc.addUserScript(ConsoleHandler.bridgeScript)
-        ucc.add(ss.handlerContext, name: "mollotovConsole")
+        ))
+        let config = makeTVWebViewConfiguration(serverState: ss)
 
         // Create the WebView at half the screen size (1920x1080 for 4K TV).
         // This gives a natural 1920px CSS viewport — desktop-width layout.
@@ -84,7 +80,7 @@ final class ExternalDisplayManager {
         vc.view.backgroundColor = .black
 
         let webView = WKWebView(frame: CGRect(origin: .zero, size: cssSize), configuration: config)
-        webView.customUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/604.1"
+        webView.customUserAgent = WebViewDefaults.sharedUserAgent
         webView.contentScaleFactor = 2
         webView.layer.anchorPoint = .zero
         webView.layer.position = .zero
@@ -96,33 +92,43 @@ final class ExternalDisplayManager {
         window.rootViewController = vc
         window.makeKeyAndVisible()
 
-        // Load home page
-        if let url = URL(string: bs.currentURL) {
-            webView.load(URLRequest(url: url))
-        }
+        attach(
+            browserState: bs,
+            serverState: ss,
+            webView: webView,
+            window: window,
+            attachPath: "scene-scan"
+        )
+    }
 
-        // Wire up server state
-        ss.webView = webView
-        ss.handlerContext.webView = webView
+    func attachDebugLocalTV() {
+        guard !isConnected else { return }
 
-        browserState = bs
-        serverState = ss
-        externalWindow = window
-        isConnected = true
-        attachPath = "scene-scan"
-        NotificationCenter.default.post(name: .externalDisplayConnectionChanged, object: nil)
+        let bs = BrowserState()
+        let ss = ServerState(deviceInfo: DeviceInfo.externalDisplay(
+            port: Int(externalPort),
+            screenSize: Self.debugTVSize,
+            scale: 1
+        ))
+        let config = makeTVWebViewConfiguration(serverState: ss)
+        let webView = WKWebView(
+            frame: CGRect(origin: .zero, size: Self.debugTVSize),
+            configuration: config
+        )
+        webView.customUserAgent = WebViewDefaults.sharedUserAgent
 
-        ss.startHTTPServer()
-        ss.startMDNS()
-
-        // Track navigation changes for history
-        let coordinator = TVWebViewObserver(browserState: bs)
-        webView.navigationDelegate = coordinator
-        objc_setAssociatedObject(webView, &tvObserverKey, coordinator, .OBJC_ASSOCIATION_RETAIN)
+        attach(
+            browserState: bs,
+            serverState: ss,
+            webView: webView,
+            window: nil,
+            attachPath: "debug-local"
+        )
     }
 
     func detach() {
         guard isConnected else { return }
+        stopSyncLoop()
         serverState?.stop()
         externalWindow?.isHidden = true
         externalWindow = nil
@@ -131,6 +137,237 @@ final class ExternalDisplayManager {
         isConnected = false
         attachPath = nil
         NotificationCenter.default.post(name: .externalDisplayConnectionChanged, object: nil)
+    }
+
+    func setPhoneWebView(_ webView: WKWebView?) {
+        phoneWebView = webView
+        log("phone webview attached url=\(webView?.url?.absoluteString ?? "nil")")
+        startSyncLoopIfNeeded()
+    }
+
+    func setSyncEnabled(_ enabled: Bool) {
+        guard isSyncEnabled != enabled else { return }
+        isSyncEnabled = enabled
+        UserDefaults.standard.set(enabled, forKey: "tvSyncEnabled")
+        log("sync enabled changed to \(enabled)")
+        if enabled {
+            startSyncLoopIfNeeded()
+            triggerSyncPass()
+        } else {
+            stopSyncLoop()
+        }
+    }
+
+    func triggerSyncPass() {
+        guard isSyncEnabled, syncTask != nil else { return }
+        Task { @MainActor in
+            await performSyncPass()
+        }
+    }
+
+    private func makeTVWebViewConfiguration(serverState: ServerState) -> WKWebViewConfiguration {
+        let config = WKWebViewConfiguration()
+        config.allowsInlineMediaPlayback = true
+        config.processPool = WebViewDefaults.sharedProcessPool
+        config.websiteDataStore = WebViewDefaults.sharedWebsiteDataStore
+
+        let ucc = config.userContentController
+        ucc.addUserScript(NetworkBridge.bridgeScript)
+        ucc.add(serverState.handlerContext, name: "mollotovNetwork")
+        ucc.addUserScript(ConsoleHandler.bridgeScript)
+        ucc.add(serverState.handlerContext, name: "mollotovConsole")
+
+        return config
+    }
+
+    private func attach(
+        browserState: BrowserState,
+        serverState: ServerState,
+        webView: WKWebView,
+        window: UIWindow?,
+        attachPath: String
+    ) {
+        if let url = URL(string: browserState.currentURL) {
+            webView.load(URLRequest(url: url))
+        }
+
+        serverState.webView = webView
+        serverState.handlerContext.webView = webView
+
+        self.browserState = browserState
+        self.serverState = serverState
+        self.externalWindow = window
+        isConnected = true
+        self.attachPath = attachPath
+        NotificationCenter.default.post(name: .externalDisplayConnectionChanged, object: nil)
+        log("attached external display via \(attachPath)")
+
+        serverState.startHTTPServer()
+        serverState.startMDNS()
+        startSyncLoopIfNeeded()
+
+        let coordinator = TVWebViewObserver(browserState: browserState)
+        webView.navigationDelegate = coordinator
+        objc_setAssociatedObject(webView, &tvObserverKey, coordinator, .OBJC_ASSOCIATION_RETAIN)
+    }
+
+    private func startSyncLoopIfNeeded() {
+        guard isSyncEnabled, isConnected, phoneWebView != nil, syncTask == nil else { return }
+        log("starting sync loop")
+        syncTask = Task { @MainActor [weak self] in
+            while let self, !Task.isCancelled {
+                guard self.isSyncEnabled, self.isConnected, self.phoneWebView != nil else {
+                    self.log("stopping sync loop due to missing state")
+                    self.syncTask = nil
+                    return
+                }
+                await self.performSyncPass()
+                try? await Task.sleep(nanoseconds: 100_000_000)
+            }
+            self?.syncTask = nil
+        }
+    }
+
+    private func stopSyncLoop() {
+        syncTask?.cancel()
+        syncTask = nil
+        lastSyncedScrollRatio = nil
+        pendingTVURL = nil
+    }
+
+    private struct PageSyncSnapshot {
+        let urlString: String
+        let scrollRatio: Double
+    }
+
+    private func performSyncPass() async {
+        guard isSyncEnabled, let phoneWebView else { return }
+        guard let snapshot = await pageSnapshot(from: phoneWebView) else {
+            log("phone snapshot unavailable")
+            return
+        }
+        log("phone snapshot url=\(snapshot.urlString.prefix(80)) ratio=\(String(format: "%.3f", snapshot.scrollRatio))")
+        guard syncURLToTV(snapshot.urlString) else { return }
+        guard let tvWebView = serverState?.handlerContext.webView else {
+            log("tv webview unavailable")
+            return
+        }
+
+        if let lastSyncedScrollRatio,
+           abs(lastSyncedScrollRatio - snapshot.scrollRatio) < 0.001 {
+            return
+        }
+
+        do {
+            try await tvWebView.evaluateJavaScript(
+                """
+                (function(targetRatio) {
+                    var doc = document.documentElement;
+                    var maxScroll = Math.max((doc ? doc.scrollHeight : 0) - window.innerHeight, 0);
+                    var state = window.__mollotovSyncState || (window.__mollotovSyncState = {
+                        raf: 0,
+                        targetY: 0
+                    });
+                    state.targetY = targetRatio * maxScroll;
+
+                    if (state.raf) {
+                        return;
+                    }
+
+                    var step = function() {
+                        var currentY = window.scrollY ?? window.pageYOffset ?? (doc ? doc.scrollTop : 0) ?? 0;
+                        var delta = state.targetY - currentY;
+                        if (Math.abs(delta) < 0.5) {
+                            window.scrollTo(0, state.targetY);
+                            state.raf = 0;
+                            return;
+                        }
+
+                        window.scrollTo(0, currentY + delta * 0.28);
+                        state.raf = window.requestAnimationFrame(step);
+                    };
+
+                    state.raf = window.requestAnimationFrame(step);
+                })(\(snapshot.scrollRatio))
+                """
+            )
+            lastSyncedScrollRatio = snapshot.scrollRatio
+            log("applied tv scroll ratio=\(String(format: "%.3f", snapshot.scrollRatio))")
+        } catch {
+            lastSyncedScrollRatio = nil
+            log("tv scroll apply failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func pageSnapshot(from webView: WKWebView) async -> PageSyncSnapshot? {
+        let script = """
+        (function() {
+            var doc = document.documentElement;
+            var body = document.body;
+            var scrollHeight = Math.max(doc ? doc.scrollHeight : 0, body ? body.scrollHeight : 0);
+            var viewportHeight = window.innerHeight || (doc ? doc.clientHeight : 0) || 0;
+            var maxScroll = Math.max(scrollHeight - viewportHeight, 0);
+            var scrollY = window.scrollY ?? window.pageYOffset ?? (doc ? doc.scrollTop : 0) ?? 0;
+            return JSON.stringify({
+                url: String(window.location.href || ''),
+                scrollRatio: maxScroll > 0 ? Math.min(Math.max(scrollY / maxScroll, 0), 1) : 0
+            });
+        })()
+        """
+
+        do {
+            guard let jsonString = try await webView.evaluateJavaScript(script) as? String,
+                  let data = jsonString.data(using: .utf8),
+                  let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let urlString = json["url"] as? String,
+                  !urlString.isEmpty else {
+                return nil
+            }
+
+            let scrollRatio = json["scrollRatio"] as? Double ?? 0
+            return PageSyncSnapshot(
+                urlString: urlString,
+                scrollRatio: min(max(scrollRatio, 0), 1)
+            )
+        } catch {
+            return nil
+        }
+    }
+
+    @discardableResult
+    private func syncURLToTV(_ urlString: String) -> Bool {
+        guard isSyncEnabled,
+              let tvWebView = serverState?.handlerContext.webView,
+              let url = URL(string: urlString) else {
+            log("syncURLToTV blocked connected=\(isConnected) sync=\(isSyncEnabled) tvExists=\(serverState?.handlerContext.webView != nil)")
+            return false
+        }
+
+        if tvWebView.url?.absoluteString == urlString {
+            if tvWebView.isLoading {
+                lastSyncedScrollRatio = nil
+                log("tv url matched but still loading")
+                return false
+            }
+            pendingTVURL = nil
+            log("tv url already matched")
+            return true
+        }
+
+        if pendingTVURL != urlString {
+            pendingTVURL = urlString
+            log("loading tv url from \(tvWebView.url?.absoluteString ?? "nil") to \(urlString.prefix(80))")
+            tvWebView.load(URLRequest(url: url))
+        } else {
+            log("tv still pending \(urlString.prefix(80)) current=\(tvWebView.url?.absoluteString ?? "nil")")
+        }
+        lastSyncedScrollRatio = nil
+        return false
+    }
+
+    private func log(_ message: String) {
+        guard ProcessInfo.processInfo.environment["MOLLOTOV_SYNC_LOG"] == "1" else { return }
+        NSLog("[TVSync] %@", message)
     }
 }
 

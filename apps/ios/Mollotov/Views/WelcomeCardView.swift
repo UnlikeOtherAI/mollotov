@@ -7,6 +7,7 @@ struct WelcomeCardView: View {
     let onDismiss: () -> Void
     @AppStorage("hideWelcomeCard") private var hideWelcome = false
     @State private var dontShowAgain = false
+    private let modalCardMaxWidth: CGFloat = 540
 
     var body: some View {
         ZStack {
@@ -58,6 +59,7 @@ struct WelcomeCardView: View {
             .background(.regularMaterial)
             .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
             .shadow(color: .black.opacity(0.15), radius: 20, y: 10)
+            .frame(maxWidth: UIDevice.current.userInterfaceIdiom == .pad ? modalCardMaxWidth : .infinity)
             .padding(.horizontal, 32)
         }
     }

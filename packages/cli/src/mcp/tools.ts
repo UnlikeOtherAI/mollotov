@@ -89,6 +89,7 @@ export const browserTools: BrowserToolDef[] = [
 
   // Viewport & Device
   { name: "mollotov_get_viewport", description: "Get viewport dimensions and device pixel ratio", method: "getViewport", schema: { device }, bodyFromArgs: passthrough },
+  { name: "mollotov_get_viewport_presets", description: "List named viewport presets available for the current device or window geometry. Linux does not support viewport presets yet.", method: "getViewportPresets", schema: { device }, bodyFromArgs: passthrough },
   { name: "mollotov_get_device_info", description: "Get full device information", method: "getDeviceInfo", schema: { device }, bodyFromArgs: passthrough },
   { name: "mollotov_get_capabilities", description: "Get device capabilities", method: "getCapabilities", schema: { device }, bodyFromArgs: passthrough },
 
@@ -189,6 +190,7 @@ export const browserTools: BrowserToolDef[] = [
   { name: "mollotov_get_keyboard_state", description: "Get keyboard visibility and state", method: "getKeyboardState", schema: { device }, bodyFromArgs: passthrough },
   { name: "mollotov_resize_viewport", description: "Resize the browser viewport", method: "resizeViewport", schema: { device, width: z.number().optional().describe("Viewport width"), height: z.number().optional().describe("Viewport height") }, bodyFromArgs: passthrough },
   { name: "mollotov_reset_viewport", description: "Reset viewport to device default", method: "resetViewport", schema: { device }, bodyFromArgs: passthrough },
+  { name: "mollotov_set_viewport_preset", description: "Activate a named viewport preset such as Compact / Base, Standard / Pro, or foldable sizes. Linux does not support viewport presets yet.", method: "setViewportPreset", schema: { device, presetId: z.string().describe("Viewport preset id returned by getViewportPresets") }, bodyFromArgs: passthrough },
   { name: "mollotov_is_element_obscured", description: "Check if an element is obscured by keyboard or other elements", method: "isElementObscured", schema: { device, selector }, bodyFromArgs: passthrough },
 
   // Orientation

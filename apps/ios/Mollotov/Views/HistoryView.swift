@@ -46,6 +46,7 @@ struct HistoryView: View {
                                     }
                                 }
                             }
+                            .accessibilityIdentifier("browser.history.row.\(entry.id.uuidString)")
                         }
                     }
                 }
@@ -55,10 +56,12 @@ struct HistoryView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Done") { dismiss() }
+                        .accessibilityIdentifier("browser.history.done")
                 }
                 if !store.entries.isEmpty {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button("Clear", role: .destructive) { store.clear() }
+                            .accessibilityIdentifier("browser.history.clear")
                     }
                 }
             }

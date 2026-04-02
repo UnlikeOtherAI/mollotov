@@ -30,6 +30,7 @@ struct NavigationHandler {
         }
 
         let loadTime = Int((CFAbsoluteTimeGetCurrent() - start) * 1000)
+        await context.persistRendererCookiesToSharedJar()
         return successResponse([
             "url": context.currentURL?.absoluteString ?? urlString,
             "title": context.currentTitle,
@@ -42,6 +43,7 @@ struct NavigationHandler {
         guard context.renderer != nil else { return errorResponse(code: "NO_WEBVIEW", message: "No WebView") }
         context.goBack()
         try? await Task.sleep(nanoseconds: 500_000_000)
+        await context.persistRendererCookiesToSharedJar()
         return successResponse(["url": context.currentURL?.absoluteString ?? "", "title": context.currentTitle])
     }
 
@@ -50,6 +52,7 @@ struct NavigationHandler {
         guard context.renderer != nil else { return errorResponse(code: "NO_WEBVIEW", message: "No WebView") }
         context.goForward()
         try? await Task.sleep(nanoseconds: 500_000_000)
+        await context.persistRendererCookiesToSharedJar()
         return successResponse(["url": context.currentURL?.absoluteString ?? "", "title": context.currentTitle])
     }
 
@@ -63,6 +66,7 @@ struct NavigationHandler {
             if !context.isLoadingPage { break }
         }
         let loadTime = Int((CFAbsoluteTimeGetCurrent() - start) * 1000)
+        await context.persistRendererCookiesToSharedJar()
         return successResponse(["url": context.currentURL?.absoluteString ?? "", "title": context.currentTitle, "loadTime": loadTime])
     }
 

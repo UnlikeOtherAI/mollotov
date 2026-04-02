@@ -12,6 +12,7 @@ const StringList kAllEngines = {"webkit", "chromium", "gecko"};
 const StringList kWebkitOnly = {"webkit"};
 const std::vector<P> kApplePlatforms = {P::kIos, P::kMacos};
 const std::vector<P> kMobilePlatforms = {P::kIos, P::kAndroid};
+const std::vector<P> kOrientationPlatforms = {P::kIos, P::kAndroid, P::kMacos};
 const std::vector<P> kRendererPlatforms = {P::kIos, P::kAndroid, P::kMacos, P::kLinux,
                                            P::kWindows};
 
@@ -171,9 +172,9 @@ std::vector<McpTool> CreateDefaultMcpTools() {
       Tool("mollotov_is_element_obscured", "is-element-obscured", "Check if an element is obscured by keyboard or other elements",
            CapabilityAvailability(kMobilePlatforms, kAllEngines, {"obscured-element-detection"})),
       Tool("mollotov_set_orientation", "set-orientation", "Force the device into portrait, landscape, or auto orientation. Useful for testing responsive layouts and orientation-dependent features.",
-           CapabilityAvailability(kMobilePlatforms, kAllEngines, {"orientation-control"})),
+           CapabilityAvailability(kOrientationPlatforms, kAllEngines, {"orientation-control"})),
       Tool("mollotov_get_orientation", "get-orientation", "Get the current device orientation and lock state",
-           CapabilityAvailability(kMobilePlatforms, kAllEngines, {"orientation-control"})),
+           CapabilityAvailability(kOrientationPlatforms, kAllEngines, {"orientation-control"})),
       Tool("mollotov_safari_auth", "safari-auth", "Open the current page (or a specific URL) in a Safari-backed authentication session. This lets the user authenticate using Safari's saved passwords and cookies, then syncs the session back into the browser. Use this when a login page requires credentials the user has saved in Safari, or when OAuth providers block in-app browsers. The user will see a Safari sheet and must complete authentication manually — the tool returns once they finish or cancel.",
            UiAvailability(kApplePlatforms, kWebkitOnly, {"safari-auth-session"})),
       Tool("mollotov_set_renderer", "set-renderer", "Switch the browser rendering engine when renderer switching is supported on the current platform. Available engines are platform-dependent and iOS alternative engines remain region-gated.",

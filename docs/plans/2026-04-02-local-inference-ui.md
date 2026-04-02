@@ -535,19 +535,109 @@ Identical structure to iOS, using Material 3 components:
 
 ## URL Bar AI Status Pill
 
-When a model is loaded, show a compact pill in the URL bar area.
+The AI pill lives in the URL bar on every platform. It's always visible when a model is loaded — this is a first-class feature, not buried in settings.
+
+### iOS
+
+The URL bar is `< > [URL field]`. The pill sits to the right of the URL field as a 34x34 tappable circle (matching nav button size). When no model is loaded, the pill isn't shown and the URL field stretches to fill.
 
 ```
-┌─────────────────────────────────────────────┐
-│ ← → ↻  https://example.com     [brain 👁]  │   vision model loaded
-│ ← → ↻  https://example.com     [brain ⊘]  │   text-only model loaded
-│ ← → ↻  https://example.com                │   no model loaded
-└─────────────────────────────────────────────┘
+No model:
+┌──────────────────────────────────────────────────┐
+│  <  >  [  https://example.com                  ] │
+└──────────────────────────────────────────────────┘
+
+Vision model loaded:
+┌──────────────────────────────────────────────────┐
+│  <  >  [  https://example.com          ]  (🧠👁) │
+└──────────────────────────────────────────────────┘
+
+Text-only model loaded:
+┌──────────────────────────────────────────────────┐
+│  <  >  [  https://example.com          ]  (🧠⊘) │
+└──────────────────────────────────────────────────┘
 ```
 
-- Font Awesome `fa-brain` (U+F5DC) + `fa-eye` or `fa-eye-slash`
-- Pill is tappable/clickable — shows popover with model name, backend, RAM usage, and [Unload] button
-- Pill color: subtle accent (e.g. system tint) when loaded, not shown when no model
+The pill is a circle with `fa-brain` as the main icon. A tiny 10px badge in the bottom-right corner shows `fa-eye` (vision) or `fa-eye-slash` (text-only). Background is a subtle tinted fill (e.g. `systemGray5` with accent overlay when active).
+
+**Tapping the pill** shows a popover sheet:
+
+```
+┌────────────────────────────────────┐
+│                                    │
+│  🧠  Gemma 4 E2B Q4               │
+│                                    │
+│  👁  Text + Vision                 │
+│  3.8 GB RAM  •  native             │
+│  Speed: moderate                   │
+│                                    │
+│  ┌──────────┐   ┌──────────────┐   │
+│  │  Unload  │   │  AI Settings │   │
+│  └──────────┘   └──────────────┘   │
+│                                    │
+└────────────────────────────────────┘
+```
+
+"AI Settings" navigates to the full model list (same as Settings > AI > Active Model).
+
+**When no model is loaded** — the pill spot is empty. But to make AI discoverable, add a subtle ghost pill on first launch (or until the user has configured AI):
+
+```
+┌──────────────────────────────────────────────────┐
+│  <  >  [  https://example.com          ]  (🧠?)  │
+└──────────────────────────────────────────────────┘
+```
+
+Tapping the ghost pill opens the AI models screen directly. After the user either loads a model or explicitly dismisses, the ghost pill disappears permanently (stored in `UserDefaults`).
+
+### macOS
+
+The pill sits between the address field and the selectors row. It's a capsule shape showing the brain icon + model name.
+
+```
+Wide window:
+← → ↻ [ https://example.com ] [🧠 👁 Gemma 4 Q4] [iPhone 15 ▾] [⬜▬] [Safari Chrome] [−100%+]
+
+Narrow window (selectors on second row):
+← → ↻ [ https://example.com ] [🧠 👁 Gemma 4 Q4]
+       [iPhone 15 ▾] [⬜▬] [Safari Chrome] [−100%+]
+
+No model:
+← → ↻ [ https://example.com ] [iPhone 15 ▾] [⬜▬] [Safari Chrome] [−100%+]
+```
+
+The macOS pill has room to show the model name inline. Clicking it shows a popover with model info and an Unload button, same content as iOS.
+
+When no model is loaded, the pill is hidden. No ghost pill on macOS — the Settings panel is discoverable enough.
+
+### Android
+
+Same layout as iOS — pill to the right of the URL field, same 34dp tappable circle, same popover behavior.
+
+### Pill Implementation (all platforms)
+
+The pill component needs:
+
+```swift
+// iOS/macOS
+struct AIStatusPill: View {
+    @ObservedObject var aiState: AIState  // Published: isLoaded, modelName, hasVision, backend, ramUsageMB
+
+    var body: some View {
+        // If no model loaded: hidden (or ghost on iOS first-launch)
+        // If loaded: 34pt circle with fa-brain, vision badge
+        // Tap -> popover
+    }
+}
+```
+
+```kotlin
+// Android
+@Composable
+fun AIStatusPill(aiState: AIState, onTap: () -> Unit)
+```
+
+The `AIState` observable is shared with the AIHandler — it updates when models are loaded/unloaded.
 
 ---
 

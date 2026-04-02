@@ -111,6 +111,14 @@ struct BrowserView: View {
             )
             .frame(width: 0, height: 0)
         )
+        .background(
+            BrowserCommandBridge(
+                actions: BrowserCommandActions(
+                    hardReload: { serverState.handlerContext.hardReloadPage() }
+                )
+            )
+            .frame(width: 0, height: 0)
+        )
         .sheet(isPresented: $showSettings) {
             SettingsView(serverState: serverState, rendererState: rendererState)
         }
@@ -140,6 +148,12 @@ struct BrowserView: View {
             Task { @MainActor in
                 await connectRendererState()
             }
+        }
+        .onChange(of: viewportState.resolutionLabel) { _, _ in
+            notifyRendererViewportChangeIfNeeded()
+        }
+        .onChange(of: viewportState.showsViewportStageChrome) { _, _ in
+            notifyRendererViewportChangeIfNeeded()
         }
         .onExitCommand {
             if showWelcome && shouldShowWelcomeCard {
@@ -213,16 +227,29 @@ struct BrowserView: View {
         serverState.handlerContext.load(url: url)
     }
 
+    private func notifyRendererViewportChangeIfNeeded() {
+        guard rendererState.activeEngine == .chromium else { return }
+        guard viewportState.showsViewportStageChrome else { return }
+        serverState.handlerContext.renderer?.viewportDidChange()
+    }
+
     @ViewBuilder
     private var rendererSurface: some View {
-        Group {
-            if rendererState.isSwitching {
-                ViewportStageView(viewportState: viewportState) {
+        ViewportStageView(
+            viewportState: viewportState,
+            stageScale: rendererState.activeEngine == .chromium ? 1.0 : viewportState.scale
+        ) {
+            ZStack {
+                RendererContainerView(serverState: serverState, rendererState: rendererState)
+
+                if rendererState.isSwitching {
+                    Color.black.opacity(0.12)
+                        .ignoresSafeArea()
+
                     ProgressView("Switching renderer...")
-                }
-            } else {
-                ViewportStageView(viewportState: viewportState) {
-                    RendererContainerView(serverState: serverState, rendererState: rendererState)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 12)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
             }
         }
@@ -231,6 +258,7 @@ struct BrowserView: View {
 
 private struct ViewportStageView<Content: View>: View {
     @ObservedObject var viewportState: ViewportState
+    let stageScale: Double
     let content: () -> Content
 
     private let stageColor = Color(nsColor: NSColor(calibratedWhite: 0.17, alpha: 1))
@@ -238,9 +266,11 @@ private struct ViewportStageView<Content: View>: View {
 
     init(
         viewportState: ViewportState,
+        stageScale: Double,
         @ViewBuilder content: @escaping () -> Content
     ) {
         self.viewportState = viewportState
+        self.stageScale = stageScale
         self.content = content
     }
 
@@ -250,8 +280,9 @@ private struct ViewportStageView<Content: View>: View {
     var body: some View {
         GeometryReader { geometry in
             let vp     = viewportState.viewportSize
-            let scale  = viewportState.scale
             let chrome = viewportState.showsViewportStageChrome
+            // Scale only applies in preset/custom mode — Full always fills the stage.
+            let scale  = chrome ? stageScale : 1.0
 
             // Visual size of the viewport after applying scale.
             let scaledW = (vp.width  * scale).rounded(.down)
@@ -314,37 +345,40 @@ private struct ViewportStageView<Content: View>: View {
 
     @ViewBuilder
     private func stageChromeHeader(width: CGFloat) -> some View {
-        ZStack {
-            Text(viewportState.stageSummaryLabel)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(Color.black.opacity(0.9))
-                .clipShape(Capsule())
-                .overlay {
-                    Capsule().stroke(Color.white.opacity(0.9), lineWidth: 1)
-                }
-                .accessibilityIdentifier("browser.viewport.summary")
-        }
-        .frame(width: max(width, 200), height: Self.stageChromeHeight)
-        .overlay(alignment: .leading) {
+        HStack(spacing: 6) {
             Button {
                 _ = viewportState.selectFullViewport()
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(.white)
-                    .frame(width: 34, height: 34)
+                    .frame(width: 28, height: 28)
                     .background(Color.black.opacity(0.9))
                     .clipShape(Circle())
-                    .overlay {
-                        Circle().stroke(Color.white.opacity(0.9), lineWidth: 1)
-                    }
+                    .overlay { Circle().stroke(Color.white.opacity(0.9), lineWidth: 1) }
+                    .contentShape(Circle())
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("browser.viewport.close")
+
+            Text(viewportState.stageSummaryLabel)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .truncationMode(.tail)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .frame(maxWidth: .infinity)
+                .background(Color.black.opacity(0.9))
+                .clipShape(Capsule())
+                .overlay { Capsule().stroke(Color.white.opacity(0.9), lineWidth: 1) }
+                .accessibilityIdentifier("browser.viewport.summary")
+
+            // Balance spacer matching the close button width
+            Color.clear.frame(width: 28, height: 28)
         }
+        .frame(width: max(width, 80), height: Self.stageChromeHeight)
     }
 }
 

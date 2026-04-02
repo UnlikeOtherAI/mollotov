@@ -218,6 +218,7 @@ struct BrowserManagementHandler {
             width: body["width"] as? Int,
             height: body["height"] as? Int
         )
+        await context.waitForViewportSize(viewport)
         let stage = viewportState.fullStageDimensions
 
         return successResponse([
@@ -230,6 +231,7 @@ struct BrowserManagementHandler {
     @MainActor
     private func resetViewport() async -> [String: Any] {
         let viewport = viewportState.resetViewport()
+        await context.waitForViewportSize(viewport)
         return successResponse([
             "viewport": ["width": Int(viewport.width), "height": Int(viewport.height)],
             "activePresetId": NSNull(),
@@ -257,6 +259,7 @@ struct BrowserManagementHandler {
         guard let viewport = viewportState.selectPreset(presetID) else {
             return errorResponse(code: "INVALID_PARAM", message: "Viewport preset \(presetID) could not be selected")
         }
+        await context.waitForViewportSize(viewport)
 
         return successResponse([
             "activePresetId": preset.id,

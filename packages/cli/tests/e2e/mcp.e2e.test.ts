@@ -8,13 +8,15 @@ import { BrowserMcpTools, CliMcpTools } from "@unlikeotherai/mollotov-shared";
  */
 describe("E2E: MCP Tool Definitions", () => {
   it("browser MCP tools cover all expected methods", () => {
-    expect(BrowserMcpTools.length).toBe(83);
+    expect(BrowserMcpTools.length).toBe(92);
     // Spot check key tools
     expect(BrowserMcpTools).toContain("mollotov_navigate");
     expect(BrowserMcpTools).toContain("mollotov_screenshot");
     expect(BrowserMcpTools).toContain("mollotov_click");
     expect(BrowserMcpTools).toContain("mollotov_get_accessibility_tree");
     expect(BrowserMcpTools).toContain("mollotov_get_page_text");
+    expect(BrowserMcpTools).toContain("mollotov_get_viewport_presets");
+    expect(BrowserMcpTools).toContain("mollotov_set_viewport_preset");
   });
 
   it("CLI MCP tools cover all expected methods", () => {
@@ -24,8 +26,8 @@ describe("E2E: MCP Tool Definitions", () => {
     expect(CliMcpTools).toContain("mollotov_list_devices");
   });
 
-  it("total MCP tools is 102", () => {
-    expect(BrowserMcpTools.length + CliMcpTools.length).toBe(103);
+  it("total MCP tools is 112", () => {
+    expect(BrowserMcpTools.length + CliMcpTools.length).toBe(112);
   });
 });
 

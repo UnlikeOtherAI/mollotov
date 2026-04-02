@@ -7,10 +7,22 @@ final class HTTPServer: @unchecked Sendable {
     let port: UInt16
     let router: Router
     private var listener: NWListener?
+    private var bonjourService: NWListener.Service?
+    var onBonjourStateChange: ((Bool) -> Void)?
+    var onStateChange: ((Bool) -> Void)?
 
     init(port: UInt16 = 8420, router: Router) {
         self.port = port
         self.router = router
+    }
+
+    func configureBonjourService(
+        name: String,
+        type: String,
+        txtRecord: NWTXTRecord
+    ) {
+        bonjourService = NWListener.Service(name: name, type: type, txtRecord: txtRecord)
+        listener?.service = bonjourService
     }
 
     func start() {
@@ -20,7 +32,23 @@ final class HTTPServer: @unchecked Sendable {
             listener = try NWListener(using: params, on: NWEndpoint.Port(rawValue: port)!)
         } catch {
             print("[HTTPServer] Failed to create listener: \(error)")
+            onBonjourStateChange?(false)
             return
+        }
+
+        listener?.service = bonjourService
+        listener?.serviceRegistrationUpdateHandler = { [weak self] change in
+            guard let self else { return }
+            switch change {
+            case .add(let endpoint):
+                print("[mDNS] Advertising: \(endpoint)")
+                self.onBonjourStateChange?(true)
+            case .remove(let endpoint):
+                print("[mDNS] Removed: \(endpoint)")
+                self.onBonjourStateChange?(false)
+            @unknown default:
+                break
+            }
         }
 
         listener?.newConnectionHandler = { [weak self] connection in
@@ -30,8 +58,14 @@ final class HTTPServer: @unchecked Sendable {
             switch state {
             case .ready:
                 print("[HTTPServer] Listening on port \(self.port)")
+                self.onStateChange?(true)
             case .failed(let error):
                 print("[HTTPServer] Listener failed: \(error)")
+                self.onBonjourStateChange?(false)
+                self.onStateChange?(false)
+            case .cancelled:
+                self.onBonjourStateChange?(false)
+                self.onStateChange?(false)
             default:
                 break
             }
@@ -42,6 +76,8 @@ final class HTTPServer: @unchecked Sendable {
     func stop() {
         listener?.cancel()
         listener = nil
+        onBonjourStateChange?(false)
+        onStateChange?(false)
     }
 
     private func handleConnection(_ connection: NWConnection) {
@@ -63,7 +99,7 @@ final class HTTPServer: @unchecked Sendable {
                 let headerString = String(data: accumulated[..<headerEnd.lowerBound], encoding: .utf8) ?? ""
                 let contentLength = self.parseContentLength(headerString)
                 let bodyStart = headerEnd.upperBound
-                let bodyReceived = accumulated.count - bodyStart.hashValue
+                let bodyReceived = accumulated.distance(from: bodyStart, to: accumulated.endIndex)
 
                 if bodyReceived >= contentLength {
                     Task {

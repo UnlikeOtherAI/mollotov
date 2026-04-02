@@ -497,6 +497,10 @@ Response:
 ### `resizeViewport`
 Simulate a reduced viewport size — shrink the visible area as if the keyboard, a toolbar, or another overlay is present. This does NOT change the actual device resolution; it constrains the WebView's visible bounds. Useful for testing responsive layouts at arbitrary viewport dimensions.
 
+On macOS this updates the hosted viewport inside the browser shell and does not resize the native window. If the requested viewport is larger than the visible stage, Mollotov keeps the full requested size and makes the shell scrollable instead of scaling the viewport down.
+
+Any `resize-viewport` call clears the active named viewport preset and enters raw custom viewport mode on macOS.
+
 ```json
 POST /v1/resize-viewport
 {
@@ -508,12 +512,15 @@ Response:
 {
   "success": true,
   "viewport": {"width": 390, "height": 500},
-  "originalViewport": {"width": 390, "height": 844}
+  "originalViewport": {"width": 390, "height": 844},
+  "activePresetId": null
 }
 ```
 
 ### `resetViewport`
 Restore the viewport to its original full-screen dimensions.
+
+On every supported platform this also clears the active named viewport preset. On macOS it returns to the full shell viewport instead of re-applying the last preset.
 
 ```json
 POST /v1/reset-viewport
@@ -521,7 +528,75 @@ POST /v1/reset-viewport
 Response:
 {
   "success": true,
-  "viewport": {"width": 390, "height": 844}
+  "viewport": {"width": 390, "height": 844},
+  "activePresetId": null
+}
+```
+
+### `setViewportPreset`
+Activate one of the shared named viewport presets returned by `getViewportPresets`.
+
+Supported on iPad, Android tablets, and macOS. Linux does not support named viewport presets yet.
+
+```json
+POST /v1/set-viewport-preset
+{
+  "presetId": "compact-base"
+}
+
+Response:
+{
+  "success": true,
+  "activePresetId": "compact-base",
+  "preset": {
+    "id": "compact-base",
+    "name": "Compact / Base",
+    "inches": "6.1\" - 6.3\"",
+    "pixels": "1170 x 2532 - 1206 x 2622"
+  },
+  "viewport": {"width": 393, "height": 852}
+}
+```
+
+### `setOrientation`
+Force the current browser orientation when the platform supports explicit orientation changes.
+
+On macOS this does not rotate the native window. It only changes the staged viewport orientation when a named viewport preset is active. `full` mode and raw `custom` viewport mode return `INVALID_STATE` with an explanation instead of silently failing. `auto` is not supported on macOS staged presets.
+
+macOS error reasons:
+- `full-viewport`: a named preset is required before orientation can change
+- `custom-viewport`: raw custom sizes have no orientation control
+- `auto-unsupported`: staged macOS presets only accept explicit `portrait` or `landscape`
+
+```json
+POST /v1/set-orientation
+{
+  "orientation": "landscape"
+}
+
+Response:
+{
+  "success": true,
+  "orientation": "landscape",
+  "locked": "landscape",
+  "activePresetId": "compact-base",
+  "viewport": {"width": 852, "height": 393}
+}
+```
+
+### `getOrientation`
+Get the current browser orientation and lock state.
+
+On macOS the reported orientation always matches the current hosted viewport dimensions. `locked` is only set when a named viewport preset is active; `full` and raw `custom` viewport modes return `null` because there is no separate lock state there.
+
+```json
+POST /v1/get-orientation
+
+Response:
+{
+  "success": true,
+  "orientation": "portrait",
+  "locked": null
 }
 ```
 

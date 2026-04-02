@@ -3,8 +3,10 @@
 #import <crt_externs.h>
 
 #include <atomic>
+#include <mutex>
 #include <stddef.h>
 #include <string.h>
+#include <unordered_map>
 
 static inline NSString *StringFromCEFString(const cef_string_t *value) {
     if (value == nullptr || value->str == nullptr || value->length == 0) {
@@ -15,18 +17,19 @@ static inline NSString *StringFromCEFString(const cef_string_t *value) {
 
 static char **sAugmentedArgv = nullptr;
 static int sAugmentedArgc = 0;
+static const char *kUseMockKeychainArg = "--use-mock-keychain";
 
 cef_main_args_t CEFBridgeMainArgs(void) {
     if (sAugmentedArgv == nullptr) {
         int origArgc = *_NSGetArgc();
         char **origArgv = *_NSGetArgv();
-        // Inject --use-mock-keychain to prevent Keychain password prompts
+        // Inject --use-mock-keychain to prevent Keychain password prompts.
         sAugmentedArgc = origArgc + 1;
         sAugmentedArgv = (char **)calloc(sAugmentedArgc + 1, sizeof(char *));
         for (int i = 0; i < origArgc; i++) {
             sAugmentedArgv[i] = origArgv[i];
         }
-        sAugmentedArgv[origArgc] = (char *)"--use-mock-keychain";
+        sAugmentedArgv[origArgc] = (char *)kUseMockKeychainArg;
     }
     cef_main_args_t args = {};
     args.argc = sAugmentedArgc;
@@ -190,6 +193,7 @@ struct DeleteCookiesCallback {
     cef_delete_cookies_callback_t callback;
     RefCountedState ref;
     void (^completion)(NSInteger);
+    std::atomic<bool> finished;
 };
 
 struct FlushCallback {
@@ -197,6 +201,18 @@ struct FlushCallback {
     RefCountedState ref;
     void (^completion)(void);
 };
+
+struct DevToolsScreenshotObserver {
+    cef_dev_tools_message_observer_t observer;
+    RefCountedState ref;
+    __strong NSMutableDictionary<NSNumber *, id> *pendingCompletions;
+    std::atomic<int> nextMessageID;
+    cef_registration_t *registration;
+    int browserID;
+};
+
+static std::mutex sDevToolsScreenshotObserversMutex;
+static std::unordered_map<int, DevToolsScreenshotObserver *> sDevToolsScreenshotObservers;
 
 #define DEFINE_REFCOUNTED_FUNCS(Type, field, Prefix) \
     static void Prefix##AddRef(cef_base_ref_counted_t *base) { AddRefImpl<Type>(base, offsetof(Type, field)); } \
@@ -212,6 +228,31 @@ DEFINE_REFCOUNTED_FUNCS(CookieVisitor, visitor, CookieVisitor)
 DEFINE_REFCOUNTED_FUNCS(SetCookieCallback, callback, SetCookie)
 DEFINE_REFCOUNTED_FUNCS(DeleteCookiesCallback, callback, DeleteCookies)
 DEFINE_REFCOUNTED_FUNCS(FlushCallback, callback, Flush)
+static void DevToolsScreenshotAddRef(cef_base_ref_counted_t *base) {
+    AddRefImpl<DevToolsScreenshotObserver>(base, offsetof(DevToolsScreenshotObserver, observer));
+}
+
+static int DevToolsScreenshotRelease(cef_base_ref_counted_t *base) {
+    DevToolsScreenshotObserver *observer = StructFromBase<DevToolsScreenshotObserver>(base, offsetof(DevToolsScreenshotObserver, observer));
+    if (observer->ref.count.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+        if (observer->registration != nullptr) {
+            observer->registration->base.release(&observer->registration->base);
+            observer->registration = nullptr;
+        }
+        observer->pendingCompletions = nil;
+        delete observer;
+        return 1;
+    }
+    return 0;
+}
+
+static int DevToolsScreenshotHasOneRef(cef_base_ref_counted_t *base) {
+    return HasOneRefImpl<DevToolsScreenshotObserver>(base, offsetof(DevToolsScreenshotObserver, observer));
+}
+
+static int DevToolsScreenshotHasAtLeastOneRef(cef_base_ref_counted_t *base) {
+    return HasAtLeastOneRefImpl<DevToolsScreenshotObserver>(base, offsetof(DevToolsScreenshotObserver, observer));
+}
 
 static cef_life_span_handler_t *GetLifeSpanHandler(cef_client_t *self) {
     BridgeClient *client = StructFromBase<BridgeClient>(&self->base, offsetof(BridgeClient, client));
@@ -545,7 +586,7 @@ static void SetCookieComplete(cef_set_cookie_callback_t *self, int success) {
 
 static void DeleteCookiesComplete(cef_delete_cookies_callback_t *self, int numDeleted) {
     DeleteCookiesCallback *callback = StructFromBase<DeleteCookiesCallback>(&self->base, offsetof(DeleteCookiesCallback, callback));
-    if (callback->completion != nil) {
+    if (!callback->finished.exchange(true) && callback->completion != nil) {
         dispatch_async(dispatch_get_main_queue(), ^{ callback->completion(numDeleted); });
     }
 }
@@ -585,6 +626,7 @@ static DeleteCookiesCallback *CreateDeleteCookiesCallback(void (^completion)(NSI
     memset(callback, 0, sizeof(DeleteCookiesCallback));
     callback->ref.count = 1;
     callback->completion = [completion copy];
+    callback->finished = false;
     callback->callback.base.size = sizeof(callback->callback);
     callback->callback.base.add_ref = DeleteCookiesAddRef;
     callback->callback.base.release = DeleteCookiesRelease;
@@ -614,6 +656,163 @@ static FlushCallback *CreateFlushCallback(void (^completion)(void)) {
     callback->callback.base.has_at_least_one_ref = FlushHasAtLeastOneRef;
     callback->callback.on_complete = FlushComplete;
     return callback;
+}
+
+static NSData *PNGDataFromDevToolsResult(const void *result, size_t resultSize) {
+    if (result == nullptr || resultSize == 0) {
+        return nil;
+    }
+    NSData *jsonData = [NSData dataWithBytes:result length:resultSize];
+    NSDictionary *payload = [NSJSONSerialization JSONObjectWithData:jsonData options:0 error:nil];
+    NSString *base64 = [payload isKindOfClass:[NSDictionary class]] ? payload[@"data"] : nil;
+    if (![base64 isKindOfClass:[NSString class]] || base64.length == 0) {
+        return nil;
+    }
+    return [[NSData alloc] initWithBase64EncodedString:base64 options:0];
+}
+
+static int OnDevToolsScreenshotMessage(cef_dev_tools_message_observer_t *self,
+                                       cef_browser_t *browser,
+                                       const void *message,
+                                       size_t messageSize);
+static void OnDevToolsScreenshotResult(cef_dev_tools_message_observer_t *self,
+                                       cef_browser_t *browser,
+                                       int messageID,
+                                       int success,
+                                       const void *result,
+                                       size_t resultSize);
+static void OnDevToolsScreenshotEvent(cef_dev_tools_message_observer_t *self,
+                                      cef_browser_t *browser,
+                                      const cef_string_t *method,
+                                      const void *params,
+                                      size_t paramsSize);
+static void OnDevToolsScreenshotAgentAttached(cef_dev_tools_message_observer_t *self,
+                                              cef_browser_t *browser);
+static void OnDevToolsScreenshotAgentDetached(cef_dev_tools_message_observer_t *self,
+                                              cef_browser_t *browser);
+
+static void CompletePendingDevToolsScreenshot(DevToolsScreenshotObserver *observer, int messageID, NSData *pngData) {
+    if (observer == nullptr || messageID == 0) {
+        return;
+    }
+
+    NSNumber *key = @(messageID);
+    void (^completion)(NSData * _Nullable) = nil;
+    id stored = observer->pendingCompletions[key];
+    if (stored != nil) {
+        completion = [stored copy];
+    }
+    [observer->pendingCompletions removeObjectForKey:key];
+
+    if (completion != nil) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            completion(pngData);
+        });
+    }
+}
+
+static void CompleteAllPendingDevToolsScreenshots(DevToolsScreenshotObserver *observer, NSData *pngData) {
+    if (observer == nullptr || observer->pendingCompletions.count == 0) {
+        return;
+    }
+
+    NSArray<NSNumber *> *keys = observer->pendingCompletions.allKeys;
+    for (NSNumber *key in keys) {
+        CompletePendingDevToolsScreenshot(observer, key.intValue, pngData);
+    }
+}
+
+static DevToolsScreenshotObserver *CreateDevToolsScreenshotObserver(void) {
+    DevToolsScreenshotObserver *observer = new DevToolsScreenshotObserver();
+    observer->ref.count = 1;
+    observer->pendingCompletions = [NSMutableDictionary dictionary];
+    observer->nextMessageID = 1;
+    observer->registration = nullptr;
+    observer->browserID = 0;
+    observer->observer = {};
+    observer->observer.base.size = sizeof(observer->observer);
+    observer->observer.base.add_ref = DevToolsScreenshotAddRef;
+    observer->observer.base.release = DevToolsScreenshotRelease;
+    observer->observer.base.has_one_ref = DevToolsScreenshotHasOneRef;
+    observer->observer.base.has_at_least_one_ref = DevToolsScreenshotHasAtLeastOneRef;
+    observer->observer.on_dev_tools_message = OnDevToolsScreenshotMessage;
+    observer->observer.on_dev_tools_method_result = OnDevToolsScreenshotResult;
+    observer->observer.on_dev_tools_event = OnDevToolsScreenshotEvent;
+    observer->observer.on_dev_tools_agent_attached = OnDevToolsScreenshotAgentAttached;
+    observer->observer.on_dev_tools_agent_detached = OnDevToolsScreenshotAgentDetached;
+    return observer;
+}
+
+static DevToolsScreenshotObserver *CopyDevToolsScreenshotObserver(cef_browser_host_t *host) {
+    if (host == nullptr || host->get_browser == nullptr || host->add_dev_tools_message_observer == nullptr) {
+        return nullptr;
+    }
+
+    cef_browser_t *browser = host->get_browser(host);
+    if (browser == nullptr) {
+        return nullptr;
+    }
+
+    const int browserID = browser->get_identifier != nullptr ? browser->get_identifier(browser) : 0;
+    browser->base.release(&browser->base);
+    if (browserID == 0) {
+        return nullptr;
+    }
+
+    std::lock_guard<std::mutex> lock(sDevToolsScreenshotObserversMutex);
+    if (auto it = sDevToolsScreenshotObservers.find(browserID); it != sDevToolsScreenshotObservers.end()) {
+        it->second->observer.base.add_ref(&it->second->observer.base);
+        return it->second;
+    }
+
+    DevToolsScreenshotObserver *observer = CreateDevToolsScreenshotObserver();
+    observer->browserID = browserID;
+    observer->registration = host->add_dev_tools_message_observer(host, &observer->observer);
+    if (observer->registration == nullptr) {
+        observer->observer.base.release(&observer->observer.base);
+        return nullptr;
+    }
+
+    sDevToolsScreenshotObservers.emplace(browserID, observer);
+    observer->observer.base.add_ref(&observer->observer.base);
+    return observer;
+}
+
+static int OnDevToolsScreenshotMessage(cef_dev_tools_message_observer_t *, cef_browser_t *, const void *, size_t) {
+    return 0;
+}
+
+static void OnDevToolsScreenshotResult(cef_dev_tools_message_observer_t *self,
+                                       cef_browser_t *,
+                                       int messageID,
+                                       int success,
+                                       const void *result,
+                                       size_t resultSize) {
+    DevToolsScreenshotObserver *observer = StructFromBase<DevToolsScreenshotObserver>(&self->base, offsetof(DevToolsScreenshotObserver, observer));
+    if (!success) {
+        NSString *errorText = result != nullptr && resultSize > 0
+            ? [[NSString alloc] initWithBytes:result length:resultSize encoding:NSUTF8StringEncoding]
+            : @"<no error payload>";
+        NSLog(@"[CEFBridge] DevTools screenshot failed id=%d error=%@", messageID, errorText);
+        CompletePendingDevToolsScreenshot(observer, messageID, nil);
+        return;
+    }
+    CompletePendingDevToolsScreenshot(observer, messageID, PNGDataFromDevToolsResult(result, resultSize));
+}
+
+static void OnDevToolsScreenshotEvent(cef_dev_tools_message_observer_t *,
+                                      cef_browser_t *,
+                                      const cef_string_t *,
+                                      const void *,
+                                      size_t) {
+}
+
+static void OnDevToolsScreenshotAgentAttached(cef_dev_tools_message_observer_t *, cef_browser_t *) {
+}
+
+static void OnDevToolsScreenshotAgentDetached(cef_dev_tools_message_observer_t *self, cef_browser_t *) {
+    DevToolsScreenshotObserver *observer = StructFromBase<DevToolsScreenshotObserver>(&self->base, offsetof(DevToolsScreenshotObserver, observer));
+    CompleteAllPendingDevToolsScreenshots(observer, nil);
 }
 
 void CEFBridgeVisitAllCookies(cef_cookie_manager_t *manager, void (^completion)(NSArray<NSDictionary *> *cookies)) {
@@ -691,9 +890,25 @@ void CEFBridgeDeleteAllCookies(cef_cookie_manager_t *manager, void (^completion)
         if (completion != nil) { completion(0); }
         return;
     }
-    DeleteCookiesCallback *callback = CreateDeleteCookiesCallback(completion ?: ^(NSInteger) {});
-    manager->delete_cookies(manager, nullptr, nullptr, &callback->callback);
+    void (^safeCompletion)(NSInteger) = [completion copy];
+    DeleteCookiesCallback *callback = CreateDeleteCookiesCallback(safeCompletion ?: ^(NSInteger) {});
+    callback->callback.base.add_ref(&callback->callback.base); // Keep alive for timeout fallback.
+    const int started = manager->delete_cookies(manager, nullptr, nullptr, &callback->callback);
+    if (!started) {
+        if (safeCompletion != nil) {
+            dispatch_async(dispatch_get_main_queue(), ^{ safeCompletion(0); });
+        }
+        callback->callback.base.release(&callback->callback.base);
+        callback->callback.base.release(&callback->callback.base);
+        return;
+    }
     callback->callback.base.release(&callback->callback.base);
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        if (!callback->finished.exchange(true) && safeCompletion != nil) {
+            safeCompletion(0);
+        }
+        callback->callback.base.release(&callback->callback.base);
+    });
 }
 
 void CEFBridgeFlushCookieStore(cef_cookie_manager_t *manager, void (^completion)(void)) {
@@ -707,4 +922,98 @@ void CEFBridgeFlushCookieStore(cef_cookie_manager_t *manager, void (^completion)
         dispatch_async(dispatch_get_main_queue(), completion);
     }
     callback->callback.base.release(&callback->callback.base);
+}
+
+void CEFBridgeCaptureScreenshot(cef_browser_host_t *host,
+                                CGSize logicalSize,
+                                void (^completion)(NSData * _Nullable pngData)) {
+    if (host == nullptr || logicalSize.width <= 0 || logicalSize.height <= 0) {
+        if (completion != nil) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                completion(nil);
+            });
+        }
+        return;
+    }
+
+    if (host->add_dev_tools_message_observer == nullptr || host->execute_dev_tools_method == nullptr) {
+        if (completion != nil) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                completion(nil);
+            });
+        }
+        return;
+    }
+
+    DevToolsScreenshotObserver *observer = CopyDevToolsScreenshotObserver(host);
+    if (observer == nullptr) {
+        if (completion != nil) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                completion(nil);
+            });
+        }
+        return;
+    }
+
+    const int messageID = observer->nextMessageID.fetch_add(1, std::memory_order_relaxed);
+    if (completion != nil) {
+        observer->pendingCompletions[@(messageID)] = [completion copy];
+    }
+
+    NSString *payload = [NSString stringWithFormat:
+        @"{\"id\":%d,\"method\":\"Page.captureScreenshot\",\"params\":{\"format\":\"png\",\"captureBeyondViewport\":true,\"clip\":{\"x\":0,\"y\":0,\"width\":%.0f,\"height\":%.0f,\"scale\":1}}}",
+        messageID,
+        logicalSize.width,
+        logicalSize.height
+    ];
+    NSData *payloadData = [payload dataUsingEncoding:NSUTF8StringEncoding];
+    const int submitted = payloadData != nil && host->send_dev_tools_message != nullptr
+        ? host->send_dev_tools_message(host, payloadData.bytes, payloadData.length)
+        : 0;
+    if (submitted == 0) {
+        NSLog(@"[CEFBridge] DevTools screenshot submit failed browserID=%d messageID=%d",
+              observer->browserID,
+              messageID);
+        CompletePendingDevToolsScreenshot(observer, messageID, nil);
+        observer->observer.base.release(&observer->observer.base);
+        return;
+    }
+
+    observer->observer.base.add_ref(&observer->observer.base);
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        CompletePendingDevToolsScreenshot(observer, messageID, nil);
+        observer->observer.base.release(&observer->observer.base);
+    });
+
+    observer->observer.base.release(&observer->observer.base);
+}
+
+void CEFBridgeInvalidateScreenshotCapture(cef_browser_t *browser) {
+    if (browser == nullptr || browser->get_identifier == nullptr) {
+        return;
+    }
+
+    const int browserID = browser->get_identifier(browser);
+    if (browserID == 0) {
+        return;
+    }
+
+    DevToolsScreenshotObserver *observer = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(sDevToolsScreenshotObserversMutex);
+        if (auto it = sDevToolsScreenshotObservers.find(browserID); it != sDevToolsScreenshotObservers.end()) {
+            observer = it->second;
+            sDevToolsScreenshotObservers.erase(it);
+        }
+    }
+
+    if (observer == nullptr) {
+        return;
+    }
+    CompleteAllPendingDevToolsScreenshots(observer, nil);
+    if (observer->registration != nullptr) {
+        observer->registration->base.release(&observer->registration->base);
+        observer->registration = nullptr;
+    }
+    observer->observer.base.release(&observer->observer.base);
 }

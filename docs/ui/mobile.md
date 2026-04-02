@@ -135,12 +135,21 @@ Slides in from the right edge when the settings icon is tapped. Covers approxima
 - Port number (editable, requires restart)
 - Device name (editable)
 
+**Help**
+- Show Welcome Screen
+- Open Mollotov Website
+- Open GitHub Repository
+- Open UnlikeOtherAI
+
 ### Interactions
 
 - **Open**: Tap settings gear icon — panel slides in from right
 - **Close**: Tap dimmed area outside panel, or swipe right on panel
 - **Copy URLs**: Tap any URL to copy to clipboard
 - **QR Code**: Always visible, updates if port changes
+- **Help / Welcome**: `Show Welcome Screen` reopens the welcome card even if automatic launch presentation was disabled earlier
+- **iPad App Menu**: The same welcome and support links are also available directly under the app menu's `Settings` item
+- **iPad View Menu**: `Full Width` and the currently fitting staged phone, tablet, and laptop viewport presets are available directly in the `View` menu
 
 ---
 
@@ -152,6 +161,24 @@ On iPads and Android tablets:
 - Settings panel is narrower (40% width) since there's more space
 - WebView remains the dominant element
 - No split-view or multi-window support (keep it simple)
+- Back and forward controls use full 44-point button targets instead of icon-only tap slivers.
+
+On iPad specifically:
+
+- The first-launch welcome card should cap its width to a modal-like width instead of expanding across the whole tablet.
+- The settings help section can reopen the welcome card even when automatic launch presentation was previously disabled.
+- The app menu also exposes `Show Welcome Screen`, `Open Mollotov Website`, `Open GitHub Repository`, and `Open UnlikeOtherAI` directly under `Settings`.
+- The `View` menu lists `Full Width` plus every staged phone, tablet, and laptop viewport preset that currently fits the tablet geometry.
+- The floating menu includes a phone icon that opens a pill picker for staged device-class viewports.
+- The picker uses the shared fitting preset list from the staged viewport catalog, sorted by screen size, and shows full labels such as `6.1" Compact`, `11" iPad Pro`, and `13" Laptop`.
+- The picker opens in its own lane outside the floating action fan and spills into extra columns if needed, so the pills do not sit on top of the action buttons.
+- When a preset is enabled, the browser renders inside a centered phone-sized stage instead of taking the full tablet width.
+- The staged viewport follows tablet orientation: portrait tablet -> phone portrait frame, landscape tablet -> phone landscape frame.
+- The staged viewport shows a persistent black close button with a white border above and to the left of the browser frame, so the smaller viewport can always be dismissed directly without sharing the browser edge.
+- A centered pill sits above the staged viewport with clear spacing and shows the simulated inches band and pixel range for the active preset.
+- The floating-menu fan uses a wider half-circle spread on tablets so every icon has comfortable spacing.
+- Android tablets mirror the same staged viewport picker, colors, close button, summary pill, and larger navigation targets.
+- Android mirrors the same settings help actions and welcome-screen trigger behavior as iPad.
 
 ---
 

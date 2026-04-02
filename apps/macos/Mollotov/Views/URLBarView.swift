@@ -92,6 +92,7 @@ struct URLBarView: View {
 
     @ViewBuilder
     private var scaleControl: some View {
+        let scaleSupported = rendererState.activeEngine != .chromium
         HStack(spacing: 0) {
             Button { viewportState.scaleDown() } label: {
                 Text("−")
@@ -99,9 +100,9 @@ struct URLBarView: View {
                     .frame(width: 30, height: 34)
                     .contentShape(Rectangle())
             }
-            .disabled(!viewportState.canScaleDown)
+            .disabled(!scaleSupported || !viewportState.canScaleDown)
 
-            Text(viewportState.scalePercentLabel)
+            Text(scaleSupported ? viewportState.scalePercentLabel : "100%")
                 .font(.system(size: 12, weight: .semibold, design: .monospaced))
                 .frame(minWidth: 40)
                 .lineLimit(1)
@@ -112,7 +113,7 @@ struct URLBarView: View {
                     .frame(width: 30, height: 34)
                     .contentShape(Rectangle())
             }
-            .disabled(!viewportState.canScaleUp)
+            .disabled(!scaleSupported || !viewportState.canScaleUp)
         }
         .foregroundStyle(.primary)
         .frame(height: 34)
@@ -207,9 +208,9 @@ struct URLBarView: View {
                     iconSize: 12
                 ),
             ],
-            selectedID: viewportState.orientation.rawValue,
+            selectedID: viewportState.reportedOrientation.rawValue,
             accessibilityID: "browser.orientation.switch",
-            isEnabled: viewportState.mode != .full,
+            isEnabled: viewportState.supportsOrientationSelection,
             onSelect: { id in
                 guard let o = ViewportOrientation(rawValue: id) else { return }
                 viewportState.selectOrientation(o)
@@ -229,6 +230,12 @@ struct URLBarView: View {
             if !viewportState.availableTabletPresets.isEmpty {
                 Divider()
                 ForEach(viewportState.availableTabletPresets) { preset in
+                    Button(preset.menuLabel) { _ = viewportState.selectPreset(preset.id) }
+                }
+            }
+            if !viewportState.availableLaptopPresets.isEmpty {
+                Divider()
+                ForEach(viewportState.availableLaptopPresets) { preset in
                     Button(preset.menuLabel) { _ = viewportState.selectPreset(preset.id) }
                 }
             }

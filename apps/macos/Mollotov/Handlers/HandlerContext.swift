@@ -155,10 +155,26 @@ final class HandlerContext {
     func goBack() { renderer?.goBack() }
     func goForward() { renderer?.goForward() }
     func reloadPage() { renderer?.reload() }
+    func hardReloadPage() { renderer?.hardReload() }
 
     func takeSnapshot() async throws -> NSImage {
         guard let renderer else { throw HandlerError.noWebView }
         return try await renderer.takeSnapshot()
+    }
+
+    func waitForViewportSize(_ size: CGSize) async {
+        guard let view = renderer?.makeView() else { return }
+        let expectedWidth = size.width
+        let expectedHeight = size.height
+
+        for _ in 0..<30 {
+            let bounds = view.bounds.size
+            if abs(bounds.width - expectedWidth) < 0.75 &&
+               abs(bounds.height - expectedHeight) < 0.75 {
+                return
+            }
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
     }
 
     func allCookies() async -> [HTTPCookie] {
@@ -237,7 +253,11 @@ final class HandlerContext {
             return
         }
 
-        if snapshot.modifiedAt != nil && snapshot.cookies.isEmpty {
+        if renderer.engineName == "chromium" && snapshot.cookies.isEmpty {
+            // CEF cookie deletion is unstable during renderer switches. The
+            // shared jar remains the source of truth, and Chromium no longer
+            // tries to wipe its store during activation.
+        } else if snapshot.modifiedAt != nil && snapshot.cookies.isEmpty {
             await renderer.deleteAllCookies()
         } else if !snapshot.cookies.isEmpty {
             await renderer.setCookies(snapshot.cookies)

@@ -1,5 +1,7 @@
 package com.mollotov.browser.ui
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -8,8 +10,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.mollotov.browser.device.DeviceInfo
 
@@ -18,7 +22,10 @@ fun SettingsScreen(
     deviceInfo: DeviceInfo,
     isServerRunning: Boolean,
     isMDNSAdvertising: Boolean,
+    onShowWelcome: () -> Unit,
 ) {
+    val context = LocalContext.current
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -47,6 +54,20 @@ fun SettingsScreen(
         InfoRow("Width", "${deviceInfo.width}px")
         InfoRow("Height", "${deviceInfo.height}px")
 
+        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+
+        SectionHeader("Help")
+        HelpActionRow("Show Welcome Screen", onClick = onShowWelcome)
+        HelpActionRow("Open Mollotov Website") {
+            openHelpURL(context, "https://unlikeotherai.github.io/mollotov")
+        }
+        HelpActionRow("Open GitHub Repository") {
+            openHelpURL(context, "https://github.com/UnlikeOtherAI/mollotov")
+        }
+        HelpActionRow("Open UnlikeOtherAI") {
+            openHelpURL(context, "https://unlikeotherai.com")
+        }
+
         Spacer(Modifier.height(8.dp))
         InfoRow("Version", deviceInfo.version)
         Spacer(Modifier.height(24.dp))
@@ -70,4 +91,27 @@ private fun InfoRow(label: String, value: String) {
         style = MaterialTheme.typography.bodyMedium,
         modifier = Modifier.padding(vertical = 2.dp),
     )
+}
+
+@Composable
+private fun HelpActionRow(
+    title: String,
+    onClick: () -> Unit,
+) {
+    TextButton(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text(
+            text = title,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+private fun openHelpURL(context: android.content.Context, value: String) {
+    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(value)).apply {
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    context.startActivity(intent)
 }

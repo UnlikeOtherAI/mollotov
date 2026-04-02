@@ -592,6 +592,22 @@ Response:
 }
 ```
 
+### `getOrientation`
+Get the current orientation and lock state.
+
+On macOS the orientation is derived from the hosted browser viewport, not the native window. `locked` is only non-null when a named viewport preset is active.
+
+```json
+POST /v1/get-orientation
+
+Response:
+{
+  "success": true,
+  "orientation": "landscape",
+  "locked": "landscape"
+}
+```
+
 ### `getDeviceInfo`
 Get comprehensive device metadata. This is the primary endpoint for LLMs to understand what device they're talking to. Returns everything the platform can report.
 

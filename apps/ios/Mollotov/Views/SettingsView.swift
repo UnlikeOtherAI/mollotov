@@ -4,7 +4,9 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var serverState: ServerState
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
     @AppStorage("debugOverlay") private var debugOverlay = false
+    let onShowWelcome: () -> Void
 
     var body: some View {
         NavigationView {
@@ -36,6 +38,25 @@ struct SettingsView: View {
                     Toggle("Debug Overlay", isOn: $debugOverlay)
                 }
 
+                Section("Help") {
+                    Button("Show Welcome Screen") {
+                        dismiss()
+                        onShowWelcome()
+                    }
+
+                    Button("Open Mollotov Website") {
+                        openHelpURL("https://unlikeotherai.github.io/mollotov")
+                    }
+
+                    Button("Open GitHub Repository") {
+                        openHelpURL("https://github.com/UnlikeOtherAI/mollotov")
+                    }
+
+                    Button("Open UnlikeOtherAI") {
+                        openHelpURL("https://unlikeotherai.com")
+                    }
+                }
+
                 Section("App") {
                     row("Version", serverState.deviceInfo.version)
                     #if DEBUG
@@ -62,5 +83,10 @@ struct SettingsView: View {
             Spacer()
             Text(value).textSelection(.enabled)
         }
+    }
+
+    private func openHelpURL(_ value: String) {
+        guard let url = URL(string: value) else { return }
+        openURL(url)
     }
 }

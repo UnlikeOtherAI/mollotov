@@ -34,9 +34,14 @@ fun WebViewContainer(
                 addJavascriptInterface(JsBridge(consoleHandler), "MollotovBridge")
 
                 webViewClient = object : WebViewClient() {
+                    private var documentNavigationUrl: String? = null
+                    private var didCaptureDocumentForNavigation = false
+
                     override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
                         browserState.updateUrl(url)
                         browserState.updateLoading(true)
+                        documentNavigationUrl = url
+                        didCaptureDocumentForNavigation = false
                     }
 
                     override fun onPageFinished(view: WebView, url: String) {
@@ -48,6 +53,23 @@ fun WebViewContainer(
                         // Inject bridge scripts after page load
                         view.evaluateJavascript(ConsoleHandler.BRIDGE_SCRIPT, null)
                         view.evaluateJavascript(JsBridge.NETWORK_BRIDGE_SCRIPT, null)
+
+                        if (!didCaptureDocumentForNavigation && documentNavigationUrl == url) {
+                            didCaptureDocumentForNavigation = true
+                            view.evaluateJavascript("(document.contentType || 'text/html')") { value ->
+                                val contentType = value
+                                    ?.trim()
+                                    ?.removePrefix("\"")
+                                    ?.removeSuffix("\"")
+                                    ?.takeIf { it.isNotEmpty() && it != "null" }
+                                    ?: "text/html"
+                                NetworkTrafficStore.appendDocumentNavigation(
+                                    url = url,
+                                    statusCode = 0,
+                                    contentType = contentType,
+                                )
+                            }
+                        }
                     }
 
                     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {

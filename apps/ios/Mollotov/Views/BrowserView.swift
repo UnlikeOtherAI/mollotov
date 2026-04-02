@@ -389,7 +389,7 @@ struct BrowserView: View {
     private var availableTabletViewportPresetOptions: [MobileViewportPresetOption] {
         tabletViewportPresets
             .filter { availableIPadViewportPresetIDs.contains($0.id) }
-            .map { MobileViewportPresetOption(id: $0.id, label: $0.label) }
+            .map { MobileViewportPresetOption(id: $0.id, label: $0.menuLabel) }
     }
 
     private func toggleTabletViewportPreset(_ presetID: String) {

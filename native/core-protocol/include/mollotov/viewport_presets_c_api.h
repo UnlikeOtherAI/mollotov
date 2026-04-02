@@ -8,7 +8,8 @@ extern "C" {
 
 typedef enum {
     MOLLOTOV_DEVICE_KIND_PHONE  = 0,
-    MOLLOTOV_DEVICE_KIND_TABLET = 1
+    MOLLOTOV_DEVICE_KIND_TABLET = 1,
+    MOLLOTOV_DEVICE_KIND_LAPTOP = 2
 } MollotovDeviceKind;
 
 typedef struct {

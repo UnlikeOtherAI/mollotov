@@ -13,6 +13,8 @@ final class WKWebViewRenderer: NSObject, RendererEngine, WKScriptMessageHandler,
     private var loadingObservation: NSKeyValueObservation?
     private var backObservation: NSKeyValueObservation?
     private var forwardObservation: NSKeyValueObservation?
+    private var documentNavigationStart: Date?
+    private var capturedDocumentResponseURL: String?
 
     // MARK: - Navigation state (published via onStateChange)
     private(set) var currentURL: URL?
@@ -59,6 +61,7 @@ final class WKWebViewRenderer: NSObject, RendererEngine, WKScriptMessageHandler,
     func goBack() { webView.goBack() }
     func goForward() { webView.goForward() }
     func reload() { webView.reload() }
+    func hardReload() { webView.reloadFromOrigin() }
 
     func evaluateJS(_ script: String) async throws -> Any? {
         try await webView.evaluateJavaScript(script)
@@ -89,7 +92,15 @@ final class WKWebViewRenderer: NSObject, RendererEngine, WKScriptMessageHandler,
 
     func takeSnapshot() async throws -> NSImage {
         let config = WKSnapshotConfiguration()
-        config.rect = webView.bounds
+        let hostBounds = webView.superview?.bounds ?? .zero
+        let snapshotBounds = hostBounds.width > 0 && hostBounds.height > 0 ? hostBounds : webView.bounds
+        config.rect = CGRect(
+            origin: .zero,
+            size: CGSize(
+                width: snapshotBounds.width.rounded(),
+                height: snapshotBounds.height.rounded()
+            )
+        )
         return try await webView.takeSnapshot(configuration: config)
     }
 
@@ -152,6 +163,24 @@ final class WKWebViewRenderer: NSObject, RendererEngine, WKScriptMessageHandler,
         }
     }
 
+    nonisolated func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        Task { @MainActor in
+            self.documentNavigationStart = Date()
+            self.capturedDocumentResponseURL = nil
+        }
+    }
+
+    nonisolated func webView(
+        _ webView: WKWebView,
+        decidePolicyFor navigationResponse: WKNavigationResponse,
+        decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void
+    ) {
+        Task { @MainActor in
+            self.recordMainDocumentResponse(navigationResponse)
+            decisionHandler(.allow)
+        }
+    }
+
     // MARK: - WKUIDelegate
 
     nonisolated func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
@@ -169,4 +198,32 @@ final class WKWebViewRenderer: NSObject, RendererEngine, WKScriptMessageHandler,
     // WKUserScript which is specific to this renderer.
     static let consoleBridgeScript: WKUserScript = ConsoleHandler.bridgeScript
     static let networkBridgeScript: WKUserScript = NetworkBridge.bridgeScript
+
+    private func recordMainDocumentResponse(_ navigationResponse: WKNavigationResponse) {
+        guard navigationResponse.isForMainFrame,
+              let response = navigationResponse.response as? HTTPURLResponse,
+              let url = response.url?.absoluteString,
+              capturedDocumentResponseURL != url else {
+            return
+        }
+
+        let contentType = response.mimeType
+            ?? response.value(forHTTPHeaderField: "Content-Type")
+            ?? "text/html"
+        let size = Int(response.expectedContentLength)
+        let responseHeaders = response.allHeaderFields.reduce(into: [String: String]()) { headers, item in
+            headers[String(describing: item.key)] = String(describing: item.value)
+        }
+
+        NetworkTrafficStore.shared.appendDocumentNavigation(
+            url: url,
+            statusCode: response.statusCode,
+            contentType: contentType,
+            responseHeaders: responseHeaders,
+            size: size > 0 ? size : 0,
+            startedAt: documentNavigationStart ?? Date()
+        )
+
+        capturedDocumentResponseURL = url
+    }
 }

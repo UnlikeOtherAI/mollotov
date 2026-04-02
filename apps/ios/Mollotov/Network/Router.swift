@@ -39,7 +39,7 @@ final class Router: @unchecked Sendable {
             "get-element-text", "get-attributes", "click", "tap", "fill",
             "type", "select-option", "check", "uncheck", "scroll", "scroll2",
             "scroll-to-top", "scroll-to-bottom", "get-viewport", "get-device-info",
-            "get-capabilities", "wait-for-element", "wait-for-navigation",
+            "get-viewport-presets", "get-capabilities", "wait-for-element", "wait-for-navigation",
             "find-element", "find-button", "find-link", "find-input",
             "evaluate", "get-console-messages", "get-js-errors",
             "get-network-log", "get-resource-timeline", "clear-console",
@@ -55,7 +55,7 @@ final class Router: @unchecked Sendable {
             "set-geolocation", "clear-geolocation", "set-request-interception",
             "get-intercepted-requests", "clear-request-interception",
             "show-keyboard", "hide-keyboard", "get-keyboard-state",
-            "resize-viewport", "reset-viewport", "is-element-obscured",
+            "resize-viewport", "reset-viewport", "set-viewport-preset", "is-element-obscured",
             "toast", "safari-auth",
             "set-orientation", "get-orientation",
         ]

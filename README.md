@@ -5,7 +5,7 @@
 <h1 align="center">Mollotov</h1>
 
 <p align="center">
-  LLM-first browser for iOS, Android, and macOS.<br>
+  LLM-first browser for iOS, Android, macOS, and desktop work in progress.<br>
   Control real browsers via mDNS discovery, HTTP API, and MCP. AirPlay to Apple TV supported.
 </p>
 
@@ -24,6 +24,17 @@
 Native iOS, Android, and macOS browser apps paired with a Node.js CLI. Language models discover devices on the local network, then control them: navigate, screenshot, read DOM, click, fill forms, scroll, capture network traffic, evaluate JS. Works on real devices, simulators, and emulators. AirPlay an iPhone to an Apple TV and it appears as a second controllable device.
 
 No emulators pretending to be phones. No persistent content scripts. No browser extensions. Real browsers on real hardware, fully controllable by LLMs.
+
+## Status
+
+| Target | Status | Notes |
+|---|---|---|
+| iOS | Done | Main mobile platform, actively usable |
+| Android | Done | Main mobile platform, actively usable |
+| macOS | Done | Desktop app is usable |
+| Linux | In progress | Desktop shell exists, still evolving |
+| Windows | Not done | Very much a work in progress. Not even worth launching yet |
+| CLI | Done | Main control surface for devices |
 
 ## Install
 
@@ -100,7 +111,7 @@ docs/           Product brief, architecture, API reference, CLI docs
 
 ### [AppReveal](https://github.com/UnlikeOtherAI/AppReveal)
 
-Drop-in Swift package that turns any iOS app into an MCP-controllable agent. 44 tools: screenshot, tap, DOM, forms, navigation, view hierarchy. Discovered via mDNS, accessed over streamable HTTP. Used by Mollotov for debug integration.
+Mollotov uses AppReveal only for debug automation. The CLI helper and the in-app library are separate things, and the in-app SDK must never ship in release builds. See [docs.md](docs.md).
 
 ## License
 

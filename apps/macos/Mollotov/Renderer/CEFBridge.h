@@ -35,6 +35,9 @@
 /// Reload the current page.
 - (void)reload;
 
+/// Reload the current page ignoring the HTTP cache.
+- (void)reloadIgnoringCache;
+
 /// Get the current URL.
 - (NSString *)currentURL;
 
@@ -77,6 +80,17 @@
 
 /// Take a screenshot. Returns PNG data via callback.
 - (void)takeScreenshotWithCompletion:(void (^)(NSData * _Nullable pngData))completion;
+
+/// Close the browser and pump the CEF message loop until the close
+/// completes. Must be called before releasing the bridge to avoid
+/// leaving CrBrowserMain running against freed state.
+- (void)closeBrowser;
+
+/// Notify CEF that the browser view is hidden or visible.
+/// Call with YES when the view is removed from any window,
+/// NO when it is added back. This pauses CEF's rendering
+/// pipeline while the view is detached and resumes it on reattach.
+- (void)setHidden:(BOOL)hidden;
 
 /// Resize the browser view.
 - (void)resizeTo:(NSSize)size;

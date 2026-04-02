@@ -7,14 +7,23 @@ import WebKit
 struct TouchpadOverlayView: View {
     let onClose: () -> Void
 
+    private let tvViewport = CGSize(width: 1920, height: 1080)
     private let scrollStripWidth: CGFloat = 60
     private let gap: CGFloat = 12
     private let outerPadding: CGFloat = 16
     private let cornerRadius: CGFloat = 16
+    private let cursorGain = 1.35
+    private let scrollGain = 5.5
+    private let momentumDecay = 0.9
+    private let momentumThreshold = 0.75
+    private let momentumTick = 1.0 / 60.0
 
     @State private var cursorX: Double = 960
     @State private var cursorY: Double = 540
+    @State private var lastCursorDragLocation: CGPoint?
     @State private var lastScrollDragY: CGFloat = 0
+    @State private var scrollVelocity: Double = 0
+    @State private var scrollMomentumTimer: Timer?
 
     var body: some View {
         ZStack {
@@ -37,6 +46,7 @@ struct TouchpadOverlayView: View {
         }
         .ignoresSafeArea()
         .onAppear { injectCursor() }
+        .onDisappear { stopScrollMomentum() }
     }
 
     // MARK: - Main Touchpad
@@ -53,14 +63,19 @@ struct TouchpadOverlayView: View {
                 .gesture(
                     DragGesture(minimumDistance: 0)
                         .onChanged { value in
-                            let tvX = Double(value.location.x / geo.size.width) * 1920
-                            let tvY = Double(value.location.y / geo.size.height) * 1080
-                            cursorX = min(max(tvX, 0), 1920)
-                            cursorY = min(max(tvY, 0), 1080)
-                            moveCursor(x: cursorX, y: cursorY)
+                            guard let previousLocation = lastCursorDragLocation else {
+                                lastCursorDragLocation = value.location
+                                return
+                            }
+
+                            let deltaX = value.location.x - previousLocation.x
+                            let deltaY = value.location.y - previousLocation.y
+                            lastCursorDragLocation = value.location
+                            moveCursor(byX: deltaX, byY: deltaY, touchpadSize: geo.size)
                         }
                         .onEnded { value in
                             let distance = hypot(value.translation.width, value.translation.height)
+                            lastCursorDragLocation = nil
                             if distance < 10 {
                                 clickAt(x: cursorX, y: cursorY)
                             }
@@ -82,12 +97,18 @@ struct TouchpadOverlayView: View {
             .gesture(
                 DragGesture()
                     .onChanged { value in
+                        stopScrollMomentum()
                         let delta = value.translation.height - lastScrollDragY
                         lastScrollDragY = value.translation.height
-                        scrollBy(delta: delta * 4)
+                        let scrollDelta = Double(delta) * scrollGain
+                        scrollVelocity = scrollDelta
+                        scrollBy(delta: scrollDelta)
                     }
-                    .onEnded { _ in
+                    .onEnded { value in
+                        let predictedTail = value.predictedEndTranslation.height - value.translation.height
+                        let releaseVelocity = scrollVelocity + (Double(predictedTail) * scrollGain * 0.12)
                         lastScrollDragY = 0
+                        startScrollMomentum(with: releaseVelocity)
                     }
             )
     }
@@ -126,7 +147,20 @@ struct TouchpadOverlayView: View {
     }
 
     @MainActor
-    private func moveCursor(x: Double, y: Double) {
+    private func moveCursor(byX deltaX: CGFloat, byY deltaY: CGFloat, touchpadSize: CGSize) {
+        guard touchpadSize.width > 0, touchpadSize.height > 0 else { return }
+
+        let scaledX = Double(deltaX / touchpadSize.width) * tvViewport.width * cursorGain
+        let scaledY = Double(deltaY / touchpadSize.height) * tvViewport.height * cursorGain
+
+        cursorX = min(max(cursorX + scaledX, 0), tvViewport.width)
+        cursorY = min(max(cursorY + scaledY, 0), tvViewport.height)
+
+        renderCursor(x: cursorX, y: cursorY)
+    }
+
+    @MainActor
+    private func renderCursor(x: Double, y: Double) {
         tvWebView?.evaluateJavaScript(
             "var c=document.getElementById('mollotov-cursor');if(c){c.style.left='\(Int(x))px';c.style.top='\(Int(y))px';}"
         )
@@ -152,7 +186,38 @@ struct TouchpadOverlayView: View {
         tvWebView?.evaluateJavaScript("window.scrollBy(0,\(delta))")
     }
 
+    private func startScrollMomentum(with velocity: Double) {
+        scrollVelocity = velocity
+        guard abs(scrollVelocity) >= momentumThreshold else {
+            scrollVelocity = 0
+            return
+        }
+
+        stopScrollMomentum()
+
+        let timer = Timer(timeInterval: momentumTick, repeats: true) { _ in
+            Task { @MainActor in
+                guard abs(scrollVelocity) >= momentumThreshold else {
+                    stopScrollMomentum()
+                    return
+                }
+
+                scrollBy(delta: scrollVelocity)
+                scrollVelocity *= momentumDecay
+            }
+        }
+
+        scrollMomentumTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    private func stopScrollMomentum() {
+        scrollMomentumTimer?.invalidate()
+        scrollMomentumTimer = nil
+    }
+
     private func closeTouchpad() {
+        stopScrollMomentum()
         removeCursor()
         onClose()
     }

@@ -19,5 +19,8 @@ struct ExternalBrowserView: View {
         .onChange(of: browserState.currentURL) { newURL in
             HistoryStore.shared.record(url: newURL, title: browserState.pageTitle)
         }
+        .onChange(of: browserState.pageTitle) { newTitle in
+            HistoryStore.shared.updateLatestTitle(for: browserState.currentURL, title: newTitle)
+        }
     }
 }

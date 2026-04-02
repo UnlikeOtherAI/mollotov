@@ -8,17 +8,28 @@ struct URLBarView: View {
     let onForward: () -> Void
 
     @State private var urlText: String = ""
+    private let navigationButtonSize: CGFloat = 44
 
     var body: some View {
         HStack(spacing: 8) {
             Button(action: onBack) {
                 Image(systemName: "chevron.left")
+                    .font(.system(size: 16, weight: .semibold))
+                    .frame(width: navigationButtonSize, height: navigationButtonSize)
+                    .background(Color(.systemGray6))
+                    .clipShape(Circle())
             }
+            .accessibilityIdentifier("browser.nav.back")
             .disabled(!browserState.canGoBack)
 
             Button(action: onForward) {
                 Image(systemName: "chevron.right")
+                    .font(.system(size: 16, weight: .semibold))
+                    .frame(width: navigationButtonSize, height: navigationButtonSize)
+                    .background(Color(.systemGray6))
+                    .clipShape(Circle())
             }
+            .accessibilityIdentifier("browser.nav.forward")
             .disabled(!browserState.canGoForward)
 
             TextField("URL", text: $urlText)
@@ -29,6 +40,7 @@ struct URLBarView: View {
                 .autocapitalization(.none)
                 .disableAutocorrection(true)
                 .keyboardType(.URL)
+                .accessibilityIdentifier("browser.url.field")
                 .onSubmit { navigate() }
         }
         .padding(.horizontal, 12)

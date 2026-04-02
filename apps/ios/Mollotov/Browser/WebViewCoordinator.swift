@@ -14,6 +14,8 @@ struct WebViewContainer: UIViewRepresentable {
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
+        config.processPool = WebViewDefaults.sharedProcessPool
+        config.websiteDataStore = WebViewDefaults.sharedWebsiteDataStore
 
         // Inject bridge scripts — network bridge FIRST (saves postMessage ref before console bridge masks messageHandlers)
         if let handlerContext {
@@ -29,9 +31,10 @@ struct WebViewContainer: UIViewRepresentable {
         webView.uiDelegate = context.coordinator
         webView.allowsBackForwardNavigationGestures = true
         // Use Safari user agent so Google OAuth and similar services don't block us
-        webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"
+        webView.customUserAgent = WebViewDefaults.sharedUserAgent
 
         context.coordinator.webView = webView
+        context.coordinator.observe(webView)
         onWebView(webView)
 
         if let url = URL(string: browserState.currentURL) {
@@ -53,6 +56,8 @@ struct WebViewContainer: UIViewRepresentable {
         private var loadingObservation: NSKeyValueObservation?
         private var backObservation: NSKeyValueObservation?
         private var forwardObservation: NSKeyValueObservation?
+        private var documentNavigationStart: Date?
+        private var capturedDocumentResponseURL: String?
 
         init(browserState: BrowserState) {
             self.browserState = browserState
@@ -60,6 +65,11 @@ struct WebViewContainer: UIViewRepresentable {
         }
 
         func observe(_ webView: WKWebView) {
+            guard progressObservation == nil else {
+                syncBrowserState(from: webView)
+                return
+            }
+
             progressObservation = webView.observe(\.estimatedProgress) { [weak self] wv, _ in
                 Task { @MainActor in self?.browserState.progress = wv.estimatedProgress }
             }
@@ -78,18 +88,44 @@ struct WebViewContainer: UIViewRepresentable {
             forwardObservation = webView.observe(\.canGoForward) { [weak self] wv, _ in
                 Task { @MainActor in self?.browserState.canGoForward = wv.canGoForward }
             }
+
+            syncBrowserState(from: webView)
+        }
+
+        private func syncBrowserState(from webView: WKWebView) {
+            Task { @MainActor in
+                browserState.currentURL = webView.url?.absoluteString ?? browserState.currentURL
+                browserState.pageTitle = webView.title ?? ""
+                browserState.isLoading = webView.isLoading
+                browserState.canGoBack = webView.canGoBack
+                browserState.canGoForward = webView.canGoForward
+                browserState.progress = webView.estimatedProgress
+            }
         }
 
         // MARK: - WKNavigationDelegate
 
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
-            if progressObservation == nil { observe(webView) }
+            observe(webView)
+            documentNavigationStart = Date()
+            capturedDocumentResponseURL = nil
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            Task { @MainActor in
-                browserState.isLoading = false
-            }
+            syncBrowserState(from: webView)
+        }
+
+        func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+            syncBrowserState(from: webView)
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationResponse: WKNavigationResponse,
+            decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void
+        ) {
+            recordMainDocumentResponse(navigationResponse)
+            decisionHandler(.allow)
         }
 
         // MARK: - WKUIDelegate
@@ -100,6 +136,34 @@ struct WebViewContainer: UIViewRepresentable {
                 webView.load(navigationAction.request)
             }
             return nil
+        }
+
+        private func recordMainDocumentResponse(_ navigationResponse: WKNavigationResponse) {
+            guard navigationResponse.isForMainFrame,
+                  let response = navigationResponse.response as? HTTPURLResponse,
+                  let url = response.url?.absoluteString,
+                  capturedDocumentResponseURL != url else {
+                return
+            }
+
+            let contentType = response.mimeType
+                ?? response.value(forHTTPHeaderField: "Content-Type")
+                ?? "text/html"
+            let size = Int(response.expectedContentLength)
+            let responseHeaders = response.allHeaderFields.reduce(into: [String: String]()) { headers, item in
+                headers[String(describing: item.key)] = String(describing: item.value)
+            }
+
+            NetworkTrafficStore.shared.appendDocumentNavigation(
+                url: url,
+                statusCode: response.statusCode,
+                contentType: contentType,
+                responseHeaders: responseHeaders,
+                size: size > 0 ? size : 0,
+                startedAt: documentNavigationStart ?? Date()
+            )
+
+            capturedDocumentResponseURL = url
         }
     }
 }

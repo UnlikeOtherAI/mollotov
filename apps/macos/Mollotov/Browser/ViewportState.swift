@@ -1,7 +1,7 @@
 import AppKit
 import Combine
 
-enum DeviceKind { case phone, tablet }
+enum DeviceKind { case phone, tablet, laptop }
 
 enum ViewportOrientation: String {
     case portrait = "portrait"
@@ -26,31 +26,59 @@ private func cstr(_ ptr: UnsafePointer<CChar>?) -> String {
     return String(cString: ptr)
 }
 
-private func loadPresetsFromNative() -> (phones: [DesktopViewportPreset], tablets: [DesktopViewportPreset]) {
+private func viewportPresetSortValue(_ label: String) -> Double {
+    let pattern = #"[0-9]+(?:\.[0-9]+)?"#
+    guard let range = label.range(of: pattern, options: .regularExpression) else {
+        return .greatestFiniteMagnitude
+    }
+    return Double(label[range]) ?? .greatestFiniteMagnitude
+}
+
+private func loadPresetsFromNative()
+    -> (phones: [DesktopViewportPreset], tablets: [DesktopViewportPreset], laptops: [DesktopViewportPreset])
+{
     var phones: [DesktopViewportPreset] = []
     var tablets: [DesktopViewportPreset] = []
+    var laptops: [DesktopViewportPreset] = []
     let count = Int(mollotov_viewport_preset_count())
     for i in 0 ..< count {
         guard let p = mollotov_viewport_preset_get(Int32(i))?.pointee else { continue }
+        let kind: DeviceKind = p.kind == MOLLOTOV_DEVICE_KIND_TABLET ? .tablet
+                             : p.kind == MOLLOTOV_DEVICE_KIND_LAPTOP ? .laptop
+                             : .phone
         let preset = DesktopViewportPreset(
             id:                   cstr(p.id),
             name:                 cstr(p.name),
             label:                cstr(p.label),
             menuLabel:            cstr(p.menu_label),
-            kind:                 p.kind == MOLLOTOV_DEVICE_KIND_TABLET ? .tablet : .phone,
+            kind:                 kind,
             displaySizeLabel:     cstr(p.display_size_label),
             pixelResolutionLabel: cstr(p.pixel_resolution_label),
             portraitSize:         CGSize(width: CGFloat(p.portrait_width), height: CGFloat(p.portrait_height))
         )
-        if preset.kind == .tablet { tablets.append(preset) } else { phones.append(preset) }
+        switch kind {
+        case .tablet: tablets.append(preset)
+        case .laptop: laptops.append(preset)
+        case .phone:  phones.append(preset)
+        }
     }
-    return (phones, tablets)
+    let sorter: (DesktopViewportPreset, DesktopViewportPreset) -> Bool = { lhs, rhs in
+        let leftValue = viewportPresetSortValue(lhs.displaySizeLabel)
+        let rightValue = viewportPresetSortValue(rhs.displaySizeLabel)
+        if leftValue != rightValue { return leftValue < rightValue }
+        return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+    }
+    phones.sort(by: sorter)
+    tablets.sort(by: sorter)
+    laptops.sort(by: sorter)
+    return (phones, tablets, laptops)
 }
 
 private let _nativePresets = loadPresetsFromNative()
 let macPhonePresets:  [DesktopViewportPreset] = _nativePresets.phones
 let macTabletPresets: [DesktopViewportPreset] = _nativePresets.tablets
-let allMacViewportPresets = macPhonePresets + macTabletPresets
+let macLaptopPresets: [DesktopViewportPreset] = _nativePresets.laptops
+let allMacViewportPresets = macPhonePresets + macTabletPresets + macLaptopPresets
 
 // Legacy alias kept so any existing reference sites compile.
 let macViewportPresets = macPhonePresets
@@ -158,6 +186,11 @@ final class ViewportState: ObservableObject {
 
     var availablePhonePresets:  [DesktopViewportPreset] { availablePresets.filter { $0.kind == .phone  } }
     var availableTabletPresets: [DesktopViewportPreset] { availablePresets.filter { $0.kind == .tablet } }
+    var availableLaptopPresets: [DesktopViewportPreset] { availablePresets.filter { $0.kind == .laptop } }
+    var supportsOrientationSelection: Bool {
+        if case .preset = mode { return true }
+        return false
+    }
 
     var activePresetId: String? {
         guard case let .preset(id) = mode else { return nil }
@@ -176,6 +209,10 @@ final class ViewportState: ObservableObject {
         case .custom: return "Custom"
         case .preset: return activePreset?.menuLabel ?? "Full"
         }
+    }
+
+    var reportedOrientation: ViewportOrientation {
+        viewportSize.width >= viewportSize.height ? .landscape : .portrait
     }
 
     var resolutionLabel: String { "\(Int(viewportSize.width))×\(Int(viewportSize.height))" }
@@ -231,6 +268,19 @@ final class ViewportState: ObservableObject {
         mode = .full
         requestedCustomViewportSize = nil
         persistSelectedMode()
+        return recalculateViewportSize()
+    }
+
+    @discardableResult
+    func reapplyCurrentConfiguration() -> CGSize {
+        switch mode {
+        case .full:
+            mode = .full
+        case .custom:
+            mode = .custom
+        case let .preset(id):
+            mode = .preset(id)
+        }
         return recalculateViewportSize()
     }
 

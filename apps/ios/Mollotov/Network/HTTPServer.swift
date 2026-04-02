@@ -63,7 +63,7 @@ final class HTTPServer: @unchecked Sendable {
                 let headerString = String(data: accumulated[..<headerEnd.lowerBound], encoding: .utf8) ?? ""
                 let contentLength = self.parseContentLength(headerString)
                 let bodyStart = headerEnd.upperBound
-                let bodyReceived = accumulated.count - bodyStart.hashValue
+                let bodyReceived = accumulated.distance(from: bodyStart, to: accumulated.endIndex)
 
                 if bodyReceived >= contentLength {
                     Task {

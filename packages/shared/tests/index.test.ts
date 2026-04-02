@@ -71,7 +71,7 @@ describe("MCP tools", () => {
   });
 
   it("has correct count of browser tools", () => {
-    expect(BrowserMcpTools.length).toBe(90);
+    expect(BrowserMcpTools.length).toBe(92);
   });
 
   it("has correct count of CLI tools", () => {
@@ -89,6 +89,8 @@ describe("MCP tools", () => {
   it("tracks linux and windows unsupported browser tools", () => {
     expect(BrowserToolUnsupportedPlatforms.mollotov_show_keyboard).toEqual(["linux", "windows"]);
     expect(BrowserToolUnsupportedPlatforms.mollotov_hide_keyboard).toEqual(["linux", "windows"]);
+    expect(BrowserToolUnsupportedPlatforms.mollotov_get_viewport_presets).toEqual(["linux", "windows"]);
+    expect(BrowserToolUnsupportedPlatforms.mollotov_set_viewport_preset).toEqual(["linux", "windows"]);
     expect(BrowserToolUnsupportedPlatforms.mollotov_set_orientation).toEqual(["linux", "windows"]);
     expect(BrowserToolUnsupportedPlatforms.mollotov_safari_auth).toEqual(["linux", "windows"]);
   });

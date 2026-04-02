@@ -30,7 +30,7 @@ void TestAlternativeEngineRegions() {
 
 void TestRegistryFiltering() {
   const mollotov::McpRegistry registry;
-  assert(registry.all_tools().size() == 90);
+  assert(registry.all_tools().size() == 92);
 
   const auto ios_tools = registry.tools_for_platform(mollotov::Platform::kIos);
   const auto android_tools = registry.tools_for_platform(mollotov::Platform::kAndroid);
@@ -39,15 +39,16 @@ void TestRegistryFiltering() {
   const auto webkit_tools = registry.tools_for_engine("webkit");
   const auto chromium_tools = registry.tools_for_engine("chromium");
 
-  assert(ios_tools.size() == 90);
-  assert(android_tools.size() == 89);
-  assert(macos_tools.size() == 84);
-  assert(windows_tools.size() == 83);
-  assert(webkit_tools.size() == 90);
-  assert(chromium_tools.size() == 89);
+  assert(ios_tools.size() == 92);
+  assert(android_tools.size() == 91);
+  assert(macos_tools.size() == 88);
+  assert(windows_tools.size() == 85);
+  assert(webkit_tools.size() == 92);
+  assert(chromium_tools.size() == 91);
 
   assert(ContainsTool(ios_tools, "mollotov_safari_auth"));
   assert(!ContainsTool(android_tools, "mollotov_safari_auth"));
+  assert(ContainsTool(macos_tools, "mollotov_set_orientation"));
   assert(!ContainsTool(macos_tools, "mollotov_show_keyboard"));
   assert(!ContainsTool(windows_tools, "mollotov_set_orientation"));
 }
@@ -58,6 +59,7 @@ void TestAvailabilityChecks() {
   assert(!registry.is_tool_available("mollotov_safari_auth", mollotov::Platform::kIos, "chromium"));
   assert(!registry.is_tool_available("mollotov_safari_auth", mollotov::Platform::kAndroid, "webkit"));
   assert(registry.is_tool_available("mollotov_set_renderer", mollotov::Platform::kWindows, "gecko"));
+  assert(registry.is_tool_available("mollotov_set_orientation", mollotov::Platform::kMacos, "webkit"));
   assert(registry.is_tool_available("mollotov_show_keyboard", mollotov::Platform::kAndroid, "chromium"));
   assert(!registry.is_tool_available("mollotov_show_keyboard", mollotov::Platform::kMacos, "webkit"));
 }
@@ -87,7 +89,7 @@ void TestCApi() {
   assert(ios_tools_json != nullptr);
   const json ios_tools = json::parse(ios_tools_json);
   mollotov_mcp_free_string(ios_tools_json);
-  assert(ios_tools.size() == 90);
+  assert(ios_tools.size() == 92);
   assert(ios_tools[0].contains("availability"));
 
   assert(mollotov_mcp_registry_is_available(registry, "mollotov_safari_auth", MOLLOTOV_PLATFORM_IOS,

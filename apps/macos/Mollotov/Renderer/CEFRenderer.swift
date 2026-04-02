@@ -13,10 +13,24 @@ final class CEFRenderer: RendererEngine {
     private final class CEFHostView: NSView {
         var onWindowReady: (() -> Void)?
         var onBoundsReady: (() -> Void)?
+        var onWindowLost: (() -> Void)?
+        var onBecomeVisible: (() -> Void)?
+        var onBecomeHidden: (() -> Void)?
+
+        override var isHidden: Bool {
+            didSet {
+                guard isHidden != oldValue else { return }
+                if isHidden { onBecomeHidden?() } else { onBecomeVisible?() }
+            }
+        }
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
-            notifyIfReady()
+            if window == nil {
+                onWindowLost?()
+            } else {
+                notifyIfReady()
+            }
         }
 
         override func layout() {
@@ -40,11 +54,14 @@ final class CEFRenderer: RendererEngine {
     private var bridge: CEFBridge?
     private let containerView: CEFHostView
     private var pendingURL: URL?
+    /// Navigation deferred because the view was hidden when load(url:) was called.
+    /// Executed by onBoundsReady when the view becomes visible.
+    private var pendingNavigation: URL?
     private var documentNavigationStart = Date()
     private var capturedDocumentResponseURL: String?
     private var pendingCookies: [HTTPCookie] = []
     private var pendingDeleteAllCookies = false
-
+    private var surfaceRefreshTask: Task<Void, Never>?
     private(set) var currentURL: URL?
     private(set) var currentTitle: String = ""
     private(set) var isLoading: Bool = false
@@ -71,6 +88,11 @@ final class CEFRenderer: RendererEngine {
         }
     }
 
+    deinit {
+        surfaceRefreshTask?.cancel()
+        bridge?.closeBrowser()
+    }
+
     init() {
         Self.ensureCEFInitialized()
 
@@ -85,6 +107,16 @@ final class CEFRenderer: RendererEngine {
             Task { @MainActor in
                 guard let self, let bridge = self.bridge else { return }
                 bridge.resize(to: self.containerView.bounds.size)
+            }
+        }
+        containerView.onBecomeHidden = { [weak self] in
+            self?.bridge?.setHidden(true)
+        }
+        containerView.onBecomeVisible = { [weak self] in
+            Task { @MainActor in
+                self?.bridge?.setHidden(false)
+                self?.scheduleSurfaceRefresh()
+                await self?.flushDeferredStateIfPossible()
             }
         }
     }
@@ -195,16 +227,42 @@ final class CEFRenderer: RendererEngine {
         capturedDocumentResponseURL = nil
         ensureBridge()
         if hadBridge {
-            bridge?.loadURL(url.absoluteString)
+            if containerView.isHidden {
+                // View is hidden (renderer switch in progress). Defer the navigation
+                // until the view is shown — CEF crashes if navigated while hidden and
+                // then immediately made visible (GPU surface transition).
+                pendingNavigation = url
+                NSLog("[CEFRenderer] view hidden, deferring navigation to %@", url.absoluteString)
+            } else {
+                bridge?.loadURL(url.absoluteString)
+            }
             pendingURL = nil
         }
+    }
+
+    func willDeactivate() {
+        bridge?.setHidden(true)
+    }
+
+    func didActivate() {
+        bridge?.setHidden(false)
+        scheduleSurfaceRefresh()
+        Task { @MainActor in
+            await flushDeferredStateIfPossible()
+        }
+    }
+
+    func viewportDidChange() {
+        scheduleSurfaceRefresh()
     }
 
     func goBack() { bridge?.goBack() }
     func goForward() { bridge?.goForward() }
     func reload() { bridge?.reload() }
+    func hardReload() { bridge?.reloadIgnoringCache() }
 
     func evaluateJS(_ script: String) async throws -> Any? {
+        guard !containerView.isHidden else { return nil }
         guard let bridge else { throw HandlerError.noWebView }
         return try await withCheckedThrowingContinuation { continuation in
             bridge.evaluateJavaScript(script) { result, error in
@@ -275,6 +333,15 @@ final class CEFRenderer: RendererEngine {
         // CEF's C API set_cookie doesn't work in external message loop mode.
         // Inject non-httpOnly cookies via JS if we have a loaded page on a
         // matching domain. httpOnly cookies are skipped (JS can't set them).
+        // Skip injection while hidden: executing JS while CEF's view is hidden
+        // triggers a compositor repaint that crashes CEF's rendering pipeline.
+        guard !containerView.isHidden else {
+            if pendingDeleteAllCookies {
+                pendingCookies.removeAll()
+            }
+            pendingCookies.append(contentsOf: cookies)
+            return
+        }
         guard let host = currentURL?.host else { return }
         var js = ""
         for cookie in cookies {
@@ -307,6 +374,11 @@ final class CEFRenderer: RendererEngine {
 
     func deleteAllCookies() async {
         guard let bridge else {
+            pendingDeleteAllCookies = true
+            pendingCookies.removeAll()
+            return
+        }
+        guard !containerView.isHidden else {
             pendingDeleteAllCookies = true
             pendingCookies.removeAll()
             return
@@ -368,6 +440,62 @@ final class CEFRenderer: RendererEngine {
                 self?.bridge?.reload()
             }
         }
+    }
+
+    private func scheduleSurfaceRefresh() {
+        surfaceRefreshTask?.cancel()
+        surfaceRefreshTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            for _ in 0..<3 {
+                try? await Task.sleep(nanoseconds: 120_000_000)
+                guard !Task.isCancelled else { return }
+                guard let bridge else { return }
+                guard !containerView.isHidden else { continue }
+                containerView.layoutSubtreeIfNeeded()
+                bridge.setHidden(false)
+                bridge.resize(to: containerView.bounds.size)
+            }
+        }
+    }
+
+    private func flushDeferredStateIfPossible() async {
+        guard let bridge else { return }
+        guard !containerView.isHidden else { return }
+
+        if pendingDeleteAllCookies {
+            pendingDeleteAllCookies = false
+            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                bridge.deleteAllCookies { _ in
+                    cont.resume()
+                }
+            }
+        }
+
+        let deferredNavigation = pendingNavigation
+        pendingNavigation = nil
+
+        guard !pendingCookies.isEmpty else {
+            if let deferredNavigation {
+                bridge.loadURL(deferredNavigation.absoluteString)
+            }
+            return
+        }
+
+        let cookiesToInject = pendingCookies
+        pendingCookies.removeAll()
+        let urlToPrime = deferredNavigation ?? currentURL
+        guard let urlToPrime else {
+            pendingCookies = cookiesToInject
+            return
+        }
+
+        bridge.loadURL(urlToPrime.absoluteString)
+
+        for _ in 0..<200 {
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            if !bridge.isLoading() { break }
+        }
+        injectCookiesViaJS(cookiesToInject)
     }
 
     private func recordCompletedDocumentNavigation() {

@@ -12,12 +12,8 @@ struct DeviceHandler {
         router.register("get-viewport-presets") { _ in await getViewportPresets() }
         router.register("get-device-info") { _ in await getDeviceInfoResponse() }
         router.register("get-capabilities") { _ in await getCapabilities() }
-        router.register("set-orientation") { _ in
-            errorResponse(code: "PLATFORM_NOT_SUPPORTED", message: "Orientation is not supported on macOS")
-        }
-        router.register("get-orientation") { _ in
-            successResponse(["orientation": "landscape", "locked": NSNull()])
-        }
+        router.register("set-orientation") { body in await setOrientation(body) }
+        router.register("get-orientation") { _ in await getOrientation() }
     }
 
     @MainActor
@@ -115,5 +111,81 @@ struct DeviceHandler {
             "rendererSwitching": true,
             "viewportPresets": true,
         ]
+    }
+
+    @MainActor
+    private func getOrientation() async -> [String: Any] {
+        successResponse([
+            "orientation": viewportState.reportedOrientation.rawValue,
+            "locked": viewportState.supportsOrientationSelection ? viewportState.reportedOrientation.rawValue : NSNull(),
+        ])
+    }
+
+    @MainActor
+    private func setOrientation(_ body: [String: Any]) async -> [String: Any] {
+        guard let orientation = body["orientation"] as? String else {
+            return errorResponse(code: "MISSING_PARAM", message: "orientation is required (portrait|landscape|auto)")
+        }
+
+        switch orientation.lowercased() {
+        case "portrait", "landscape":
+            break
+        case "auto":
+            return [
+                "success": false,
+                "error": [
+                    "code": "INVALID_STATE",
+                    "message": "Auto orientation is not supported for staged macOS viewports. Use a named preset and set portrait or landscape explicitly.",
+                    "reason": "auto-unsupported",
+                ],
+            ]
+        default:
+            return errorResponse(code: "INVALID_PARAM", message: "orientation must be portrait, landscape, or auto")
+        }
+
+        guard case .preset = viewportState.mode else {
+            let error: [String: Any]
+            switch viewportState.mode {
+            case .full:
+                error = [
+                    "code": "INVALID_STATE",
+                    "message": "Orientation can only be changed on macOS when a named viewport preset is active. Select a smaller viewport preset first.",
+                    "reason": "full-viewport",
+                ]
+            case .custom:
+                error = [
+                    "code": "INVALID_STATE",
+                    "message": "Orientation cannot be changed for raw custom macOS viewports. Resize explicitly or switch to a named viewport preset first.",
+                    "reason": "custom-viewport",
+                ]
+            case .preset:
+                error = [
+                    "code": "INVALID_STATE",
+                    "message": "Orientation could not be changed for the current macOS viewport mode.",
+                    "reason": "unavailable",
+                ]
+            }
+            return ["success": false, "error": error]
+        }
+
+        guard let nextOrientation = ViewportOrientation(rawValue: orientation.lowercased()) else {
+            return errorResponse(code: "INVALID_PARAM", message: "orientation must be portrait or landscape")
+        }
+
+        viewportState.selectOrientation(nextOrientation)
+        await context.waitForViewportSize(CGSize(
+            width: CGFloat(viewportState.currentViewportDimensions.width),
+            height: CGFloat(viewportState.currentViewportDimensions.height)
+        ))
+        let viewport = viewportState.currentViewportDimensions
+        return successResponse([
+            "orientation": viewportState.reportedOrientation.rawValue,
+            "locked": viewportState.reportedOrientation.rawValue,
+            "activePresetId": viewportState.activePresetId as Any,
+            "viewport": [
+                "width": viewport.width,
+                "height": viewport.height,
+            ],
+        ])
     }
 }

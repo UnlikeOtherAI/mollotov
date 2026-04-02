@@ -35,6 +35,7 @@ fun URLBar(
     modifier: Modifier = Modifier,
 ) {
     var urlText by remember(currentUrl) { mutableStateOf(currentUrl) }
+    val navigationButtonSize = 44.dp
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -42,10 +43,10 @@ fun URLBar(
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 4.dp),
     ) {
-        IconButton(onClick = onBack, enabled = canGoBack, modifier = Modifier.size(36.dp)) {
+        IconButton(onClick = onBack, enabled = canGoBack, modifier = Modifier.size(navigationButtonSize)) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
         }
-        IconButton(onClick = onForward, enabled = canGoForward, modifier = Modifier.size(36.dp)) {
+        IconButton(onClick = onForward, enabled = canGoForward, modifier = Modifier.size(navigationButtonSize)) {
             Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Forward")
         }
 

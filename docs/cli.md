@@ -75,6 +75,50 @@ mollotov ping --device "My iPhone"
 mollotov ping                       # ping all
 ```
 
+### `mollotov browser`
+Manage local macOS Mollotov app aliases stored in `~/.mollotov/browsers.json`.
+
+```bash
+mollotov browser --help
+```
+
+### `mollotov browser register <name>`
+Register or update a named local macOS browser alias.
+
+```bash
+mollotov browser register claude-a
+mollotov browser register codex-b --app /Applications/Mollotov.app
+```
+
+### `mollotov browser launch <name>`
+Launch a new local macOS Mollotov app instance for a registered alias. If `--port` is omitted, the CLI auto-selects the first safe free port and skips reserved ports such as `8421` used by AppReveal and CLI MCP.
+
+```bash
+mollotov browser launch claude-a
+mollotov browser launch codex-b --port 8450 --wait
+```
+
+### `mollotov browser list`
+List registered local browser aliases and their saved runtime state.
+
+```bash
+mollotov browser list
+```
+
+### `mollotov browser inspect <name>`
+Show the saved app path, runtime port, and reachability for one alias.
+
+```bash
+mollotov browser inspect claude-a
+```
+
+### `mollotov browser remove <name>`
+Remove a saved local alias and its runtime state. This does not terminate a running app process.
+
+```bash
+mollotov browser remove claude-a
+```
+
 ---
 
 ## Navigation Commands

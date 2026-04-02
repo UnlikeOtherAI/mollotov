@@ -22,6 +22,7 @@ All methods are available via three interfaces:
 - Content-Type: `application/json`
 - Auth: None (local network only)
 - Default Port: `8420`
+- Port fallback: if `8420` is already occupied, the app binds the next available local port and advertises that port via mDNS and `get-device-info`
 - Concurrency: Requests are queued and processed sequentially per device. Rapid-fire commands are safe but will execute in order. No rate limiting enforced — the embedded HTTP server handles one command at a time.
 
 ---
@@ -54,6 +55,7 @@ Not all methods have identical implementations on Android, iOS, and macOS. Andro
 | Geolocation override | CDP `Emulation.*` | Not supported | Not supported | No public WKWebView API; macOS does not expose a supported override path |
 | Dialog handling | Native | Native | Native | All platforms have native dialog delegation APIs |
 | Keyboard simulation | Native | Native | Not supported | macOS has no soft keyboard equivalent to show or hide |
+| Named viewport presets (`get-viewport-presets`, `set-viewport-preset`) | Native (tablet only) | Native (iPad only) | Native | Linux does not support named viewport presets yet; phones return no preset support |
 | Renderer switching (`set-renderer`, `get-renderer`) | Not supported | Not supported | Native | macOS switches between WebKit and Chromium/CEF at runtime and migrates cookies automatically |
 
 **Legend:**
@@ -181,6 +183,7 @@ When exposed via MCP, methods use the `mollotov_` prefix:
 | `/v1/scroll-to-top` | `mollotov_scroll_to_top` |
 | `/v1/scroll-to-bottom` | `mollotov_scroll_to_bottom` |
 | `/v1/get-viewport` | `mollotov_get_viewport` |
+| `/v1/get-viewport-presets` | `mollotov_get_viewport_presets` |
 | `/v1/get-device-info` | `mollotov_get_device_info` |
 | `/v1/get-capabilities` | `mollotov_get_capabilities` |
 | `/v1/wait-for-element` | `mollotov_wait_for_element` |
@@ -236,6 +239,9 @@ When exposed via MCP, methods use the `mollotov_` prefix:
 | `/v1/get-keyboard-state` | `mollotov_get_keyboard_state` |
 | `/v1/resize-viewport` | `mollotov_resize_viewport` |
 | `/v1/reset-viewport` | `mollotov_reset_viewport` |
+| `/v1/set-viewport-preset` | `mollotov_set_viewport_preset` |
+| `/v1/set-orientation` | `mollotov_set_orientation` |
+| `/v1/get-orientation` | `mollotov_get_orientation` |
 | `/v1/is-element-obscured` | `mollotov_is_element_obscured` |
 
 CLI MCP adds additional tools:
