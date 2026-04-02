@@ -179,15 +179,9 @@ Every model in the list is rendered as a card. The card adapts to the model's st
 
 Each model declares its requirements. The device reports its capabilities. The UI evaluates fitness at display time.
 
-```ts
-interface ModelRequirements {
-  downloadSizeGB: number;          // Disk needed for download
-  ramWhenLoadedGB: number;         // RAM consumed when model is active
-  minRamGB: number;                // Minimum total device RAM
-  recommendedRamGB: number;        // Comfortable total device RAM
-  supportsMetalGPU?: boolean;      // Needs Metal (Apple) or Vulkan (Android)
-}
+Model requirements come from the `ApprovedModel` interface in the core plan (`sizeBytes`, `ramWhenLoadedGB`, `minRamGB`, `recommendedRamGB`). Device capabilities come from the extended `DeviceInfo`:
 
+```ts
 interface DeviceCapabilities {
   totalRamGB: number;
   availableRamGB: number;
@@ -210,9 +204,35 @@ interface DeviceCapabilities {
 
 Ollama models running on the same Mac need no fitness check — Ollama manages its own memory. Ollama models accessed remotely from mobile don't consume device resources at all. Show them with a `[server]` badge and no resource warnings.
 
-### Platform AI models (Apple Intelligence / Gemini Nano)
+### Platform AI (Apple Intelligence / Gemini Nano) — Default on Mobile
 
-No resource check needed — the OS manages these. Show them with an "On-device" badge. If the device doesn't support them (too old, wrong chip), show: "Requires [A17 Pro / Pixel 8+] — not available on this device" and disable.
+Platform AI is the **default backend on mobile**. It's always available on supported hardware — no download, no configuration. Show it as a persistent card at the top of the PLATFORM section with a `[device]` badge and no resource warnings.
+
+**Card state: active (default — nothing else configured):**
+```
+┌──────────────────────────────────────────────────┐
+│  ⊘  Apple Intelligence                 ● Active  │
+│                                                  │
+│  Built into your device. Fast text summaries     │
+│  and Q&A about page content. No vision.          │
+│                                                  │
+│  Managed by iOS  •  No storage needed            │
+└──────────────────────────────────────────────────┘
+```
+
+**Card state: available (Ollama model is loaded instead):**
+```
+┌──────────────────────────────────────────────────┐
+│  ⊘  Apple Intelligence                           │
+│                                                  │
+│  Built into your device. Fast text summaries     │
+│  and Q&A about page content. No vision.          │
+│                                                  │
+│  [▶ Switch to Apple Intelligence]                │
+└──────────────────────────────────────────────────┘
+```
+
+**Not shown** on devices without platform AI support (older iPhones, unsupported Android devices) — unless Ollama is configured, AI features are hidden entirely on these devices.
 
 ### Sorting
 
@@ -228,17 +248,7 @@ Models are sorted within each section by fitness, then by size:
 
 Every model in the approved registry needs a human-readable description written for users who don't know what an LLM is. No jargon. Focus on what it can do, not how it works.
 
-### Required description fields
-
-```ts
-interface ModelDescription {
-  summary: string;            // 1 sentence: what does this model do?
-  strengths: string[];        // 2-3 bullet points: what it's good at
-  limitations: string[];      // 1-2 bullet points: what it can't do
-  bestFor: string;            // "Best for: ___" one-liner
-  speedRating: "fast" | "moderate" | "slow";  // Relative to other models in the list
-}
-```
+Description fields are part of the `ApprovedModel.description: ModelDescription` interface defined in the core plan (`summary`, `strengths`, `limitations`, `bestFor`, `speedRating`).
 
 ### Example descriptions
 
@@ -279,17 +289,31 @@ bestFor: "Use your existing Ollama models without re-downloading"
 speedRating: [not shown — varies by model]
 ```
 
-**Apple Intelligence:**
+**Apple Intelligence (iOS default):**
 ```
-summary: "Apple's built-in on-device model. Fast and private — runs entirely on your device's neural engine."
+summary: "Built into your device. Fast text summaries and page Q&A — no download needed."
 strengths:
-  - "Instant startup — no download needed"
-  - "Very fast inference using the Neural Engine"
-  - "Zero memory overhead — managed by the OS"
+  - "Instant — no model download or setup required"
+  - "Low memory footprint — managed by the OS"
+  - "Works offline"
 limitations:
-  - "Text only — cannot analyse screenshots or images"
-  - "Cannot be customised or replaced"
-bestFor: "Quick text summaries when you don't need vision"
+  - "Text only — cannot see screenshots or process images"
+  - "Less capable than dedicated models for complex questions"
+bestFor: "Quick page summaries and text Q&A without any setup"
+speedRating: "fast"
+```
+
+**Gemini Nano (Android default):**
+```
+summary: "Built into your device. Fast text summaries and page Q&A — no download needed."
+strengths:
+  - "Instant — no model download or setup required"
+  - "Low memory footprint — managed by Google Play Services"
+  - "Works offline"
+limitations:
+  - "Text only — cannot see screenshots or process images"
+  - "Less capable than dedicated models for complex questions"
+bestFor: "Quick page summaries and text Q&A without any setup"
 speedRating: "fast"
 ```
 
@@ -587,21 +611,23 @@ Full-width model card list. Download, load, unload. Ollama endpoint config acces
 
 ### Brain pill (iOS/Android)
 
-34x34 tappable circle to the right of the URL field.
+34x34 tappable circle to the right of the URL field. **Always active on supported hardware** — platform AI means the brain pill is never dead on mobile.
 
 ```
-No model:
+Platform AI active (default — no Ollama configured):
 ┌──────────────────────────────────────────────────┐
 │  <  >  [  https://example.com            ]  (🧠) │
 └──────────────────────────────────────────────────┘
 
-Model loaded:
+Ollama model loaded (has vision):
 ┌──────────────────────────────────────────────────┐
 │  <  >  [  https://example.com          ]  (🧠👁) │
 └──────────────────────────────────────────────────┘
 ```
 
-**Tap** → navigates to the AI chat screen. No model loaded → Models tab. Model loaded → Chat tab. Ghost pill on first launch (stored in UserDefaults) to make AI discoverable.
+**Tap** → navigates to the AI chat screen on Chat tab (always ready — platform AI is the fallback). Ghost pill on first launch (stored in UserDefaults) to make AI discoverable.
+
+**No eye icon** when platform AI is active (text-only, no vision). Eye icon appears when an Ollama vision model is loaded.
 
 ---
 
@@ -743,7 +769,8 @@ Both write to the app's local model directory and update the local registry.
 | iOS | `Mollotov/AI/ModelDownloader.swift` | Background download support |
 | iOS | `Mollotov/AI/ModelRegistry.swift` | Curated model list + fitness |
 | iOS | `Mollotov/AI/AudioRecorder.swift` | AVAudioEngine recorder |
-| iOS | `Mollotov/AI/AIState.swift` | Published state |
+| iOS | `Mollotov/AI/PlatformAIEngine.swift` | Apple Intelligence wrapper (Foundation Models) |
+| iOS | `Mollotov/AI/AIState.swift` | Published state — always available on supported hardware |
 | Android | `ui/AIChatScreen.kt` | Full-screen chat with tabs |
 | Android | `ui/AIChatView.kt` | Chat conversation composable |
 | Android | `ui/AIModelListView.kt` | Model card list composable |
@@ -751,5 +778,6 @@ Both write to the app's local model directory and update the local registry.
 | Android | `ai/ModelDownloader.kt` | DownloadManager integration |
 | Android | `ai/ModelRegistry.kt` | Curated model list + fitness |
 | Android | `ai/AudioRecorder.kt` | AudioRecord recorder |
-| Android | `ai/AIState.kt` | State holder |
+| Android | `ai/PlatformAIEngine.kt` | Gemini Nano wrapper (AI Edge SDK) |
+| Android | `ai/AIState.kt` | State holder — always available on supported hardware |
 | CLI | `src/ai/fitness.ts` | Hardware evaluation logic |

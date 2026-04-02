@@ -4,7 +4,7 @@
 
 **Goal:** Add on-device LLM inference to Mollotov — the CLI manages model downloads from Hugging Face, the macOS browser loads and runs them, and new MCP tools let LLMs ask the local model to summarise/describe/analyse the current page without sending data to the cloud.
 
-**Architecture:** The CLI owns model lifecycle (download, list, delete) using GGUF files from Hugging Face. Each browser app exposes new HTTP endpoints for model loading/unloading and inference. The MCP server adds tools to query model status and run inference. On macOS, inference runs via `llama.cpp` as a compiled Swift package. Mobile will use platform-native inference frameworks (Core ML on iOS, MediaPipe on Android) in a later phase.
+**Architecture:** The CLI owns model lifecycle (download, list, delete) using GGUF files from Hugging Face. Each browser app exposes new HTTP endpoints for model loading/unloading and inference. The MCP server adds tools to query model status and run inference. On macOS, inference runs via `llama.cpp` as a compiled Swift package. On mobile, platform AI (Apple Intelligence on iOS, Gemini Nano on Android) is the default backend — no download needed, text-only. Mobile also supports remote Ollama as an upgrade path for vision-capable models.
 
 **Tech Stack:** llama.cpp (Swift package), Hugging Face Hub API (REST), GGUF model format, existing Mollotov HTTP/MCP patterns.
 
@@ -52,7 +52,7 @@ Single source of truth for the active AI state. Every browser window, the CLI, a
 | Field | Description |
 |---|---|
 | `activeModel` | Model ID currently loaded (null = none) |
-| `backend` | `"native"` or `"ollama"` |
+| `backend` | `"native"`, `"ollama"`, or `"platform"` (mobile default) |
 | `ollamaEndpoint` | Ollama API URL (persisted across sessions) |
 | `ollamaModel` | Ollama model name when backend is ollama (e.g. `"llava:7b"`) |
 | `loadedAt` | Timestamp of last load (used for staleness detection) |
@@ -72,12 +72,18 @@ Single source of truth for the active AI state. Every browser window, the CLI, a
 - `registry.json` — tracks which models are downloaded (persistent inventory)
 - `ai-config.json` — tracks which model is currently active (runtime state)
 
+**Startup reconciliation:** On app launch, `ai-config.json` may claim a model is loaded from a previous session that crashed or was force-quit. The app must clear `activeModel` to `null` on every startup — the in-memory `InferenceEngine` is the true authority for whether a model is loaded. The config file is only authoritative for `ollamaEndpoint` (persisted setting) and as a cross-window notification channel. It is not a cache of runtime state across restarts.
+
+**Write-ownership rule:** Only the process that owns the `InferenceEngine` (the macOS app) may write `activeModel` and `backend` fields. The CLI must use HTTP (`POST /v1/ai-load`) to trigger model changes — it must never write `ai-config.json` directly for load/unload. Direct file edits by users or scripts are ignored for model state; the app treats them as no-ops since the in-memory engine hasn't changed.
+
+**FSEvents watching:** Watch the *directory* (`~/.mollotov/`) and filter for `ai-config.json` filename changes, not the file descriptor directly. This handles delete+recreate patterns from atomic writes. If the file is deleted, the app recreates it with `activeModel: null`.
+
 The macOS app also watches `~/.mollotov/models/` directory for download changes (CLI adding/removing model files). Both watches use the same FSEvents mechanism.
 
 The CLI can also manage models on a running device remotely via HTTP:
 - `mollotov ai load <model> --device mac` → `POST /v1/ai-load`
 - `mollotov ai unload --device mac` → `POST /v1/ai-unload`
-- `mollotov ai status --device mac` → `GET /v1/ai-status`
+- `mollotov ai status --device mac` → `POST /v1/ai-status`
 
 Downloads always happen locally (CLI or app write to disk) — the HTTP API only handles load/unload/status/inference.
 
@@ -91,13 +97,25 @@ interface ApprovedModel {
   name: string;                  // e.g. "Gemma 4 E2B Q4"
   huggingFaceRepo: string;       // e.g. "bartowski/gemma-4-E2B-it-GGUF"
   huggingFaceFile: string;       // e.g. "gemma-4-E2B-it-Q4_K_M.gguf"
+  sha256: string;                // SHA-256 of the GGUF file — verified after download
   sizeBytes: number;             // Approximate download size
+  ramWhenLoadedGB: number;       // RAM consumed when model is active (~1.5x file size)
   capabilities: string[];        // ["text", "vision", "audio"] — audio = model accepts raw audio input (max 30s)
   memory: boolean;               // true = supports multi-turn conversation, false = stateless Q&A only
   platforms: string[];           // ["macos", "ios", "android"]
-  minRamGB: number;              // Minimum RAM to run this model
+  minRamGB: number;              // Minimum total device RAM to run
+  recommendedRamGB: number;      // Comfortable total device RAM (no amber warning)
   quantization: string;          // "Q4_K_M", "Q8_0", etc.
-  description: string;           // One-line description for users
+  contextWindow: number;         // Max context in tokens (e.g. 8192 for Gemma 2B)
+  description: ModelDescription; // Structured description for UI display
+}
+
+interface ModelDescription {
+  summary: string;               // 1 sentence: what does this model do?
+  strengths: string[];           // 2-3 bullet points
+  limitations: string[];         // 1-2 bullet points
+  bestFor: string;               // "Best for: ___"
+  speedRating: "fast" | "moderate" | "slow";
 }
 ```
 
@@ -111,10 +129,12 @@ interface ApprovedModel {
 | `vision` | Accepts image input — can describe screenshots |
 | `audio` | Accepts raw audio input — model processes speech natively (max 30s) |
 
-**Voice input routing:** When the user taps the brain pill and speaks, the browser checks the loaded model's capabilities:
+**Voice input routing:** When the user taps the 🎤 button in the chat input, the browser checks the loaded model's capabilities:
 
 - **Model has `audio` capability** (e.g. Gemma 4 E2B): Raw audio (16-bit PCM WAV, 16kHz mono) is sent directly to the model via `ai-infer`. The model handles both transcription and understanding in a single pass. This is the preferred path — higher quality than platform STT.
-- **Model lacks `audio` capability** (text-only): Falls back to platform speech-to-text (SFSpeechRecognizer on Apple, SpeechRecognizer on Android), then sends the transcribed text as a normal prompt. Degraded experience but still functional.
+- **Model lacks `audio` capability** (text-only): Falls back to platform speech-to-text (SFSpeechRecognizer on Apple, SpeechRecognizer on Android), then sends the transcribed text as a normal chat message. Degraded experience but still functional.
+
+The brain pill itself toggles the chat panel (macOS) or navigates to the chat screen (mobile). It is NOT the mic trigger — the mic lives inside the chat input area.
 
 Mobile apps (iOS/Android) embed their own curated subset of this list. To add a model to the mobile list, users raise a PR against the relevant app.
 
@@ -165,6 +185,9 @@ ai-infer request arrives
   → if "native": run llama.cpp inference (existing path)
   → if "ollama": POST to Ollama API with prompt + image
       → parse Ollama response
+      → return in standard Mollotov response format
+  → if "platform": route to platform AI (iOS: Foundation Models, Android: AI Edge SDK)
+      → text-only — reject image/audio inputs with VISION_NOT_SUPPORTED / AUDIO_NOT_SUPPORTED
       → return in standard Mollotov response format
 ```
 
@@ -238,12 +261,12 @@ mollotov ai ask "describe this page" --device mac --context screenshot
 │  │ ai-infer: route to active backend   │    │
 │  └──────────┬──────────────┬───────────┘    │
 │             │              │                │
-│  ┌──────────▼────┐  ┌─────▼──────────┐     │
-│  │ Native Engine │  │ Ollama Proxy   │     │
-│  │ (llama.cpp)   │  │ localhost:11434│     │
-│  │ Load GGUF     │  │ /api/generate  │     │
-│  │ Run locally   │  │ Forward prompt │     │
-│  └───────────────┘  └────────────────┘     │
+│  ┌──────────▼────┐  ┌─────▼──────────┐  ┌──▼─────────────┐│
+│  │ Native Engine │  │ Ollama Proxy   │  │ Platform AI    ││
+│  │ (llama.cpp)   │  │ localhost:11434│  │ (mobile only)  ││
+│  │ Load GGUF     │  │ /api/generate  │  │ Apple Intel.   ││
+│  │ Run locally   │  │ Forward prompt │  │ Gemini Nano    ││
+│  └───────────────┘  └────────────────┘  └────────────────┘│
 └─────────────────────────────────────────────┘
 ```
 
@@ -256,23 +279,23 @@ All new endpoints use the existing `/v1/` prefix pattern.
 Load a model into memory. Only one model can be loaded at a time. Supports both native GGUF and Ollama backends.
 
 ```json
-// Request (native GGUF)
-{ "path": "/Users/foo/.mollotov/models/gemma-4-e2b-q4/model.gguf" }
+// Request (native GGUF by model ID — resolved to local path by the handler)
+{ "model": "gemma-4-e2b-q4" }
 
-// Request (Ollama model — local, no path needed)
-{ "ollama": "llava:7b" }
+// Request (native GGUF by absolute path — for custom models)
+{ "path": "/Users/foo/.mollotov/models/custom/model.gguf" }
+
+// Request (Ollama model — local)
+{ "model": "ollama:llava:7b" }
 
 // Request (Ollama model — remote endpoint, used by mobile devices)
-{ "ollama": "llava:7b", "ollamaEndpoint": "http://192.168.1.50:11434" }
+{ "model": "ollama:llava:7b", "ollamaEndpoint": "http://192.168.1.50:11434" }
 
-// Response (success — native)
+// Response (success — auto-unloads previous model if any)
 { "success": true, "model": "gemma-4-e2b-q4", "backend": "native", "loadTimeMs": 2340 }
 
 // Response (success — Ollama)
 { "success": true, "model": "llava:7b", "backend": "ollama", "loadTimeMs": 12 }
-
-// Response (error — already loaded)
-{ "success": false, "error": { "code": "MODEL_ALREADY_LOADED", "message": "Unload current model first", "currentModel": "gemma-4-e2b-q4" } }
 
 // Response (error — file not found)
 { "success": false, "error": { "code": "MODEL_NOT_FOUND", "message": "No GGUF file at specified path" } }
@@ -293,7 +316,7 @@ Unload the current model, freeing memory.
 { "success": true }
 ```
 
-#### `GET /v1/ai-status`
+#### `POST /v1/ai-status`
 
 Report the current inference state.
 
@@ -339,13 +362,31 @@ Report the current inference state.
 
 Run inference. The model generates a response to the prompt. Supports text, vision (base64 image), and audio (base64 WAV, max 30 seconds) inputs.
 
+**Routing:** The `ai-infer` endpoint handles both stateless single-shot and multi-turn Ollama chat. The presence of the `messages` field determines which path:
+- `messages` absent → single-shot (native llama.cpp or Ollama `/api/generate`)
+- `messages` present → multi-turn (Ollama `/api/chat` only — ignored for native models)
+
+The in-app chat panel sends `messages` for Ollama models with `memory: true`. MCP callers and the CLI always omit `messages` (stateless).
+
 ```json
-// Request (text only)
+// Request — single-shot (MCP, CLI, or native model)
 {
   "prompt": "Summarise this page content in 3 bullet points",
   "context": "page_text",
   "maxTokens": 512,
   "temperature": 0.7
+}
+
+// Request — multi-turn Ollama chat (in-app panel only)
+{
+  "prompt": "What about the enterprise tier?",
+  "messages": [
+    { "role": "system", "content": "<system prompt>" },
+    { "role": "user", "content": "What are the prices?" },
+    { "role": "assistant", "content": "The page shows three tiers..." }
+  ],
+  "context": "page_text",
+  "maxTokens": 512
 }
 
 // Request (with screenshot)
@@ -362,8 +403,7 @@ Run inference. The model generates a response to the prompt. Supports text, visi
   "maxTokens": 512
 }
 
-// Request (voice transcribed by platform STT — model lacks audio capability)
-// The browser detects the model can't handle audio, transcribes locally, sends text.
+// Request (voice transcribed by platform STT — model lacks audio)
 {
   "prompt": "What are the prices on this page?",
   "voiceTranscription": true,
@@ -371,7 +411,7 @@ Run inference. The model generates a response to the prompt. Supports text, visi
   "maxTokens": 512
 }
 
-// Request (with explicit data — for debugging or custom use)
+// Request (explicit data — debugging)
 {
   "prompt": "What language is this code?",
   "text": "<html>...</html>",
@@ -386,7 +426,7 @@ Run inference. The model generates a response to the prompt. Supports text, visi
   "inferenceTimeMs": 1450
 }
 
-// Response (from audio-capable model — includes transcription)
+// Response (audio-capable model — includes transcription)
 {
   "success": true,
   "transcription": "What are the prices on this page?",
@@ -396,26 +436,23 @@ Run inference. The model generates a response to the prompt. Supports text, visi
 }
 
 // Error — no model loaded
-{
-  "success": false,
-  "error": { "code": "NO_MODEL_LOADED", "message": "Load a model first with ai-load" }
-}
+{ "success": false, "error": { "code": "NO_MODEL_LOADED", "message": "Load a model first with ai-load" } }
 
 // Error — audio sent to model without audio capability
-{
-  "success": false,
-  "error": { "code": "AUDIO_NOT_SUPPORTED", "message": "Current model does not support audio input. The browser should transcribe via platform STT and resend as text." }
-}
+{ "success": false, "error": { "code": "AUDIO_NOT_SUPPORTED", "message": "Model does not support audio. Transcribe via platform STT and resend as text." } }
+
+// Error — Ollama unreachable mid-inference
+{ "success": false, "error": { "code": "OLLAMA_DISCONNECTED", "message": "Lost connection to Ollama during inference" } }
 ```
 
 **Voice input routing (browser-side):**
 
 The browser decides how to handle voice input before calling `ai-infer`:
 
-1. User taps brain pill → browser records audio (max 30s, 16-bit PCM WAV, 16kHz mono)
+1. User taps 🎤 in chat input → browser records audio (max 30s, 16-bit PCM WAV, 16kHz mono)
 2. Browser checks loaded model's capabilities via cached `ai-status`
-3. **If model has `audio` capability:** Send raw audio in the `audio` field → model transcribes and responds in one pass (preferred — higher quality than platform STT)
-4. **If model lacks `audio` capability:** Transcribe locally via platform STT (SFSpeechRecognizer / SpeechRecognizer) → send transcribed text in the `prompt` field with `voiceTranscription: true` (fallback — functional but lower quality transcription)
+3. **If model has `audio` capability:** Send raw audio in the `audio` field → model transcribes and responds in one pass (preferred — higher quality)
+4. **If model lacks `audio` capability:** Transcribe locally via platform STT (SFSpeechRecognizer / SpeechRecognizer) → send transcribed text in the `prompt` field (fallback)
 
 The `voiceTranscription: true` flag is metadata — the harness treats it identically to a typed prompt. It's recorded for analytics/debugging.
 
@@ -554,7 +591,7 @@ This summary is cheap to gather (runs in-process from cached state) and tells th
 
 #### Token Budget Management
 
-The 128K context window is **text tokens**. Audio and vision consume tokens at a higher rate:
+The context window for Gemma 2B models is **8K tokens** (not 128K — that's the larger Gemma variants). Audio and vision consume tokens at a higher rate:
 
 | Input type | Token cost |
 |---|---|
@@ -581,7 +618,7 @@ The harness uses `280` visual tokens (default) for screenshots unless the caller
 | Model response | ~500 | ~500 |
 | **Total worst case** | ~5,500 | ~10,180 |
 
-Well within 128K, but the tight budgets are about quality — small models produce better answers with focused input. When native audio is present, tool result budgets are reduced from 1,500 to 1,000 tokens to keep the total reasonable. When the STT fallback is used, audio costs ~30 tokens instead of ~6,000, so full tool budgets apply.
+Well within 8K, but the tight budgets are about quality — small models produce better answers with focused input. When native audio is present, tool result budgets are reduced from 1,500 to 1,000 tokens to keep the total reasonable. When the STT fallback is used, audio costs ~30 tokens instead of ~6,000, so full tool budgets apply.
 
 #### Truncation Strategy
 
@@ -636,6 +673,7 @@ All new tools use the `mollotov_ai_` prefix.
 | `mollotov_ai_load` | Load a model on a device from a file path | `aiLoad` |
 | `mollotov_ai_unload` | Unload the current model from a device, freeing memory | `aiUnload` |
 | `mollotov_ai_ask` | Ask the local model a question about the current page. Supports text prompt, voice audio (base64 WAV, max 30s), and context modes to auto-gather page data. Returns the model's response. Runs entirely on-device. | `aiInfer` |
+| `mollotov_ai_record` | Start/stop audio recording on the device microphone. Returns base64 WAV when stopped. | `aiRecord` |
 
 #### CLI Tools (model management)
 
@@ -682,8 +720,15 @@ The MCP tools should return clear, actionable errors:
 | `VISION_NOT_SUPPORTED` | Screenshot context requested but model has no vision capability | Use `page_text` context instead, or load a vision-capable model |
 | `AUDIO_NOT_SUPPORTED` | Raw audio sent to a model without audio capability | Browser should transcribe via platform STT and resend as text |
 | `TRANSCRIPTION_FAILED` | Platform speech-to-text failed to transcribe audio | Try again, speak more clearly, or type the query |
+| `OLLAMA_DISCONNECTED` | Ollama became unreachable during inference | Check if Ollama is still running |
+| `CHECKSUM_MISMATCH` | Downloaded file SHA-256 doesn't match expected hash | Re-download the model |
+| `DOWNLOAD_IN_PROGRESS` | Another process is already downloading this model | Wait for it to finish |
+| `RECORDING_ALREADY_ACTIVE` | `ai-record` start called while already recording | Stop current recording first |
+| `NO_RECORDING_ACTIVE` | `ai-record` stop called with no active recording | Start recording first |
+| `MIC_PERMISSION_DENIED` | Microphone permission not granted | Grant microphone access in System Settings |
 | `OLLAMA_NOT_AVAILABLE` | Ollama backend requested but the API is unreachable | Start Ollama or check the endpoint URL |
 | `OLLAMA_MODEL_NOT_FOUND` | The specified Ollama model isn't installed | Run `ollama pull <model>` to install it |
+| `PLATFORM_AI_UNAVAILABLE` | Platform AI requested but not available on this device | Device doesn't support Apple Intelligence / Gemini Nano |
 
 ---
 
@@ -730,17 +775,30 @@ Expected: FAIL — module not found
 
 `packages/cli/src/ai/models.ts`:
 ```ts
+export interface ModelDescription {
+  summary: string;
+  strengths: string[];
+  limitations: string[];
+  bestFor: string;
+  speedRating: "fast" | "moderate" | "slow";
+}
+
 export interface ApprovedModel {
   id: string;
   name: string;
   huggingFaceRepo: string;
   huggingFaceFile: string;
+  sha256: string;
   sizeBytes: number;
+  ramWhenLoadedGB: number;
   capabilities: string[];
+  memory: boolean;
   platforms: string[];
   minRamGB: number;
+  recommendedRamGB: number;
   quantization: string;
-  description: string;
+  contextWindow: number;
+  description: ModelDescription;
 }
 
 const approvedModels: ApprovedModel[] = [
@@ -749,24 +807,46 @@ const approvedModels: ApprovedModel[] = [
     name: "Gemma 4 E2B Q4",
     huggingFaceRepo: "bartowski/gemma-4-E2B-it-GGUF",
     huggingFaceFile: "gemma-4-E2B-it-Q4_K_M.gguf",
+    sha256: "", // TODO: fill after first download verification
     sizeBytes: 2_500_000_000,
+    ramWhenLoadedGB: 3.8,
     capabilities: ["text", "vision", "audio"],
+    memory: false,
     platforms: ["macos"],
     minRamGB: 8,
+    recommendedRamGB: 16,
+    contextWindow: 8192,
     quantization: "Q4_K_M",
-    description: "Google Gemma 4 2B multimodal — text + vision + audio, good for page analysis",
+    description: {
+      summary: "Understands text, images, and speech — can describe screenshots and answer voice questions.",
+      strengths: ["Describe what's on a webpage from a screenshot", "Summarise articles and extract key info", "Answer voice questions about page content"],
+      limitations: ["Slower when processing images", "May struggle with very long pages (over 10,000 words)"],
+      bestFor: "General page analysis with visual and voice understanding",
+      speedRating: "moderate",
+    },
   },
   {
     id: "gemma-4-e2b-q8",
     name: "Gemma 4 E2B Q8",
     huggingFaceRepo: "bartowski/gemma-4-E2B-it-GGUF",
     huggingFaceFile: "gemma-4-E2B-it-Q8_0.gguf",
+    sha256: "", // TODO: fill after first download verification
     sizeBytes: 5_000_000_000,
+    ramWhenLoadedGB: 8,
     capabilities: ["text", "vision", "audio"],
+    memory: false,
     platforms: ["macos"],
     minRamGB: 16,
+    recommendedRamGB: 32,
+    contextWindow: 8192,
     quantization: "Q8_0",
-    description: "Google Gemma 4 2B multimodal — higher quality, needs 16GB RAM",
+    description: {
+      summary: "Higher quality version of Gemma 4 — more accurate but needs more memory.",
+      strengths: ["More accurate responses, especially for nuanced questions", "Better at complex page layouts", "Same vision + audio as Q4"],
+      limitations: ["Needs 16 GB RAM minimum", "Slightly slower than Q4"],
+      bestFor: "When accuracy matters more than speed",
+      speedRating: "moderate",
+    },
   },
 ];
 
@@ -914,7 +994,9 @@ Expected: FAIL
 `packages/cli/src/ai/download.ts`:
 - `buildDownloadUrl(repo, file)` — constructs `https://huggingface.co/{repo}/resolve/main/{file}`
 - `parseHuggingFaceUrl(input)` — handles full URLs and `owner/repo/file` shorthand
-- `downloadModel(url, destPath, onProgress)` — streams the file to disk with progress callback, uses `node:https` or `fetch` with `ReadableStream` for progress tracking. Writes to a `.tmp` file and renames on completion (atomic write).
+- `downloadModel(url, destPath, sha256, onProgress)` — streams the file to disk with progress callback. Writes to a `.tmp` file and renames on completion (atomic write). After download, verifies SHA-256 against the expected hash — if mismatch, deletes the file and throws `CHECKSUM_MISMATCH`.
+- Download uses a per-model lock file (`<modelDir>/.downloading`) to prevent two CLI processes from downloading the same model simultaneously. If the lock file exists and the process holding it is still alive (check PID stored in the lock), abort with "download already in progress." If the PID is dead (crashed), clean up the orphaned `.tmp` and `.downloading` files, then proceed.
+- On startup, `ModelStore.cleanOrphans()` scans all model directories for stale `.tmp` and `.downloading` files from crashed processes and removes them.
 
 **Step 4: Run test to verify it passes**
 
@@ -1153,7 +1235,7 @@ Add to the `browserTools` array:
 ```ts
 // AI / Local Inference
 { name: "mollotov_ai_status", description: "Get the local inference engine status — whether a model is loaded, which model, its capabilities, and memory usage", method: "aiStatus", schema: { device }, bodyFromArgs: passthrough },
-{ name: "mollotov_ai_load", description: "Load a GGUF model on a device for local inference. The model file must already be downloaded (use mollotov_ai_pull first). Only one model can be loaded at a time.", method: "aiLoad", schema: { device, path: z.string().describe("Absolute path to the GGUF model file") }, bodyFromArgs: passthrough },
+{ name: "mollotov_ai_load", description: "Load a model on a device for local inference. Pass a model ID (resolved to local path) or an ollama: prefixed ID. The model must be downloaded first (use mollotov_ai_pull). Only one model at a time — auto-unloads the current model.", method: "aiLoad", schema: { device, model: z.string().describe("Model ID (e.g. 'gemma-4-e2b-q4') or Ollama model (e.g. 'ollama:llava:7b')") }, bodyFromArgs: passthrough },
 { name: "mollotov_ai_unload", description: "Unload the current model from a device, freeing memory", method: "aiUnload", schema: { device }, bodyFromArgs: passthrough },
 { name: "mollotov_ai_ask", description: "Ask the locally-loaded model a question about the current page. Use 'context' to auto-gather page data (page_text, screenshot, dom, accessibility) or provide 'text' directly. Returns the model's response. This runs entirely on-device — no data is sent to the cloud.", method: "aiInfer", schema: { device, prompt: z.string().describe("Question or instruction for the model"), context: z.enum(["page_text", "screenshot", "dom", "accessibility"]).optional().describe("Auto-gather page context before prompting"), text: z.string().optional().describe("Raw text input (alternative to context)"), maxTokens: z.number().optional().describe("Maximum tokens to generate (default 512)"), temperature: z.number().optional().describe("Sampling temperature (default 0.7)") }, bodyFromArgs: passthrough },
 ```
@@ -1177,6 +1259,7 @@ Add to `BrowserMcpTools`:
 "mollotov_ai_load",
 "mollotov_ai_unload",
 "mollotov_ai_ask",
+"mollotov_ai_record",
 ```
 
 Add to `CliMcpTools`:
@@ -1192,6 +1275,7 @@ Add to `httpToMcp`:
 "ai-load": "mollotov_ai_load",
 "ai-unload": "mollotov_ai_unload",
 "ai-infer": "mollotov_ai_ask",
+"ai-record": "mollotov_ai_record",
 ```
 
 **Step 4: Add AI CLI tool handlers in `server.ts`**
@@ -1202,10 +1286,26 @@ The AI CLI tools (`mollotov_ai_models`, `mollotov_ai_pull`, `mollotov_ai_remove`
 if (method === "aiModels") {
   const store = getModelStore();
   const approved = getApprovedModels();
-  const downloaded = store.listDownloaded();
+  const downloaded = store.listDownloaded(); // includes { id, path } for each
   return { content: [{ type: "text", text: JSON.stringify({ success: true, approved, downloaded }) }] };
 }
+
+if (method === "aiPull") {
+  const { model } = args;
+  const store = getModelStore();
+  // Resolve model ID → HuggingFace URL, download to store, verify sha256
+  // Return { success: true, id, path } on completion
+}
+
+if (method === "aiRemove") {
+  const { model } = args;
+  const store = getModelStore();
+  store.remove(model);
+  return { content: [{ type: "text", text: JSON.stringify({ success: true, removed: model }) }] };
+}
 ```
+
+Note: `listDownloaded()` must return the absolute file path for each downloaded model so that MCP callers can pass the model ID to `mollotov_ai_load` (which resolves it to a path internally).
 
 **Step 5: Build and test**
 
@@ -1239,14 +1339,18 @@ Add the `ggerganov/llama.cpp` Swift package to the Xcode project via SPM. The pa
 import Foundation
 import llama
 
-@MainActor
-class InferenceEngine: ObservableObject {
-    @Published private(set) var isLoaded = false
-    @Published private(set) var modelName: String?
-    @Published private(set) var capabilities: [String] = []
+/// Process-level singleton. Runs inference on a background thread to avoid blocking UI.
+/// Published properties are updated on @MainActor for SwiftUI binding.
+final class InferenceEngine: ObservableObject, @unchecked Sendable {
+    static let shared = InferenceEngine()
 
+    @MainActor @Published private(set) var isLoaded = false
+    @MainActor @Published private(set) var modelName: String?
+    @MainActor @Published private(set) var capabilities: [String] = []
+
+    private let queue = DispatchQueue(label: "com.mollotov.inference", qos: .userInitiated)
     private var model: OpaquePointer?  // llama_model
-    private var context: OpaquePointer?  // llama_context
+    private var ctx: OpaquePointer?    // llama_context
 
     struct InferenceResult {
         let text: String
@@ -1254,24 +1358,20 @@ class InferenceEngine: ObservableObject {
         let inferenceTimeMs: Int
     }
 
-    func load(path: String, name: String, capabilities: [String]) throws {
-        guard !isLoaded else {
-            throw InferenceError.alreadyLoaded(current: modelName ?? "unknown")
-        }
-        // llama_model_load, llama_context_init
-        // Set isLoaded, modelName, capabilities
+    func load(path: String, name: String, capabilities: [String]) async throws {
+        // Run llama_model_load on background queue — heavy I/O
+        // Update @MainActor published properties after success
     }
 
-    func unload() {
-        // llama_free, llama_model_free
-        // Clear state
+    func unload() async {
+        // llama_free, llama_model_free on background queue
+        // Clear @MainActor published state
     }
 
-    func infer(prompt: String, image: Data? = nil, maxTokens: Int = 512, temperature: Float = 0.7) throws -> InferenceResult {
-        guard isLoaded else {
-            throw InferenceError.noModelLoaded
-        }
-        // Tokenize prompt, sample, decode, collect output
+    func infer(prompt: String, audio: Data? = nil, image: Data? = nil,
+               maxTokens: Int = 512, temperature: Float = 0.7) async throws -> InferenceResult {
+        // Run tokenize + sample + decode on background queue
+        // Never blocks main thread — UI stays responsive during inference
     }
 
     var memoryUsageMB: Int {
@@ -1284,6 +1384,7 @@ class InferenceEngine: ObservableObject {
         case loadFailed(String)
         case inferenceFailed(String)
         case visionNotSupported
+        case audioNotSupported
     }
 }
 ```
@@ -1410,9 +1511,12 @@ The harness orchestrates the agent loop:
 4. If final answer → parse and return
 
 ```swift
-actor InferenceHarness {
-    private let engine: InferenceEngine
-    private let context: HandlerContext
+/// Instantiated per-request with the requesting window's HandlerContext.
+/// NOT a singleton — each HTTP request or chat message creates a fresh harness
+/// bound to the correct window's page state.
+struct InferenceHarness {
+    private let engine = InferenceEngine.shared
+    private let context: HandlerContext  // The window that received this request
     private let maxRounds = 3
     private let toolTokenBudget = 1500
 
@@ -1526,7 +1630,243 @@ git commit -m "feat(macos): add AI HTTP endpoints for model loading and inferenc
 
 ---
 
-### Task 10: Integration Testing — End-to-End
+### Task 10: macOS — Apple Silicon Detection Gate
+
+**Files:**
+- Create: `apps/macos/Mollotov/AI/AIState.swift`
+- Modify: `apps/macos/Mollotov/MollotovApp.swift` — check at startup
+
+**Step 1: Implement AIState**
+
+`apps/macos/Mollotov/AI/AIState.swift`:
+
+```swift
+import Foundation
+
+/// Global AI availability state. Checked once at startup, never changes.
+final class AIState: ObservableObject {
+    static let shared = AIState()
+
+    /// True only on Apple Silicon (M1+). All AI UI is hidden when false.
+    let isAvailable: Bool
+
+    private init() {
+        var result: Int32 = 0
+        var size = MemoryLayout<Int32>.size
+        let err = sysctlbyname("hw.optional.arm64", &result, &size, nil, 0)
+        isAvailable = (err == 0 && result == 1)
+    }
+}
+```
+
+**Step 2: Gate all AI UI on `AIState.shared.isAvailable`**
+
+- Brain pill in URLBarView: hidden when `!AIState.shared.isAvailable`
+- AI section in SettingsView: hidden
+- AI brain button in FloatingMenuView: hidden
+- AI chat panel: cannot open
+
+**Step 3: Build and verify on Intel (if available) or verify the sysctl check**
+
+Run: Build macOS app, verify brain pill appears on Apple Silicon.
+
+**Step 4: Commit**
+
+```bash
+git add apps/macos/Mollotov/AI/AIState.swift apps/macos/Mollotov/MollotovApp.swift
+git commit -m "feat(macos): gate AI features behind Apple Silicon detection"
+```
+
+---
+
+### Task 11: macOS — Audio Recording & ai-record Endpoint
+
+**Files:**
+- Create: `apps/macos/Mollotov/AI/AudioRecorder.swift`
+- Modify: `apps/macos/Mollotov/Handlers/AIHandler.swift` — add ai-record handler
+
+**Step 1: Implement AudioRecorder**
+
+`apps/macos/Mollotov/AI/AudioRecorder.swift`:
+
+```swift
+import AVFoundation
+
+/// Records microphone audio as 16-bit PCM WAV, 16kHz mono.
+/// Max 30 seconds, auto-stops. Output: Data containing WAV bytes.
+final class AudioRecorder: ObservableObject {
+    @Published private(set) var isRecording = false
+    @Published private(set) var elapsedMs: Int = 0
+
+    private var engine: AVAudioEngine?
+    private var buffer = Data()
+    private let maxDuration: TimeInterval = 30
+    private var timer: Timer?
+
+    func start() throws {
+        // Request mic permission, configure AVAudioEngine
+        // Tap input node at 16kHz mono
+        // Auto-stop after maxDuration
+    }
+
+    func stop() -> Data {
+        // Stop engine, prepend WAV header to buffer, return
+    }
+}
+```
+
+**Step 2: Add ai-record handler**
+
+In `AIHandler.swift`, register `ai-record`:
+```swift
+state.router.register("ai-record") { body in
+    let action = body["action"] as? String ?? "status"
+    switch action {
+    case "start":
+        try recorder.start()
+        return ["success": true, "recording": true]
+    case "stop":
+        let audio = recorder.stop()
+        return ["success": true, "audio": audio.base64EncodedString(), "durationMs": recorder.elapsedMs]
+    case "status":
+        return ["success": true, "recording": recorder.isRecording, "elapsedMs": recorder.elapsedMs]
+    default:
+        return ["success": false, "error": "Unknown action"]
+    }
+}
+```
+
+**Step 3: Build and verify**
+
+Build macOS app, verify `ai-record` endpoint responds.
+
+**Step 4: Commit**
+
+```bash
+git add apps/macos/Mollotov/AI/AudioRecorder.swift apps/macos/Mollotov/Handlers/AIHandler.swift
+git commit -m "feat(macos): add audio recorder and ai-record HTTP endpoint"
+```
+
+---
+
+### Task 12: iOS — Platform AI Handler
+
+**Files:**
+- Create: `apps/ios/Mollotov/AI/AIState.swift`
+- Create: `apps/ios/Mollotov/AI/PlatformAIEngine.swift`
+- Create: `apps/ios/Mollotov/Handlers/AIHandler.swift`
+- Modify: `apps/ios/Mollotov/Network/Router.swift` — register AI routes
+
+**Step 1: Implement PlatformAIEngine**
+
+```swift
+import Foundation
+import FoundationModels
+
+/// Wraps Apple Intelligence for text-only inference.
+/// Available on iPhone 15 Pro+ / iPad M-series.
+struct PlatformAIEngine {
+    static var isAvailable: Bool {
+        if #available(iOS 26, *) {
+            return SystemLanguageModel.isAvailable
+        }
+        return false
+    }
+
+    func infer(prompt: String) async throws -> String {
+        guard #available(iOS 26, *) else { throw AIError.platformUnavailable }
+        let model = SystemLanguageModel.default
+        let response = try await model.generateResponse(to: prompt)
+        return response.content
+    }
+}
+```
+
+**Step 2: Implement AIHandler for iOS**
+
+Same HTTP endpoints as macOS (`ai-status`, `ai-load`, `ai-unload`, `ai-infer`), but:
+- `backend` defaults to `"platform"` when no Ollama is configured
+- `ai-infer` routes to `PlatformAIEngine` for platform backend
+- `ai-infer` routes to Ollama proxy for ollama backend
+- No native GGUF support (Phase 2)
+
+**Step 3: AIState — always-available on supported devices**
+
+```swift
+final class AIState: ObservableObject {
+    static let shared = AIState()
+    let isAvailable: Bool
+
+    private init() {
+        isAvailable = PlatformAIEngine.isAvailable
+    }
+}
+```
+
+**Step 4: Build and verify**
+
+Build iOS app, verify AI endpoints respond with platform backend.
+
+**Step 5: Commit**
+
+```bash
+git add apps/ios/Mollotov/AI/ apps/ios/Mollotov/Handlers/AIHandler.swift apps/ios/Mollotov/Network/Router.swift
+git commit -m "feat(ios): add platform AI (Apple Intelligence) as default backend"
+```
+
+---
+
+### Task 13: Android — Platform AI Handler
+
+**Files:**
+- Create: `apps/android/app/src/main/java/com/mollotov/browser/ai/AIState.kt`
+- Create: `apps/android/app/src/main/java/com/mollotov/browser/ai/PlatformAIEngine.kt`
+- Create: `apps/android/app/src/main/java/com/mollotov/browser/ai/AIHandler.kt`
+- Modify: `apps/android/app/src/main/java/com/mollotov/browser/network/Router.kt` — register AI routes
+
+**Step 1: Add AI Edge SDK dependency**
+
+In `apps/android/app/build.gradle.kts`:
+```kotlin
+implementation("com.google.ai.edge:generative-ai:0.x.x")
+```
+
+**Step 2: Implement PlatformAIEngine**
+
+```kotlin
+class PlatformAIEngine(private val context: Context) {
+    companion object {
+        fun isAvailable(context: Context): Boolean {
+            // Check if Gemini Nano is available via GenerativeModel.isAvailable()
+        }
+    }
+
+    suspend fun infer(prompt: String): String {
+        val model = GenerativeModel("gemini-nano")
+        val response = model.generateContent(prompt)
+        return response.text ?: ""
+    }
+}
+```
+
+**Step 3: Implement AIHandler**
+
+Same HTTP endpoints as iOS, same backend priority (platform default, Ollama optional).
+
+**Step 4: Build and verify**
+
+Build Android app, verify AI endpoints respond.
+
+**Step 5: Commit**
+
+```bash
+git add apps/android/
+git commit -m "feat(android): add platform AI (Gemini Nano) as default backend"
+```
+
+---
+
+### Task 14: Integration Testing — End-to-End
 
 **Files:**
 - Create: `packages/cli/tests/ai/integration.test.ts`
@@ -1577,7 +1917,7 @@ git commit -m "test(cli): add AI model registry integration tests"
 
 ---
 
-### Task 11: Documentation
+### Task 15: Documentation
 
 **Files:**
 - Modify: `docs/api/README.md` — add AI section link
@@ -1587,7 +1927,7 @@ git commit -m "test(cli): add AI model registry integration tests"
 
 **Step 1: Write `docs/api/ai.md`**
 
-Document all four HTTP endpoints (`ai-load`, `ai-unload`, `ai-status`, `ai-infer`) with request/response examples.
+Document all five HTTP endpoints (`ai-load`, `ai-unload`, `ai-status`, `ai-infer`, `ai-record`) with request/response examples. Document the three backends: native (macOS), ollama (all platforms), platform (iOS/Android).
 
 **Step 2: Update CLI docs**
 
@@ -1606,49 +1946,62 @@ git commit -m "docs: add local inference API reference, CLI commands, and featur
 
 ---
 
-## Mobile Roadmap (Future Tasks — Not In This Plan)
+## Mobile — Platform AI as Default (Phase 1)
 
-### Mobile Ollama Proxy (Phase 2a — Fastest Path)
+**Mobile always has AI.** On iOS and Android, platform intelligence (Apple Intelligence / Gemini Nano) is the default backend. No download, no configuration, no Ollama — the brain pill works out of the box on supported hardware. Capabilities: `["text"]` only — no vision, no audio input processing.
 
-Mobile devices can use a remote Ollama instance over the local network. This requires no on-device model, no downloads, and no native ML framework integration — just HTTP calls.
+### Platform AI Backend
+
+**iOS — Apple Intelligence:**
+- Uses Foundation Models framework (`FoundationModels.SystemLanguageModel`)
+- Available on iPhone 15 Pro+ / iPad with M-series (devices with Apple Intelligence enabled)
+- On older iPhones without Apple Intelligence, AI is hidden unless Ollama is configured
+- No download — managed by the OS, runs on the Neural Engine
+- `ai-infer` routes to `SystemLanguageModel.default.generateResponse()` when `backend == "platform"`
+
+**Android — Gemini Nano:**
+- Uses Google AI Edge SDK (`com.google.ai.edge:generative-ai`)
+- Available on Pixel 8+ and Samsung Galaxy S24+ (devices with on-device Gemini)
+- On unsupported devices, AI is hidden unless Ollama is configured
+- No download — pre-installed or silently managed by Google Play Services
+- `ai-infer` routes to `GenerativeModel.generateContent()` when `backend == "platform"`
+
+**Backend priority on mobile:**
+1. If an Ollama backend is configured and reachable → use Ollama proxy
+2. **Otherwise → use platform AI (always available on supported hardware)**
+
+The `ai-config.json` on mobile defaults to `backend: "platform"`. Configuring Ollama changes it to `"ollama"`. If Ollama becomes unreachable, the app falls back to platform AI silently.
+
+### Mobile Ollama Proxy
+
+Mobile devices can also use a remote Ollama instance over the local network. This adds vision capability and access to larger models, but requires configuration.
 
 **Settings UI (both iOS and Android):**
-- New "AI" section in Settings
 - "Ollama Endpoint" text field — user enters `http://192.168.1.50:11434` (their Mac's LAN IP)
 - "Test Connection" button — calls `/api/tags`, shows green/red indicator
 - "Model" picker — populated from the Ollama `/api/tags` response after successful connection
 - Saved to UserDefaults (iOS) / SharedPreferences (Android)
 
 **Implementation:**
-- Mobile `AIHandler` only supports `backend: "ollama"` — no native inference
-- `ai-load` stores the Ollama endpoint + model name
-- `ai-infer` gathers context locally (screenshot, page text, DOM — these already work), then sends the prompt + data to the remote Ollama endpoint
-- Same HTTP API surface as macOS, so the CLI and MCP tools work identically
+- `ai-load` with an `ollama:` prefixed model stores the endpoint + model name
+- `ai-infer` gathers context locally (page text, DOM — these already work), then sends the prompt + data to the remote Ollama endpoint
+- Same HTTP API surface as macOS, so CLI and MCP tools work identically
 
-**Advantage:** Ships fast, zero native ML dependencies, works with any model the user has in Ollama.
+### On-Device GGUF (Future — Phase 2)
 
-### iOS (Phase 2b — On-Device)
+On-device GGUF model loading via llama.cpp is deferred:
 
-- Ship a curated model list embedded in the app (subset of approved models)
-- Download models to `Documents/models/` with iOS progress UI
-- Use `llama.cpp` compiled as a C library via SPM (same package, iOS target)
-- Core ML conversion is optional — llama.cpp runs fine on Apple Silicon via Metal
-- Implement the same native `AIHandler` backend as macOS
+**iOS:**
+- Ship curated model list, download to `Documents/models/`
+- Use llama.cpp compiled as C library via SPM (same package, iOS target)
 - Settings screen shows downloaded models and loaded status
-- Add a note in settings: "Want a model added? Raise a PR on GitHub"
 
-### Android (Phase 2b — On-Device)
-
-- Ship a curated model list in the app resources
-- Download to `files/models/` with Android DownloadManager
-- Use `llama.cpp` via JNI (android.llm or llama.android bindings)
-- Implement same native backend
-- Settings screen mirrors iOS
-- Same PR-based model addition process
+**Android:**
+- Ship curated model list, download via DownloadManager
+- Use llama.cpp via JNI (android.llm or llama.android bindings)
 
 ### Platform Parity Note
 
-Mobile inference is phased:
-1. **Phase 2a (Ollama proxy)** is lightweight and ships alongside Phase 1 macOS work — just HTTP forwarding
-2. **Phase 2b (on-device)** is deferred because it requires native ML framework integration, storage management, and download UI
-3. The HTTP API surface is identical across all backends — native, Ollama local, Ollama remote — so CLI/MCP tools work without knowing which backend is active
+The HTTP API surface is identical across all backends — native, Ollama, platform — so CLI/MCP tools work without knowing which backend is active. Mobile ships with platform AI on day one. On-device GGUF models are a future upgrade path.
+
+**macOS does NOT use platform AI.** Apple Intelligence lacks the Foundation Models API on macOS. The macOS app uses native llama.cpp or Ollama only.
