@@ -94,6 +94,24 @@ A built-in network traffic viewer accessible from the floating menu. Captures al
 
 API: `network-list`, `network-detail`, `network-select`, `network-current`, `network-clear`.
 
+## 3D DOM Inspector
+
+A visual debugging tool for inspecting element stacking and layer order. Click the 3D button in the floating menu (or call the `snapshot-3d-enter` endpoint) to explode the page DOM into a 3D layered view. Every element is pushed along the Z-axis based on its depth in the DOM tree, making it easy to see which elements overlap, identify invisible overlays blocking interaction, and understand the page structure.
+
+**Controls:**
+- **Click and drag** — rotate the 3D scene to view from any angle
+- **Scroll wheel** — zoom in and out
+- **Hover** — highlight element and show tag, classes, dimensions, position, z-index
+- **+ / -** keys — increase or decrease layer spacing
+- **R** key — reset rotation and zoom to default
+- **Escape** or close button — exit 3D mode and restore the page
+
+The 3D view shows DOM depth (tree nesting), not CSS paint order. Position, z-index, and stacking context information appear in the hover info panel. User interactions are suppressed while in 3D mode, but background page logic (timers, network callbacks) may still execute. The page is restored to its original state on exit. Works with both WebKit and Chromium renderers.
+
+**Limitations:** Canvas, WebGL, and video elements appear as opaque layers. Cross-origin iframes appear as labeled blocks. Closed shadow DOM roots are not traversable. Hover detection degrades at steep rotation angles. Pages with more than 5,000 visible elements are capped with a warning.
+
+API: `snapshot-3d-enter`, `snapshot-3d-exit`, `snapshot-3d-status`.
+
 ## Bookmarks
 
 Saved URLs accessible from the floating menu. Fully controllable through the MCP and CLI — an LLM or user can add, remove, list, and clear bookmarks remotely. Tapping a bookmark navigates the browser to that URL. Persisted across app restarts. Primary use case: push project URLs from the CLI so you can tap to navigate without typing.

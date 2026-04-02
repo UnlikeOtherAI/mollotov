@@ -229,6 +229,27 @@ Response:
   "cleared": 47
 }
 ```
+
+### `snapshot-3d-enter`
+Enter 3D DOM inspection mode. Explodes the page into a layered depth view.
+
+- Method: POST
+- Body: none
+- Response: `{success: true}` or error if already active
+
+### `snapshot-3d-exit`
+Exit 3D DOM inspection mode. Restores the page to its original state.
+
+- Method: POST
+- Body: none
+- Response: `{success: true}` (idempotent)
+
+### `snapshot-3d-status`
+Check whether 3D DOM inspection mode is currently active.
+
+- Method: POST
+- Body: none
+- Response: `{success: true, active: true|false}`
 ## Mutation Observation
 
 ### `watchMutations`
@@ -438,4 +459,3 @@ Response:
   "cleared": 2
 }
 ```
-
