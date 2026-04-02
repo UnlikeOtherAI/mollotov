@@ -10,7 +10,11 @@ class PlatformAIEngine(private val context: Context) {
         @Suppress("UNUSED_PARAMETER")
         fun isAvailable(context: Context): Boolean {
             // TODO: Check via Google AI Edge SDK GenerativeModel.isAvailable()
-            return Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+            // Until the SDK is integrated, return false so ai-status doesn't claim platform AI works.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                return false
+            }
+            return false
         }
     }
 

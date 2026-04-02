@@ -245,15 +245,7 @@ class AIHandler(private val appContext: Context) {
     }
 
     private fun currentBackend(): String {
-        return if (
-            AIState.backend == AIState.OLLAMA_BACKEND &&
-            !AIState.activeModel.isNullOrBlank() &&
-            !AIState.ollamaEndpoint.isNullOrBlank()
-        ) {
-            AIState.OLLAMA_BACKEND
-        } else {
-            AIState.PLATFORM_BACKEND
-        }
+        return AIState.backend
     }
 
     private fun currentModel(): String? {
