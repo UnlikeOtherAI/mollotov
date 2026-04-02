@@ -634,7 +634,61 @@ git commit -m "feat(macos): 3D DOM inspector JavaScript engine"
 
 ---
 
-### Task 2: Swift Handler — Snapshot3DHandler
+### Task 2: Feature Flag
+
+The 3D inspector is behind a feature flag. Hidden by default, enabled via Settings toggle or environment variable for testing.
+
+**Files:**
+- Create: `apps/macos/Mollotov/Browser/FeatureFlags.swift`
+- Modify: `apps/macos/Mollotov/Views/SettingsView.swift`
+
+**Step 1: Create `FeatureFlags.swift`**
+
+```swift
+import Foundation
+
+enum FeatureFlags {
+    /// 3D DOM Inspector — experimental, behind feature flag.
+    /// Enable via Settings toggle or `MOLLOTOV_3D_INSPECTOR=1` environment variable.
+    static var is3DInspectorEnabled: Bool {
+        if UserDefaults.standard.bool(forKey: "enable3DInspector") {
+            return true
+        }
+        if ProcessInfo.processInfo.environment["MOLLOTOV_3D_INSPECTOR"] == "1" {
+            return true
+        }
+        return false
+    }
+}
+```
+
+**Step 2: Add toggle to `SettingsView.swift`**
+
+Add an "Experimental" section to the Form, between the "App" section and the "Done" button:
+
+```swift
+Section("Experimental") {
+    Toggle("3D DOM Inspector", isOn: Binding(
+        get: { UserDefaults.standard.bool(forKey: "enable3DInspector") },
+        set: { UserDefaults.standard.set($0, forKey: "enable3DInspector") }
+    ))
+    Text("Explode the page into 3D layers to debug element stacking. Restart not required.")
+        .font(.caption)
+        .foregroundColor(.secondary)
+}
+```
+
+**Step 3: Commit**
+
+```bash
+git add apps/macos/Mollotov/Browser/FeatureFlags.swift \
+    apps/macos/Mollotov/Views/SettingsView.swift
+git commit -m "feat(macos): feature flag for 3D DOM inspector (settings toggle + env var)"
+```
+
+---
+
+### Task 3: Swift Handler — Snapshot3DHandler
 
 **Files:**
 - Create: `apps/macos/Mollotov/Handlers/Snapshot3DHandler.swift`
@@ -662,6 +716,9 @@ enum Snapshot3DHandler {
 
     @MainActor
     private static func enter(context: HandlerContext) async -> [String: Any] {
+        guard FeatureFlags.is3DInspectorEnabled else {
+            return errorResponse(code: "FEATURE_DISABLED", message: "3D inspector is not enabled. Enable in Settings or set MOLLOTOV_3D_INSPECTOR=1")
+        }
         guard !context.isIn3DInspector else {
             return errorResponse(code: "ALREADY_ACTIVE", message: "3D inspector is already active")
         }
@@ -766,7 +823,7 @@ git commit -m "feat(macos): 3D inspector HTTP handler and bridge message routing
 
 ---
 
-### Task 3: Floating Menu Integration
+### Task 4: Floating Menu Integration (gated by feature flag)
 
 **Files:**
 - Modify: `apps/macos/Mollotov/Views/FloatingMenuView.swift`
@@ -779,10 +836,15 @@ Add property:
 let onSnapshot3D: () -> Void
 ```
 
-Add to `actions` array:
+Add to `actions` array, **only when the feature flag is enabled**:
 ```swift
-.init(id: "snapshot-3d", icon: "cube.transparent", accessibilityID: "browser.floating-menu.cube-transparent", tooltip: "3D Inspector", action: onSnapshot3D),
+// In the actions computed property, conditionally include:
+if FeatureFlags.is3DInspectorEnabled {
+    items.append(.init(id: "snapshot-3d", icon: "cube.transparent", accessibilityID: "browser.floating-menu.cube-transparent", tooltip: "3D Inspector", action: onSnapshot3D))
+}
 ```
+
+Note: the `actions` property may need to change from a computed array literal to a `var` that conditionally appends. The button only appears when enabled via Settings or env var.
 
 **Step 2: Wire in `BrowserView.swift`**
 
@@ -828,7 +890,7 @@ git commit -m "feat(macos): 3D inspector button in floating menu"
 
 ---
 
-### Task 4: Build, Launch, Verify
+### Task 5: Build, Launch, Verify
 
 **Step 1:** Kill any stale Mollotov instance
 ```bash
@@ -837,9 +899,15 @@ pkill -f Mollotov || true
 
 **Step 2:** Build the macOS app in Xcode
 
-**Step 3:** Launch and navigate to a test page (e.g., `https://news.ycombinator.com` — simple DOM, good first test)
+**Step 3:** Launch with the feature flag enabled via environment variable:
+```bash
+MOLLOTOV_3D_INSPECTOR=1 open apps/macos/build/Debug/Mollotov.app
+```
+Or: launch normally, open Settings, toggle "3D DOM Inspector" under Experimental.
 
-**Step 4:** Click the 3D button in the floating menu. Verify:
+**Step 4:** Navigate to a test page (e.g., `https://news.ycombinator.com` — simple DOM, good first test)
+
+**Step 5:** Verify the 3D button appears in the floating menu. Click it. Verify:
 - Page explodes into 3D layers
 - Mouse drag rotates the scene
 - Scroll wheel zooms
@@ -850,17 +918,21 @@ pkill -f Mollotov || true
 - Escape exits cleanly
 - Page is fully restored after exit
 
-**Step 5:** Test on a complex page (e.g., `https://github.com`). Verify:
+**Step 6:** Test on a complex page (e.g., `https://github.com`). Verify:
 - Shadow DOM components are visible in the 3D tree
 - Performance is acceptable (no multi-second freeze)
 - Fixed headers are converted to absolute positioning
 - Exit restores page completely
 
-**Step 6: Commit** (if any fixes were needed)
+**Step 7:** Verify the button does NOT appear when the flag is off (neither env var nor Settings toggle)
+
+**Step 8:** Verify the HTTP endpoint returns `FEATURE_DISABLED` error when the flag is off
+
+**Step 9: Commit** (if any fixes were needed)
 
 ---
 
-### Task 5: Documentation
+### Task 6: Documentation
 
 **Files:**
 - Modify: `docs/functionality.md`
