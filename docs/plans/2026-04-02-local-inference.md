@@ -332,55 +332,165 @@ When `audio` is provided, it replaces `prompt` — the model receives the raw au
 
 When both `prompt` and `audio` are provided, `audio` takes precedence (the text prompt is ignored).
 
-**Context gathering:**
+### Inference Harness (Agent Loop)
 
-The `context` field tells the browser what data to auto-gather before prompting. Can be a single string or an array of strings for multi-source context.
+A 2B model cannot handle a massive context dump. Instead of loading everything upfront, the harness runs a lightweight agent loop: the model gets a minimal page summary, decides what tools it needs, the harness executes them, feeds results back, and the model answers.
+
+**Why a harness:**
+- 2B models have limited context windows and degrade with large inputs
+- Most questions only need 1-2 data sources, not all 12
+- The model should request what it needs, not receive everything
+- Keeps inference fast — small prompt → fast response
+
+#### System Prompt
+
+The harness prepends a fixed system prompt to every inference call. This prompt is embedded in the browser app, not configurable by the user.
+
+```
+You are a browser assistant built into Mollotov. You answer questions about the web page currently loaded in the browser.
+
+Rules:
+- Be concise. One to three sentences unless the user asks for detail.
+- Only answer questions you can answer from the page data provided. If you cannot answer, say so in one sentence.
+- Do not make up information. Do not guess URLs, prices, or facts not present in the data.
+- Do not engage in general conversation, tell jokes, discuss weather, or answer questions unrelated to the current page.
+- If the user asks something about the page and you need more data, use a tool call.
+- When referencing page elements, include the CSS selector when available.
+- When reporting errors, include the exact error message.
+
+You have access to these tools. Call them by responding with a JSON tool call:
+{tools_block}
+
+Respond with EITHER a tool call OR a final answer, never both.
+
+Tool call format:
+{"tool": "tool_name", "args": {"key": "value"}}
+
+Final answer format:
+{"answer": "your response", "references": [...]}
+```
+
+The `{tools_block}` is injected at runtime — a compact list of available tools with one-line descriptions. This keeps the system prompt small and stable.
+
+#### Available Tools (Harness-Side)
+
+The harness exposes a curated subset of Mollotov's handlers as tools the model can call. These are NOT the MCP tools — they're internal shortcuts that run in-process without HTTP round-trips.
+
+| Tool | Description | Maps to |
+|---|---|---|
+| `get_text` | Get readable page text (title, content, word count) | `get-page-text` |
+| `get_screenshot` | Take a viewport screenshot | `screenshot` |
+| `get_dom` | Get HTML of an element (default: body, max 2000 chars) | `get-dom` with truncation |
+| `get_element` | Get text/attributes of a specific CSS selector | `get-element-text` + `get-attributes` |
+| `find_element` | Find elements by text content | `find-element` |
+| `get_forms` | Get form field names, types, and values | `get-form-state` |
+| `get_errors` | Get JavaScript errors | `get-js-errors` |
+| `get_console` | Get recent console messages (last 20) | `get-console-messages` with limit |
+| `get_network` | Get recent network requests (last 20) | `get-network-log` with limit |
+| `get_cookies` | Get cookies for current page | `get-cookies` |
+| `get_storage` | Get localStorage keys and values | `get-storage` |
+| `get_links` | Get all links on the page (href + text) | `query-selector-all` for `a[href]` |
+| `get_visible` | Get visible interactive elements | `get-visible-elements` |
+| `get_a11y` | Get accessibility tree (max depth 3) | `get-accessibility-tree` with depth limit |
+
+Every tool applies aggressive truncation — the harness caps each tool result at a token budget (default 1500 tokens) to prevent blowing the model's context. Long DOM trees, large console logs, and verbose network logs are trimmed to fit.
+
+#### Agent Loop
+
+```
+1. Build initial prompt:
+   - System prompt (fixed, ~300 tokens)
+   - Page summary (auto-gathered, ~100 tokens):
+     title, URL, word count, error count, form count
+   - User's question or voice transcription
+
+2. Run inference → model responds
+
+3. If response is a tool call:
+   - Execute the tool in-process (no HTTP)
+   - Truncate result to token budget
+   - Append tool result to conversation
+   - Run inference again (step 2)
+   - Max 3 tool calls per query (hard limit, prevents loops)
+
+4. If response is a final answer:
+   - Extract answer text and references
+   - Return to caller
+```
+
+**Max 3 rounds:** The model gets at most 3 tool calls before it must answer. This prevents infinite loops and keeps response time under control. A typical query uses 0-1 tool calls.
+
+#### Page Summary (Auto-Gathered)
+
+Every inference call starts with a lightweight page summary that costs ~100 tokens. This gives the model enough context to decide if it needs tools.
+
+```
+Page: "Pricing - Acme Corp"
+URL: https://acme.com/pricing
+Words: 1,247
+Forms: 1 (3 fields)
+JS Errors: 2
+Console: 8 messages (3 warnings, 2 errors)
+Network: 34 requests (2 failed)
+Links: 47
+Interactive elements: 12
+```
+
+This summary is cheap to gather (runs in-process from cached state) and tells the model what's available without loading any of it. If the user asks "are there any errors?", the model sees `JS Errors: 2` and calls `get_errors` to get the details.
+
+#### Token Budget Management
+
+| Component | Budget |
+|---|---|
+| System prompt | ~300 tokens |
+| Page summary | ~100 tokens |
+| User prompt / audio transcription | ~100 tokens |
+| Tool results (per call, max 3) | ~1500 tokens each |
+| Model response | ~500 tokens |
+| **Total worst case** | ~5500 tokens |
+
+Gemma 4 E2B has a 128K context window, so this is well within limits even with 3 tool calls. The tight budgets are about quality, not capacity — small models produce better answers with focused input.
+
+#### Truncation Strategy
+
+Each tool result is truncated to fit its budget:
+
+- **Text content:** First N characters, with a `[truncated, {total} chars total]` suffix
+- **DOM:** Outer HTML of the target element, children collapsed after depth 2
+- **Lists (console, network, errors):** Most recent N entries, with a `[{total} total, showing last {N}]` header
+- **Screenshots:** Passed directly to the vision encoder (no truncation, but scaled to the model's expected resolution)
+
+#### Example: Voice Query Flow
+
+User taps brain, says: "Why is the form not working?"
+
+```
+Round 1:
+  System prompt + page summary + "Why is the form not working?"
+  → Model responds: {"tool": "get_errors"}
+
+Round 2:
+  + Tool result: [2 errors: "TypeError: email is undefined at line 42", "Uncaught ReferenceError: validate at line 18"]
+  → Model responds: {"tool": "get_forms"}
+
+Round 3:
+  + Tool result: [1 form, 3 fields: email (empty, required), password (filled), submit (button)]
+  → Model responds: {"answer": "The form has 2 JS errors. The email field is empty but required, and there's a TypeError at line 42 trying to read the email value. Fill in the email field to fix the submission.", "references": [{"type": "element", "selector": "input[name=email]"}, {"type": "error", "message": "TypeError: email is undefined", "line": 42}]}
+```
+
+Total: 3 inference calls, ~2000 tokens of context, ~3 seconds on M2.
+
+#### Caller-Provided Context (Override)
+
+The `context` field on the `ai-infer` request is still supported as a way for the MCP caller (or CLI) to pre-load specific data. When provided, the harness skips the agent loop and does a single-shot inference with the pre-loaded context:
 
 - `"page_text"` — runs `get-page-text`, prepends readable text
 - `"screenshot"` — takes a viewport screenshot, passes as image input
 - `"dom"` — runs `get-dom`, prepends HTML
 - `"accessibility"` — runs `get-accessibility-tree`, prepends the tree
-- `"console"` — runs `get-console-messages`, includes recent console output
-- `"errors"` — runs `get-js-errors`, includes JS errors
-- `"network"` — runs `get-network-log`, includes recent network requests
-- `"forms"` — runs `get-form-state`, includes form field states
-- `"cookies"` — runs `get-cookies`, includes cookies
-- `"storage"` — runs `get-storage`, includes localStorage/sessionStorage
-- `"visible"` — runs `get-visible-elements`, includes what's in the viewport
-- `"all"` — shortcut that gathers page_text + screenshot + console + errors + network + forms + accessibility
-- omitted — uses only the `text` field as raw input, or just the prompt/audio with no additional context
+- omitted — uses the agent loop (default)
 
-**Array context example:**
-
-```json
-{
-  "prompt": "Why is the login form not submitting?",
-  "context": ["screenshot", "forms", "errors", "console", "network"],
-  "maxTokens": 512
-}
-```
-
-This gives the local model a complete debugging picture: what the page looks like, what the form fields contain, any JS errors, console output, and recent network requests. The model can then diagnose the issue.
-
-**Tool-call responses (structured output):**
-
-When the model identifies a specific element, error, or resource, the response includes structured data alongside the text:
-
-```json
-{
-  "success": true,
-  "response": "The submit button has a JavaScript error handler that prevents default. The error in console is 'TypeError: Cannot read property email of undefined' at line 42.",
-  "references": [
-    { "type": "element", "selector": "#submit-btn", "description": "Submit button with prevented default" },
-    { "type": "error", "message": "TypeError: Cannot read property email of undefined", "line": 42 },
-    { "type": "console", "level": "error", "text": "Form validation failed" }
-  ],
-  "tokensUsed": 312,
-  "inferenceTimeMs": 1800
-}
-```
-
-The `references` array is optional — the model includes it when it can point to specific things in the page. The UI can make these tappable (e.g., tapping an element reference scrolls to and highlights it).
+This is an escape hatch for callers who know exactly what context is needed. The agent loop is the default for interactive use (UI brain pill, voice).
 
 ### MCP Tools
 
@@ -1059,7 +1169,166 @@ git commit -m "feat(macos): integrate llama.cpp Swift package and InferenceEngin
 
 ---
 
-### Task 8: macOS — AIHandler HTTP Endpoints
+### Task 8: macOS — Inference Harness & System Prompt
+
+**Files:**
+- Create: `apps/macos/Mollotov/AI/InferenceHarness.swift`
+- Create: `apps/macos/Mollotov/AI/SystemPrompt.swift`
+- Create: `apps/macos/Mollotov/AI/PageSummary.swift`
+
+**Step 1: Implement the system prompt**
+
+`apps/macos/Mollotov/AI/SystemPrompt.swift`:
+
+```swift
+enum SystemPrompt {
+    /// The fixed system prompt prepended to every inference call.
+    /// {tools_block} is replaced at runtime with the available tool descriptions.
+    static let template = """
+    You are a browser assistant built into Mollotov. You answer questions about the web page currently loaded in the browser.
+
+    Rules:
+    - Be concise. One to three sentences unless the user asks for detail.
+    - Only answer questions you can answer from the page data provided. If you cannot answer, say so in one sentence.
+    - Do not make up information. Do not guess URLs, prices, or facts not present in the data.
+    - Do not engage in general conversation, tell jokes, discuss weather, or answer questions unrelated to the current page.
+    - If you need more data about the page, use a tool call.
+    - When referencing page elements, include the CSS selector when available.
+    - When reporting errors, include the exact error message.
+
+    You have access to these tools:
+    {tools_block}
+
+    Respond with EITHER a tool call OR a final answer, never both.
+    Tool call: {"tool": "tool_name", "args": {"key": "value"}}
+    Final answer: {"answer": "your response", "references": [...]}
+    """
+
+    /// Compact tool descriptions injected into {tools_block}.
+    static let toolDescriptions = """
+    get_text - Get readable page text (title, content, word count)
+    get_screenshot - Take a viewport screenshot
+    get_dom(selector?) - Get HTML of an element (default: body, max 2000 chars)
+    get_element(selector) - Get text and attributes of a CSS selector
+    find_element(text) - Find elements by text content
+    get_forms - Get form field names, types, and values
+    get_errors - Get JavaScript errors
+    get_console - Get recent console messages (last 20)
+    get_network - Get recent network requests (last 20)
+    get_cookies - Get cookies for current page
+    get_storage - Get localStorage keys and values
+    get_links - Get all links on the page
+    get_visible - Get visible interactive elements
+    get_a11y - Get accessibility tree (depth 3)
+    """
+
+    static func build() -> String {
+        template.replacingOccurrences(of: "{tools_block}", with: toolDescriptions)
+    }
+}
+```
+
+**Step 2: Implement PageSummary**
+
+`apps/macos/Mollotov/AI/PageSummary.swift`:
+
+```swift
+/// Gathers a lightweight page summary (~100 tokens) for the harness.
+struct PageSummary {
+    let title: String
+    let url: String
+    let wordCount: Int
+    let formCount: Int
+    let errorCount: Int
+    let consoleCount: Int
+    let networkRequestCount: Int
+    let linkCount: Int
+    let interactiveElementCount: Int
+
+    func formatted() -> String {
+        """
+        Page: "\(title)"
+        URL: \(url)
+        Words: \(wordCount)
+        Forms: \(formCount)
+        JS Errors: \(errorCount)
+        Console: \(consoleCount) messages
+        Network: \(networkRequestCount) requests
+        Links: \(linkCount)
+        Interactive elements: \(interactiveElementCount)
+        """
+    }
+
+    /// Gather from the current page via HandlerContext JS evaluation.
+    @MainActor
+    static func gather(from context: HandlerContext) async -> PageSummary {
+        // Runs lightweight JS queries to collect counts, not content
+    }
+}
+```
+
+**Step 3: Implement InferenceHarness**
+
+`apps/macos/Mollotov/AI/InferenceHarness.swift`:
+
+The harness orchestrates the agent loop:
+1. Build prompt: system prompt + page summary + user question
+2. Run inference
+3. If tool call → execute tool, append result, re-run (max 3 rounds)
+4. If final answer → parse and return
+
+```swift
+actor InferenceHarness {
+    private let engine: InferenceEngine
+    private let context: HandlerContext
+    private let maxRounds = 3
+    private let toolTokenBudget = 1500
+
+    struct Result {
+        let answer: String
+        let references: [Reference]
+        let toolCallsMade: Int
+        let totalTokens: Int
+        let totalTimeMs: Int
+        let transcription: String?  // If audio input was used
+    }
+
+    struct Reference {
+        let type: String       // "element", "error", "console", "network"
+        let selector: String?
+        let message: String?
+        let description: String?
+    }
+
+    func run(prompt: String, audio: Data? = nil, preloadedContext: String? = nil) async throws -> Result {
+        // 1. If preloadedContext is set, single-shot (no agent loop)
+        // 2. Otherwise: gather page summary, run agent loop
+    }
+
+    private func executeTool(_ name: String, args: [String: String]) async -> String {
+        // Dispatch to handler context, truncate result to toolTokenBudget
+    }
+
+    private func truncate(_ text: String, maxTokens: Int) -> String {
+        // Approximate: 1 token ≈ 4 chars. Truncate with suffix.
+    }
+}
+```
+
+**Step 4: Build and verify**
+
+Build macOS app, verify harness compiles.
+
+**Step 5: Commit**
+
+```bash
+git add apps/macos/Mollotov/AI/
+git commit -m "feat(macos): add inference harness with agent loop, system prompt, and page summary"
+```
+
+---
+
+### Task 9: macOS — AIHandler HTTP Endpoints
 
 **Files:**
 - Create: `apps/macos/Mollotov/Handlers/AIHandler.swift`
@@ -1125,7 +1394,7 @@ git commit -m "feat(macos): add AI HTTP endpoints for model loading and inferenc
 
 ---
 
-### Task 9: Integration Testing — End-to-End
+### Task 10: Integration Testing — End-to-End
 
 **Files:**
 - Create: `packages/cli/tests/ai/integration.test.ts`
@@ -1176,7 +1445,7 @@ git commit -m "test(cli): add AI model registry integration tests"
 
 ---
 
-### Task 10: Documentation
+### Task 11: Documentation
 
 **Files:**
 - Modify: `docs/api/README.md` — add AI section link
