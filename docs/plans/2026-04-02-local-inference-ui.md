@@ -523,7 +523,7 @@ Pin icon (`fa-thumbtack`) in the top-right corner of the tab bar. **Pinned by de
 
 **Magnetic docking:** When the user drags the detached chat window close to the right edge of its parent browser window (within ~20px), the chat snaps back into the browser as a pinned panel. While dragging, a subtle highlight appears on the browser's right edge to show the docking zone. Once docked, both windows move together as one.
 
-**Each browser window gets its own chat instance.** Opening a second browser window creates a second independent chat. If unpinned, it's a separate floating window bound to the second browser window.
+**Each browser window gets its own chat history** but shares the same loaded model. The model is process-wide (one model at a time) — switching models in any window's Models tab writes `~/.mollotov/ai-config.json`, and all other windows pick up the change via FSEvents within one frame. Brain pills, panel headers, and Models tab active indicators all update immediately across every window.
 
 **Re-pinning** (clicking the pin icon in a detached window, or magnetic docking) snaps the floating window back into the browser as a side panel.
 

@@ -29,9 +29,50 @@ Mobile model storage:
 - iOS: `<app>/Documents/models/`
 - Android: `<app>/files/models/`
 
-**Shared model store (macOS).** Both the CLI and the macOS app read and write `~/.mollotov/models/`. Either can download, delete, or list models. The `registry.json` file is the single source of truth — both sides read it on startup and before any operation. File-level locking (`flock`) prevents concurrent writes during downloads.
+**Shared model store (macOS).** Both the CLI and the macOS app read and write `~/.mollotov/models/`. Either can download, delete, or list models. File-level locking (`flock`) prevents concurrent writes during downloads.
 
-The macOS app watches `~/.mollotov/models/` via `DispatchSource.makeFileSystemObjectSource` (FSEvents) to detect CLI-initiated changes. When the CLI downloads or deletes a model, the app's Models tab updates immediately without polling.
+### Config File
+
+```
+~/.mollotov/ai-config.json
+```
+
+Single source of truth for the active AI state. Every browser window, the CLI, and the MCP server all read and watch this file.
+
+```json
+{
+  "activeModel": "gemma-4-e2b-q4",
+  "backend": "native",
+  "ollamaEndpoint": "http://localhost:11434",
+  "ollamaModel": null,
+  "loadedAt": "2026-04-02T14:30:00Z"
+}
+```
+
+| Field | Description |
+|---|---|
+| `activeModel` | Model ID currently loaded (null = none) |
+| `backend` | `"native"` or `"ollama"` |
+| `ollamaEndpoint` | Ollama API URL (persisted across sessions) |
+| `ollamaModel` | Ollama model name when backend is ollama (e.g. `"llava:7b"`) |
+| `loadedAt` | Timestamp of last load (used for staleness detection) |
+
+**Who writes:**
+- macOS app (any window) — when user loads/unloads via the Models tab
+- CLI — when user runs `mollotov ai load` / `mollotov ai unload`
+- All writes use `flock` to prevent corruption
+
+**Who watches:**
+- Every macOS browser window watches `ai-config.json` via `DispatchSource.makeFileSystemObjectSource` (FSEvents). When the file changes, all windows update their `AIState` immediately — the brain pill, the panel's Chat tab header, and the Models tab active indicator all reflect the new model within one frame.
+- The CLI reads it on startup for `mollotov ai status` (local mode, no device needed).
+
+**Cross-window behavior:** Switching models in one browser window writes `ai-config.json` → FSEvents fires → all other windows pick up the change. Since only one model can be loaded at a time (process-wide), all windows share the same loaded model. Each window has its own independent chat history, but the model is global.
+
+**`registry.json` vs `ai-config.json`:**
+- `registry.json` — tracks which models are downloaded (persistent inventory)
+- `ai-config.json` — tracks which model is currently active (runtime state)
+
+The macOS app also watches `~/.mollotov/models/` directory for download changes (CLI adding/removing model files). Both watches use the same FSEvents mechanism.
 
 The CLI can also manage models on a running device remotely via HTTP:
 - `mollotov ai load <model> --device mac` → `POST /v1/ai-load`
