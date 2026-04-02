@@ -40,7 +40,7 @@ interface ApprovedModel {
   huggingFaceRepo: string;       // e.g. "bartowski/gemma-4-E2B-it-GGUF"
   huggingFaceFile: string;       // e.g. "gemma-4-E2B-it-Q4_K_M.gguf"
   sizeBytes: number;             // Approximate download size
-  capabilities: string[];        // ["text", "vision", "audio"]
+  capabilities: string[];        // ["text", "vision", "audio"] — audio = can accept voice input (max 30s)
   platforms: string[];           // ["macos", "ios", "android"]
   minRamGB: number;              // Minimum RAM to run this model
   quantization: string;          // "Q4_K_M", "Q8_0", etc.
@@ -251,7 +251,7 @@ Report the current inference state.
 
 #### `POST /v1/ai-infer`
 
-Run inference. The model generates a response to the prompt. Optionally attach a base64 image for vision models.
+Run inference. The model generates a response to the prompt. Supports text, vision (base64 image), and audio (base64 audio clip up to 30 seconds) inputs.
 
 ```json
 // Request (text only)
@@ -266,6 +266,20 @@ Run inference. The model generates a response to the prompt. Optionally attach a
 {
   "prompt": "Describe what you see on this page",
   "context": "screenshot",
+  "maxTokens": 512
+}
+
+// Request (with voice — browser records audio locally, sends as base64)
+{
+  "audio": "<base64 WAV/PCM data, max 30 seconds>",
+  "context": "screenshot",
+  "maxTokens": 512
+}
+
+// Request (voice + page text — "talk to the page")
+{
+  "audio": "<base64 WAV data>",
+  "context": "page_text",
   "maxTokens": 512
 }
 
@@ -284,19 +298,46 @@ Run inference. The model generates a response to the prompt. Optionally attach a
   "inferenceTimeMs": 1450
 }
 
+// Response (from voice input — includes transcription)
+{
+  "success": true,
+  "transcription": "What are the prices on this page?",
+  "response": "The page shows three pricing tiers: Basic at $9/mo, Pro at $29/mo, and Enterprise at $99/mo.",
+  "tokensUsed": 243,
+  "inferenceTimeMs": 2100
+}
+
 // Error — no model loaded
 {
   "success": false,
   "error": { "code": "NO_MODEL_LOADED", "message": "Load a model first with ai-load" }
 }
+
+// Error — audio not supported by current model
+{
+  "success": false,
+  "error": { "code": "AUDIO_NOT_SUPPORTED", "message": "Current model does not support audio input. Load a model with audio capability (e.g. gemma-4-e2b)." }
+}
+
+// Error — audio too long
+{
+  "success": false,
+  "error": { "code": "AUDIO_TOO_LONG", "message": "Audio clip exceeds 30 second limit" }
+}
 ```
 
+**Input modes:**
+
+When `audio` is provided, it replaces `prompt` — the model receives the raw audio and interprets the user's speech as the instruction. The `context` field still works the same way, so the model gets both the voice command and page data.
+
+When both `prompt` and `audio` are provided, `audio` takes precedence (the text prompt is ignored).
+
 The `context` field is a shortcut that tells the browser to auto-gather data before prompting:
-- `"page_text"` — browser runs its existing `get-page-text` handler internally and prepends the result to the prompt
-- `"screenshot"` — browser takes a viewport screenshot and passes it as the image input to a vision model
+- `"page_text"` — browser runs its existing `get-page-text` handler internally and prepends the result
+- `"screenshot"` — browser takes a viewport screenshot and passes it as the image input
 - `"dom"` — browser runs `get-dom` and prepends the HTML
 - `"accessibility"` — browser runs `get-accessibility-tree` and prepends the result
-- omitted — uses only the `text` field as raw input, or just the prompt with no additional context
+- omitted — uses only the `text` field as raw input, or just the prompt/audio with no additional context
 
 ### MCP Tools
 
@@ -309,7 +350,7 @@ All new tools use the `mollotov_ai_` prefix.
 | `mollotov_ai_status` | Get the inference engine status on a device — whether a model is loaded, which model, capabilities, memory usage | `aiStatus` |
 | `mollotov_ai_load` | Load a model on a device from a file path | `aiLoad` |
 | `mollotov_ai_unload` | Unload the current model from a device, freeing memory | `aiUnload` |
-| `mollotov_ai_ask` | Ask the local model a question about the current page. Specify a context mode to auto-gather page data. Returns the model's response. This is a cheap, local, private alternative to sending page data to a cloud LLM. | `aiInfer` |
+| `mollotov_ai_ask` | Ask the local model a question about the current page. Supports text prompt, voice audio (base64 WAV, max 30s), and context modes to auto-gather page data. Returns the model's response. Runs entirely on-device. | `aiInfer` |
 
 #### CLI Tools (model management)
 
@@ -354,6 +395,8 @@ The MCP tools should return clear, actionable errors:
 | `MODEL_TOO_LARGE` | Device doesn't have enough RAM for this model | Try a smaller quantization or different model |
 | `INFERENCE_FAILED` | The model failed to generate a response | Check model compatibility, try a simpler prompt |
 | `VISION_NOT_SUPPORTED` | Screenshot context requested but model has no vision capability | Use `page_text` context instead, or load a vision-capable model |
+| `AUDIO_NOT_SUPPORTED` | Audio input sent but model has no audio capability | Load a model with audio support (e.g. gemma-4-e2b) |
+| `AUDIO_TOO_LONG` | Audio clip exceeds the 30-second limit | Record a shorter clip |
 | `OLLAMA_NOT_AVAILABLE` | Ollama backend requested but the API is unreachable | Start Ollama or check the endpoint URL |
 | `OLLAMA_MODEL_NOT_FOUND` | The specified Ollama model isn't installed | Run `ollama pull <model>` to install it |
 
