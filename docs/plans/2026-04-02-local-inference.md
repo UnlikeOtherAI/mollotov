@@ -40,7 +40,8 @@ interface ApprovedModel {
   huggingFaceRepo: string;       // e.g. "bartowski/gemma-4-E2B-it-GGUF"
   huggingFaceFile: string;       // e.g. "gemma-4-E2B-it-Q4_K_M.gguf"
   sizeBytes: number;             // Approximate download size
-  capabilities: string[];        // ["text", "vision", "audio"] — audio = can accept voice input (max 30s)
+  capabilities: string[];        // ["text", "vision", "audio"] — audio = model accepts raw audio input (max 30s)
+  memory: boolean;               // true = supports multi-turn conversation, false = stateless Q&A only
   platforms: string[];           // ["macos", "ios", "android"]
   minRamGB: number;              // Minimum RAM to run this model
   quantization: string;          // "Q4_K_M", "Q8_0", etc.
@@ -48,9 +49,28 @@ interface ApprovedModel {
 }
 ```
 
+**`memory` field:** Indicates whether the model can maintain context across multiple queries. For Phase 1, all native GGUF models are `memory: false` — every query is a fresh start. Ollama models could potentially support memory via Ollama's server-side context caching, but we mark them `false` for now too. The UI shows this as a badge so users know what to expect.
+
+**`capabilities` values:**
+
+| Capability | Meaning |
+|---|---|
+| `text` | Accepts text prompts (all models) |
+| `vision` | Accepts image input — can describe screenshots |
+| `audio` | Accepts raw audio input — model processes speech natively (max 30s) |
+
+**Voice input routing:** When the user taps the brain pill and speaks, the browser checks the loaded model's capabilities:
+
+- **Model has `audio` capability** (e.g. Gemma 4 E2B): Raw audio (16-bit PCM WAV, 16kHz mono) is sent directly to the model via `ai-infer`. The model handles both transcription and understanding in a single pass. This is the preferred path — higher quality than platform STT.
+- **Model lacks `audio` capability** (text-only): Falls back to platform speech-to-text (SFSpeechRecognizer on Apple, SpeechRecognizer on Android), then sends the transcribed text as a normal prompt. Degraded experience but still functional.
+
 Mobile apps (iOS/Android) embed their own curated subset of this list. To add a model to the mobile list, users raise a PR against the relevant app.
 
 On macOS via CLI, users can also specify an arbitrary Hugging Face GGUF URL to download — the approved list is the default, not a restriction.
+
+**Hugging Face downloads require no account.** All approved models use public repos (community quantizations like bartowski's). The `resolve/main/` download URL works with a plain GET, no auth headers. Gated models (e.g., Meta's official Llama releases) require accepting a license + HF token, but those are not in our approved list. If a user specifies a custom gated model URL, the download will fail with a clear 401 error — the CLI should suggest they provide a HF token via `--token` or the `HF_TOKEN` env var.
+
+**Only one model loaded at a time.** The browser loads a single model into memory. Loading a second model requires unloading the first. This is a hard constraint — we can't afford to keep multiple models in RAM, especially on devices with 8-16 GB.
 
 ### Ollama Integration
 
@@ -74,11 +94,13 @@ Native Models (GGUF via llama.cpp)
 
 **How Ollama models work in the inference pipeline:**
 
-When the user loads an Ollama model, the browser doesn't load a GGUF file — instead, the `ai-infer` endpoint proxies the request to Ollama's `/api/generate` endpoint. This means:
+When the user loads an Ollama model, the browser doesn't load a GGUF file — instead, the `ai-infer` endpoint proxies the request to Ollama's API. This means:
 
 1. `ai-load` with an Ollama model ID sets the engine mode to `ollama` and records the model name — no file path needed, no memory consumed in the browser process
-2. `ai-infer` detects the Ollama backend and forwards the prompt to `POST http://localhost:11434/api/generate` (or `/api/chat` for chat models)
-3. `ai-unload` simply clears the state — Ollama manages its own model memory
+2. `ai-infer` detects the Ollama backend and routes:
+   - **In-app (brain pill / floating menu):** Uses `/api/chat` with a sliding window of recent messages (last 10 exchanges). Users can ask follow-ups.
+   - **Via MCP (`mollotov_ai_ask`):** Uses `/api/generate` with a single prompt. Stateless, no history.
+3. `ai-unload` clears the state and conversation history — Ollama manages its own model memory
 4. `ai-status` reports `backend: "ollama"` so the caller knows which engine is active
 
 **Request routing in AIHandler:**
@@ -99,15 +121,25 @@ ai-infer request arrives
 GET http://localhost:11434/api/tags
 → { "models": [{ "name": "llama3.2:3b", "size": 2000000000, ... }] }
 
-# Generate (text)
+# Generate — stateless, single prompt (used by MCP)
 POST http://localhost:11434/api/generate
 { "model": "llama3.2:3b", "prompt": "...", "stream": false }
 → { "response": "...", "total_duration": 1234, "eval_count": 50 }
 
-# Generate (vision — models like llava)
+# Generate with vision
 POST http://localhost:11434/api/generate
 { "model": "llava:7b", "prompt": "...", "images": ["<base64>"], "stream": false }
 → { "response": "...", "total_duration": 2345, "eval_count": 80 }
+
+# Chat — multi-turn with history (used by in-app brain pill)
+POST http://localhost:11434/api/chat
+{ "model": "llama3.2:3b", "messages": [
+    { "role": "system", "content": "<system prompt>" },
+    { "role": "user", "content": "What's on this page?" },
+    { "role": "assistant", "content": "The page shows..." },
+    { "role": "user", "content": "What about the pricing?" }
+  ], "stream": false }
+→ { "message": { "role": "assistant", "content": "..." }, "total_duration": 1500 }
 ```
 
 **CLI model ID convention:**
@@ -251,7 +283,7 @@ Report the current inference state.
 
 #### `POST /v1/ai-infer`
 
-Run inference. The model generates a response to the prompt. Supports text, vision (base64 image), and audio (base64 audio clip up to 30 seconds) inputs.
+Run inference. The model generates a response to the prompt. Supports text, vision (base64 image), and audio (base64 WAV, max 30 seconds) inputs.
 
 ```json
 // Request (text only)
@@ -269,16 +301,18 @@ Run inference. The model generates a response to the prompt. Supports text, visi
   "maxTokens": 512
 }
 
-// Request (with voice — browser records audio locally, sends as base64)
+// Request (with raw audio — model has audio capability)
 {
-  "audio": "<base64 WAV/PCM data, max 30 seconds>",
-  "context": "screenshot",
+  "audio": "<base64 WAV/PCM data, 16kHz mono, max 30 seconds>",
+  "context": "page_text",
   "maxTokens": 512
 }
 
-// Request (voice + page text — "talk to the page")
+// Request (voice transcribed by platform STT — model lacks audio capability)
+// The browser detects the model can't handle audio, transcribes locally, sends text.
 {
-  "audio": "<base64 WAV data>",
+  "prompt": "What are the prices on this page?",
+  "voiceTranscription": true,
   "context": "page_text",
   "maxTokens": 512
 }
@@ -298,12 +332,12 @@ Run inference. The model generates a response to the prompt. Supports text, visi
   "inferenceTimeMs": 1450
 }
 
-// Response (from voice input — includes transcription)
+// Response (from audio-capable model — includes transcription)
 {
   "success": true,
   "transcription": "What are the prices on this page?",
   "response": "The page shows three pricing tiers: Basic at $9/mo, Pro at $29/mo, and Enterprise at $99/mo.",
-  "tokensUsed": 243,
+  "tokensUsed": 6243,
   "inferenceTimeMs": 2100
 }
 
@@ -313,24 +347,23 @@ Run inference. The model generates a response to the prompt. Supports text, visi
   "error": { "code": "NO_MODEL_LOADED", "message": "Load a model first with ai-load" }
 }
 
-// Error — audio not supported by current model
+// Error — audio sent to model without audio capability
 {
   "success": false,
-  "error": { "code": "AUDIO_NOT_SUPPORTED", "message": "Current model does not support audio input. Load a model with audio capability (e.g. gemma-4-e2b)." }
-}
-
-// Error — audio too long
-{
-  "success": false,
-  "error": { "code": "AUDIO_TOO_LONG", "message": "Audio clip exceeds 30 second limit" }
+  "error": { "code": "AUDIO_NOT_SUPPORTED", "message": "Current model does not support audio input. The browser should transcribe via platform STT and resend as text." }
 }
 ```
 
-**Input modes:**
+**Voice input routing (browser-side):**
 
-When `audio` is provided, it replaces `prompt` — the model receives the raw audio and interprets the user's speech as the instruction. The `context` field still works the same way, so the model gets both the voice command and page data.
+The browser decides how to handle voice input before calling `ai-infer`:
 
-When both `prompt` and `audio` are provided, `audio` takes precedence (the text prompt is ignored).
+1. User taps brain pill → browser records audio (max 30s, 16-bit PCM WAV, 16kHz mono)
+2. Browser checks loaded model's capabilities via cached `ai-status`
+3. **If model has `audio` capability:** Send raw audio in the `audio` field → model transcribes and responds in one pass (preferred — higher quality than platform STT)
+4. **If model lacks `audio` capability:** Transcribe locally via platform STT (SFSpeechRecognizer / SpeechRecognizer) → send transcribed text in the `prompt` field with `voiceTranscription: true` (fallback — functional but lower quality transcription)
+
+The `voiceTranscription: true` flag is metadata — the harness treats it identically to a typed prompt. It's recorded for analytics/debugging.
 
 ### Inference Harness (Agent Loop)
 
@@ -438,18 +471,63 @@ Interactive elements: 12
 
 This summary is cheap to gather (runs in-process from cached state) and tells the model what's available without loading any of it. If the user asks "are there any errors?", the model sees `JS Errors: 2` and calls `get_errors` to get the details.
 
+#### Conversation Modes
+
+**Native GGUF models (via MCP and brain pill):** Stateless. Every query is completely self-contained — no conversation history, no memory of previous questions, no session state. Each tap of the brain pill starts from zero. The harness builds a fresh context for every inference call: system prompt + page summary + user question. Nothing is carried over.
+
+**Why stateless for native:** A 2B model cannot maintain coherent multi-turn conversation — it loses track, hallucinates, and contradicts itself. Single-shot Q&A is where small models actually work well.
+
+**Ollama models — in-app (brain pill / floating menu):** Chat-capable. The app maintains a sliding window of recent exchanges within the session and sends them to Ollama's `/api/chat` endpoint. Users can ask follow-up questions ("what about the third column?") and the model has prior context. The window is capped at the last 10 exchanges to prevent unbounded growth. Session resets when the user navigates to a new page or closes the browser.
+
+**Ollama models — via MCP:** Stateless. Every `mollotov_ai_ask` call is a single prompt in, single answer out. No history is carried between MCP calls. This keeps MCP tool usage predictable for orchestrating LLMs.
+
+**The `memory` flag:** The model registry's `memory: boolean` field controls which mode the harness uses. `false` = always stateless (native GGUFs). `true` = chat-capable in the app UI, stateless via MCP. Ollama models default to `memory: true` since Ollama handles context server-side.
+
+**Ollama `/api/chat` request format:**
+
+```json
+{
+  "model": "llava:7b",
+  "messages": [
+    { "role": "system", "content": "<system prompt>" },
+    { "role": "user", "content": "What's on this page?" },
+    { "role": "assistant", "content": "The page shows a pricing table..." },
+    { "role": "user", "content": "What's the cheapest tier?" }
+  ],
+  "stream": false
+}
+```
+
 #### Token Budget Management
 
-| Component | Budget |
-|---|---|
-| System prompt | ~300 tokens |
-| Page summary | ~100 tokens |
-| User prompt / audio transcription | ~100 tokens |
-| Tool results (per call, max 3) | ~1500 tokens each |
-| Model response | ~500 tokens |
-| **Total worst case** | ~5500 tokens |
+The 128K context window is **text tokens**. Audio and vision consume tokens at a higher rate:
 
-Gemma 4 E2B has a 128K context window, so this is well within limits even with 3 tool calls. The tight budgets are about quality, not capacity — small models produce better answers with focused input.
+| Input type | Token cost |
+|---|---|
+| Text | ~1 token per 4 characters |
+| Audio (30s clip, native) | ~6,000 tokens (audio encoder output) |
+| Audio (5s clip, native) | ~1,000 tokens |
+| Audio (STT fallback) | ~20-50 tokens (just transcribed text) |
+| Screenshot (1120 visual tokens — max quality) | ~1,120 tokens |
+| Screenshot (280 visual tokens — default) | ~280 tokens |
+| Screenshot (70 visual tokens — fast/low) | ~70 tokens |
+
+The harness uses `280` visual tokens (default) for screenshots unless the caller specifies otherwise. This is a good balance — enough to see page layout and read large text, not enough to read 8px footnotes.
+
+**Budget allocation:**
+
+| Component | Budget (text-only) | Budget (voice + screenshot) |
+|---|---|---|
+| System prompt | ~300 | ~300 |
+| Page summary | ~100 | ~100 |
+| User prompt | ~100 | — |
+| Audio input (native) | — | ~1,000-6,000 |
+| Screenshot | — | ~280 |
+| Tool results (per call, max 3) | ~1,500 each | ~1,000 each |
+| Model response | ~500 | ~500 |
+| **Total worst case** | ~5,500 | ~10,180 |
+
+Well within 128K, but the tight budgets are about quality — small models produce better answers with focused input. When native audio is present, tool result budgets are reduced from 1,500 to 1,000 tokens to keep the total reasonable. When the STT fallback is used, audio costs ~30 tokens instead of ~6,000, so full tool budgets apply.
 
 #### Truncation Strategy
 
@@ -548,8 +626,8 @@ The MCP tools should return clear, actionable errors:
 | `MODEL_TOO_LARGE` | Device doesn't have enough RAM for this model | Try a smaller quantization or different model |
 | `INFERENCE_FAILED` | The model failed to generate a response | Check model compatibility, try a simpler prompt |
 | `VISION_NOT_SUPPORTED` | Screenshot context requested but model has no vision capability | Use `page_text` context instead, or load a vision-capable model |
-| `AUDIO_NOT_SUPPORTED` | Audio input sent but model has no audio capability | Load a model with audio support (e.g. gemma-4-e2b) |
-| `AUDIO_TOO_LONG` | Audio clip exceeds the 30-second limit | Record a shorter clip |
+| `AUDIO_NOT_SUPPORTED` | Raw audio sent to a model without audio capability | Browser should transcribe via platform STT and resend as text |
+| `TRANSCRIPTION_FAILED` | Platform speech-to-text failed to transcribe audio | Try again, speak more clearly, or type the query |
 | `OLLAMA_NOT_AVAILABLE` | Ollama backend requested but the API is unreachable | Start Ollama or check the endpoint URL |
 | `OLLAMA_MODEL_NOT_FOUND` | The specified Ollama model isn't installed | Run `ollama pull <model>` to install it |
 
@@ -618,11 +696,11 @@ const approvedModels: ApprovedModel[] = [
     huggingFaceRepo: "bartowski/gemma-4-E2B-it-GGUF",
     huggingFaceFile: "gemma-4-E2B-it-Q4_K_M.gguf",
     sizeBytes: 2_500_000_000,
-    capabilities: ["text", "vision"],
+    capabilities: ["text", "vision", "audio"],
     platforms: ["macos"],
     minRamGB: 8,
     quantization: "Q4_K_M",
-    description: "Google Gemma 4 2B multimodal — text + vision, good for page analysis",
+    description: "Google Gemma 4 2B multimodal — text + vision + audio, good for page analysis",
   },
   {
     id: "gemma-4-e2b-q8",
@@ -630,7 +708,7 @@ const approvedModels: ApprovedModel[] = [
     huggingFaceRepo: "bartowski/gemma-4-E2B-it-GGUF",
     huggingFaceFile: "gemma-4-E2B-it-Q8_0.gguf",
     sizeBytes: 5_000_000_000,
-    capabilities: ["text", "vision"],
+    capabilities: ["text", "vision", "audio"],
     platforms: ["macos"],
     minRamGB: 16,
     quantization: "Q8_0",
