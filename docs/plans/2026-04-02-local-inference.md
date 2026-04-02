@@ -332,12 +332,55 @@ When `audio` is provided, it replaces `prompt` — the model receives the raw au
 
 When both `prompt` and `audio` are provided, `audio` takes precedence (the text prompt is ignored).
 
-The `context` field is a shortcut that tells the browser to auto-gather data before prompting:
-- `"page_text"` — browser runs its existing `get-page-text` handler internally and prepends the result
-- `"screenshot"` — browser takes a viewport screenshot and passes it as the image input
-- `"dom"` — browser runs `get-dom` and prepends the HTML
-- `"accessibility"` — browser runs `get-accessibility-tree` and prepends the result
+**Context gathering:**
+
+The `context` field tells the browser what data to auto-gather before prompting. Can be a single string or an array of strings for multi-source context.
+
+- `"page_text"` — runs `get-page-text`, prepends readable text
+- `"screenshot"` — takes a viewport screenshot, passes as image input
+- `"dom"` — runs `get-dom`, prepends HTML
+- `"accessibility"` — runs `get-accessibility-tree`, prepends the tree
+- `"console"` — runs `get-console-messages`, includes recent console output
+- `"errors"` — runs `get-js-errors`, includes JS errors
+- `"network"` — runs `get-network-log`, includes recent network requests
+- `"forms"` — runs `get-form-state`, includes form field states
+- `"cookies"` — runs `get-cookies`, includes cookies
+- `"storage"` — runs `get-storage`, includes localStorage/sessionStorage
+- `"visible"` — runs `get-visible-elements`, includes what's in the viewport
+- `"all"` — shortcut that gathers page_text + screenshot + console + errors + network + forms + accessibility
 - omitted — uses only the `text` field as raw input, or just the prompt/audio with no additional context
+
+**Array context example:**
+
+```json
+{
+  "prompt": "Why is the login form not submitting?",
+  "context": ["screenshot", "forms", "errors", "console", "network"],
+  "maxTokens": 512
+}
+```
+
+This gives the local model a complete debugging picture: what the page looks like, what the form fields contain, any JS errors, console output, and recent network requests. The model can then diagnose the issue.
+
+**Tool-call responses (structured output):**
+
+When the model identifies a specific element, error, or resource, the response includes structured data alongside the text:
+
+```json
+{
+  "success": true,
+  "response": "The submit button has a JavaScript error handler that prevents default. The error in console is 'TypeError: Cannot read property email of undefined' at line 42.",
+  "references": [
+    { "type": "element", "selector": "#submit-btn", "description": "Submit button with prevented default" },
+    { "type": "error", "message": "TypeError: Cannot read property email of undefined", "line": 42 },
+    { "type": "console", "level": "error", "text": "Form validation failed" }
+  ],
+  "tokensUsed": 312,
+  "inferenceTimeMs": 1800
+}
+```
+
+The `references` array is optional — the model includes it when it can point to specific things in the page. The UI can make these tappable (e.g., tapping an element reference scrolls to and highlights it).
 
 ### MCP Tools
 

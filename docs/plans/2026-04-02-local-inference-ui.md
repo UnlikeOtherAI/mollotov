@@ -46,6 +46,7 @@ Linux and Windows already report memory. Add `diskFreeGB` and `chipset` to them 
 | `fa-brain` | U+F5DC | AI status pill in URL bar |
 | `fa-circle-exclamation` | U+F06A | Warning (model too large for device) |
 | `fa-server` | U+F233 | Ollama backend indicator |
+| `fa-microphone` | U+F130 | Voice transcription indicator in response card |
 
 ### Platform integration
 
@@ -560,14 +561,16 @@ Text-only model loaded:
 
 The pill is a circle with `fa-brain` as the main icon. A tiny 10px badge in the bottom-right corner shows `fa-eye` (vision) or `fa-eye-slash` (text-only). Background is a subtle tinted fill (e.g. `systemGray5` with accent overlay when active).
 
-**Tapping the pill** shows a popover sheet:
+**Tap** → starts voice recording (if model has audio capability) or opens text query card (if text-only model). See "Voice Input" section below for full recording flow.
+
+**Long-press (mobile) / Hover (macOS)** → shows model info popover:
 
 ```
 ┌────────────────────────────────────┐
 │                                    │
 │  🧠  Gemma 4 E2B Q4               │
 │                                    │
-│  👁  Text + Vision                 │
+│  👁  Text + Vision + Audio         │
 │  3.8 GB RAM  •  native             │
 │  Speed: moderate                   │
 │                                    │
@@ -641,6 +644,172 @@ The `AIState` observable is shared with the AIHandler — it updates when models
 
 ---
 
+## Voice Input (Talk to the Browser)
+
+Gemma 4 E2B accepts audio input natively — up to 30 seconds. The user taps the brain pill and starts speaking. The local model processes their voice alongside page context. No cloud, no separate STT step.
+
+**Not available on Linux.** Linux has no AI/voice features.
+
+### The brain pill is the mic
+
+There is no separate microphone button. The brain pill has two interaction modes:
+
+- **Tap** → start voice recording (if model supports audio) or show the AI response card (if text-only model)
+- **Long-press (mobile) / Hover (macOS)** → show model info popover (model name, capabilities, Unload, AI Settings link)
+
+If the loaded model does NOT have audio capability, tapping the brain opens the text query card instead (same as the response display, but with a text input field).
+
+### Recording flow
+
+1. User taps the brain pill
+2. The brain icon pulses red. A thin progress bar appears across the top of the viewport (full width, like the page loading bar) — it starts full and decreases over 30 seconds
+3. User speaks their question
+4. User taps the brain again to stop early, OR the bar reaches zero and recording stops automatically
+5. Brain shows a spinner state while the model processes
+6. Response card slides up from the bottom
+
+### Progress bar (countdown)
+
+The progress bar replaces the page loading indicator position — same thin bar across the full width of the viewport, directly under the URL bar. It's red/accent-colored and starts at 100%, decreasing linearly to 0% over 30 seconds.
+
+```
+Recording active (4 seconds in, 26 seconds remaining):
+┌──────────────────────────────────────────────────┐
+│  <  >  [  https://example.com          ]  (🧠👁) │ ← brain pulsing red
+├████████████████████████████████████░░░░░░░░░░░░░░┤ ← countdown bar (86% remaining)
+│                                                  │
+│  Browser viewport                                │
+│                                                  │
+└──────────────────────────────────────────────────┘
+
+Recording active (25 seconds in, 5 seconds remaining):
+┌──────────────────────────────────────────────────┐
+│  <  >  [  https://example.com          ]  (🧠👁) │
+├█████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░┤ ← bar almost empty
+│                                                  │
+│  Browser viewport                                │
+│                                                  │
+└──────────────────────────────────────────────────┘
+```
+
+### Brain pill states
+
+| State | Visual | Interaction |
+|---|---|---|
+| No model loaded | Ghost pill `(🧠?)` or hidden | Tap → opens AI model list |
+| Model loaded (idle) | `(🧠👁)` or `(🧠⊘)` | Tap → start recording (audio model) or open text query (text-only). Long-press/hover → model info popover |
+| Recording | `(🧠)` pulsing red | Tap → stop recording |
+| Processing | `(🧠)` with spinner overlay | Non-interactive |
+| Response showing | `(🧠👁)` normal | Tap → new recording. Long-press → model info |
+
+### Response display
+
+After the model responds, a card slides up from the bottom of the viewport. Persistent until dismissed.
+
+```
+┌──────────────────────────────────────────────────────┐
+│                                                      │
+│  Browser viewport                                    │
+│                                                      │
+├──────────────────────────────────────────────────────┤
+│  🎤 "What are the prices on this page?"              │ ← transcription (dimmed)
+│                                                      │
+│  The page shows three pricing tiers:                 │ ← model response
+│  • Basic: $9/month                                   │
+│  • Pro: $29/month                                    │
+│  • Enterprise: $99/month                             │
+│                                                      │
+│                                   [Copy]  [Dismiss]  │
+└──────────────────────────────────────────────────────┘
+```
+
+- Transcription line: what the model heard (dimmed, mic icon prefix)
+- Response: the model's answer
+- Copy: copies response text to clipboard
+- Dismiss: swipe down (mobile) or click (macOS). Auto-dismisses after 30 seconds if untouched.
+
+### Context pairing
+
+When recording voice, the browser automatically pairs it with page context. Default context mode is `"screenshot"` for audio+vision models:
+
+- **screenshot** (default for vision+audio): Takes a screenshot. Model sees the page AND hears the voice.
+- **page_text**: Extracts page text. Model reads content AND hears the voice.
+- **accessibility**: Sends the a11y tree. Good for "click the submit button" type commands.
+- **none**: Just the voice, no page context.
+
+The default context mode is configurable in the AI section of settings.
+
+### Floating Menu Integration
+
+On all platforms (except Linux), the floating action menu gets a brain button:
+
+```
+iOS/Android floating menu:
+┌───┐
+│ ↻ │  Reload
+│ 🔒│  Safari Auth
+│ 🧠│  ← AI brain button (NEW)
+│ 🔖│  Bookmarks
+│ 📜│  History
+│ 📡│  Network
+│ ⚙ │  Settings
+└───┘
+
+macOS floating menu:
+Same — brain icon added to the menu items.
+```
+
+Tapping the brain in the floating menu:
+- If no model loaded → opens AI model list (same as Settings > AI)
+- If model loaded → starts voice recording (same as tapping the URL bar pill)
+- Long-press → opens model info popover
+
+This makes AI accessible from the floating menu without needing the URL bar pill, useful when the URL bar is scrolled off-screen on mobile.
+
+### MCP integration
+
+The MCP tool `mollotov_ai_ask` accepts an `audio` field (base64 WAV). An LLM orchestrator can record audio through the device microphone via a new endpoint:
+
+#### `POST /v1/ai-record`
+
+Start/stop audio recording on the device.
+
+```json
+// Start recording
+{ "action": "start", "maxDuration": 30 }
+→ { "success": true, "recording": true }
+
+// Stop recording and return audio
+{ "action": "stop" }
+→ { "success": true, "audio": "<base64 WAV>", "durationMs": 4200 }
+
+// Get recording status
+{ "action": "status" }
+→ { "success": true, "recording": true, "elapsedMs": 3100 }
+```
+
+This lets the MCP orchestrator do: record → stop → send audio to `ai-infer` with context.
+
+### Platform audio recording
+
+| Platform | API | Notes |
+|---|---|---|
+| macOS | `AVAudioEngine` | Needs microphone permission (Info.plist `NSMicrophoneUsageDescription`) |
+| iOS | `AVAudioEngine` | Same permission. Works in foreground only. |
+| Android | `AudioRecord` / `MediaRecorder` | `RECORD_AUDIO` permission in manifest |
+| Linux | N/A | No AI features on Linux |
+
+Output format: 16-bit PCM WAV, 16kHz mono. This is what Gemma 4's audio encoder expects and keeps the payload small (~960KB for 30 seconds).
+
+### Icon additions
+
+| Icon | Codepoint | Usage |
+|---|---|---|
+| `fa-microphone` | U+F130 | Shown in transcription line of response card |
+| `fa-brain` | U+F5DC | Already listed — the main AI pill icon, doubles as mic trigger |
+
+---
+
 ## Download Progress — Implementation Notes
 
 ### Progress tracking
@@ -683,12 +852,24 @@ Both write to the app's local model directory and update the local registry.
 |---|---|---|
 | All | `FontAwesome6Free-Solid-900.otf` | Font file bundled in resources |
 | macOS | `Mollotov/Views/AISettingsView.swift` | AI section in settings |
+| macOS | `Mollotov/Views/AIStatusPill.swift` | Brain pill in URL bar + voice recording trigger |
+| macOS | `Mollotov/Views/AIResponseCard.swift` | Slide-up response card with transcription |
 | macOS | `Mollotov/AI/ModelDownloader.swift` | HuggingFace download with progress |
 | macOS | `Mollotov/AI/ModelRegistry.swift` | Approved models, fitness scoring, Ollama detection |
+| macOS | `Mollotov/AI/AudioRecorder.swift` | AVAudioEngine-based 30s recorder, outputs PCM WAV |
+| macOS | `Mollotov/AI/AIState.swift` | Published state: loaded model, capabilities, recording status |
 | iOS | `Mollotov/Views/AISettingsView.swift` | AI model list and Ollama config |
+| iOS | `Mollotov/Views/AIStatusPill.swift` | Brain pill + voice trigger |
+| iOS | `Mollotov/Views/AIResponseCard.swift` | Response card |
 | iOS | `Mollotov/AI/ModelDownloader.swift` | Background download support |
 | iOS | `Mollotov/AI/ModelRegistry.swift` | Curated model list + fitness |
+| iOS | `Mollotov/AI/AudioRecorder.swift` | AVAudioEngine recorder |
+| iOS | `Mollotov/AI/AIState.swift` | Published state |
 | Android | `ui/AISettingsScreen.kt` | AI model list and Ollama config |
+| Android | `ui/AIStatusPill.kt` | Brain pill composable |
+| Android | `ui/AIResponseCard.kt` | Response card composable |
 | Android | `ai/ModelDownloader.kt` | DownloadManager integration |
 | Android | `ai/ModelRegistry.kt` | Curated model list + fitness |
+| Android | `ai/AudioRecorder.kt` | AudioRecord-based recorder |
+| Android | `ai/AIState.kt` | State holder |
 | CLI | `src/ai/fitness.ts` | Hardware evaluation logic |
