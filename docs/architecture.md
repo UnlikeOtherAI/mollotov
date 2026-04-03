@@ -89,6 +89,21 @@ Each browser app has four internal layers:
 
 **Network Layer** — Embedded HTTP server (Swifter/Telegraph on iOS, Ktor on Android, Network.framework-based server on macOS, native socket server on Linux), MCP server over the same transport, and mDNS service advertisement.
 
+### Shared Native Libraries (`native/`)
+
+Cross-platform C++17 static libraries with C ABI, shared by all platforms via bridging headers (Swift) or JNI (Kotlin). Each module lives under `native/core-*` and follows the same pattern: opaque pointer handle, `extern "C"` API, nlohmann_json, CMake build, assert-based tests.
+
+| Module | Purpose |
+|--------|---------|
+| `core-protocol` | Shared protocol types and JSON helpers |
+| `core-state` | Bookmarks, history, network traffic, console stores |
+| `core-automation` | Viewport presets and device fitting |
+| `core-mcp` | MCP protocol types |
+| `core-ai` | AI model catalog, HF token + authenticated downloads, Ollama HTTP client, HF cloud inference |
+| `engine-chromium-desktop` | CEF integration (macOS/Linux only) |
+
+**`core-ai`** manages all shareable AI logic: the approved model catalog (Gemma 4 E2B Q4/Q8), device fitness evaluation, HF token storage, model downloads with `Authorization: Bearer` headers, model store (is_downloaded/remove), Ollama HTTP client (reachable/list/infer), and HF Inference API cloud calls. Platforms keep only UI code and local inference engines (llama.cpp/Metal on macOS, Apple Foundation Models on iOS, Google AI Edge on Android). On mobile, cpp-httplib is disabled at build time — HTTPS operations (downloads, HF cloud) are handled by platform HTTP stacks (URLSession/OkHttp).
+
 ### 2. CLI
 
 ```

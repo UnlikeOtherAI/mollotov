@@ -96,17 +96,20 @@ API: `network-list`, `network-detail`, `network-select`, `network-current`, `net
 
 ## 3D DOM Inspector
 
-**Experimental** — hidden by default. Enable via the "3D DOM Inspector" toggle in Settings (Experimental section) or by setting the `MOLLOTOV_3D_INSPECTOR=1` environment variable. No restart required.
+**Experimental**. On iOS and Android the 3D inspector is visible by default and can be turned off in Settings. On macOS it stays opt-in until enabled in Settings (Experimental section) or with `MOLLOTOV_3D_INSPECTOR=1`. No restart required.
 
 A visual debugging tool for inspecting element stacking and layer order. Click the 3D button in the floating menu (or call the `snapshot-3d-enter` endpoint) to explode the page DOM into a 3D layered view. Every element is pushed along the Z-axis based on its depth in the DOM tree, making it easy to see which elements overlap, identify invisible overlays blocking interaction, and understand the page structure.
 
 **Controls:**
-- **Click and drag** — rotate the 3D scene to view from any angle
-- **Scroll wheel** — zoom in and out
+- **Native rotate mode** (`hand` tool) — pointer drag or one-finger drag rotates the scene
+- **Native scroll mode** (`vertical arrows` tool) — pointer drag or one-finger drag scrolls the underlying page while staying in 3D mode
+- **Pinch** on iPad and Android tablets — zoom the 3D camera in either mode
+- **Scroll wheel / trackpad scroll** — zoom in rotate mode, scroll the page in scroll mode
+- **Native `Zoom +`, `Zoom -`, `Reset`, and `Exit` controls** — available from the shell instead of injected page chrome
 - **Hover** — highlight element and show tag, classes, dimensions, position, z-index, stacking context
 - **+ / -** keys — increase or decrease layer spacing
 - **R** key — reset rotation and zoom to default
-- **Escape** or close button — exit 3D mode and restore the page
+- **Escape** or native exit button — exit 3D mode and restore the page
 
 The 3D view shows DOM depth (tree nesting), not CSS paint order. Position, z-index, and whether the element creates a stacking context appear in the hover info panel. User interactions are suppressed while in 3D mode, but background page logic (timers, network callbacks) may still execute. The page is restored to its original state on exit. Works with both WebKit and Chromium renderers.
 
@@ -128,7 +131,7 @@ API: `history-list` (with limit), `history-clear`.
 
 ## Floating Menu
 
-A 44-point circular flame button, vertically centered on the screen edge. Horizontally draggable — swipe it left or right so it's never in the way. Tap to expand a fan of icon-only menu items in a wide half-circle: reload, Safari/Chrome auth, bookmarks, history, network inspector, and settings. On tablets, the fan also includes a phone icon that opens a pill picker anchored off that icon instead of toggling immediately. The picker uses the same sorted fitting preset list shown by the iPad `View` menu and MCP APIs, including phone, tablet, and laptop classes when they fit the current device geometry. Pills use full visible labels such as `6.1" Compact`, `11" iPad Pro`, and `13" Laptop`, and they flow into extra columns outside the fan lane so they do not cover the action buttons. Tapping the active pill again returns the browser to full width. Opens with a blur overlay behind it.
+A 44-point circular flame button, vertically centered on the screen edge. Horizontally draggable — swipe it left or right so it's never in the way. Tap to expand a fan of icon-only menu items in a wide half-circle: reload, Safari/Chrome auth, bookmarks, history, network inspector, AI status, 3D inspector, and settings. The fan radius grows automatically with the number of visible actions so newly added buttons do not overlap. On tablets, the fan also includes a phone icon that opens a pill picker anchored off that icon instead of toggling immediately. The picker uses the same sorted fitting preset list shown by the iPad `View` menu and MCP APIs, including phone, tablet, and laptop classes when they fit the current device geometry. Pills use full visible labels such as `6.1" Compact`, `11" iPad Pro`, and `13" Laptop`, and they flow into extra columns outside the fan lane so they do not cover the action buttons. Tapping the active pill again returns the browser to full width. Opens with a blur overlay behind it.
 
 ## LLM-Optimised Queries
 
@@ -142,13 +145,19 @@ Purpose-built methods that return semantic data instead of raw HTML:
 
 ## Local AI
 
-On-device LLM inference across all platforms. Five HTTP endpoints (`ai-status`, `ai-load`, `ai-unload`, `ai-infer`, `ai-record`) and corresponding MCP tools let language models query local AI without sending data to the cloud.
+On-device LLM inference across all platforms. Five HTTP endpoints (`ai-status`, `ai-load`, `ai-unload`, `ai-infer`, `ai-record`) and corresponding MCP tools let language models query local AI without sending data to the cloud. On iOS and Android, AI remains available from the browser shell while the visible URL-bar shortcut is reserved for the 3D inspector.
 
-**macOS — native GGUF + Ollama:** The CLI manages GGUF model downloads from HuggingFace (`mollotov ai pull`). The macOS app loads them via llama.cpp on Apple Silicon. An inference harness runs a lightweight agent loop (max 3 tool calls) so 2B models can request page data on demand instead of receiving everything upfront. Audio recording captures 16kHz mono PCM (max 30s) for voice input. Intel Macs get Ollama-only mode.
+**macOS — native GGUF + Ollama + HF Cloud:** The CLI manages GGUF model downloads from HuggingFace (`mollotov ai pull`). The macOS app loads them via llama.cpp on Apple Silicon. An inference harness runs a lightweight agent loop (max 3 tool calls) so 2B models can request page data on demand instead of receiving everything upfront. Audio recording captures 16kHz mono PCM (max 30s) for voice input. Intel Macs get Ollama-only mode. HF cloud inference is available as a third backend when a token is set.
 
 **iOS — Apple Intelligence + Ollama:** Platform AI (Foundation Models framework) is the default backend on supported hardware. Text-only until the iOS 26 SDK is linked. Users can switch to a remote Ollama model for vision-capable inference.
 
 **Android — Gemini Nano + Ollama:** Platform AI (Google AI Edge SDK) is the default backend on Android 14+ hardware. Text-only until the SDK is integrated. Users can switch to a remote Ollama model for vision-capable inference.
+
+**Hugging Face Token:** Gated models (e.g. Gemma) require a HF access token. On macOS, a "Set HF Token" button appears in the AI panel's Models tab (NATIVE section header). When a download fails due to missing auth, the browser navigates to `huggingface.co/settings/tokens` and the error message guides the user to set their token. The token is stored in UserDefaults and sent as a `Bearer` header on all HF download and cloud inference requests.
+
+**HF Cloud Inference:** When a HF token is set, models available on the HF Inference API can be queried remotely without downloading. The cloud client posts to `api-inference.huggingface.co/models/{id}` and returns the generated text with timing metadata. Supports prompt, chat-message, and raw HF input formats.
+
+**Shared AI Library (`native/core-ai`):** Model catalog, fitness evaluation, HF token management, authenticated downloads, Ollama HTTP client, and HF cloud inference live in a shared C++ library. All platforms link it: macOS and desktop get full HTTP support (cpp-httplib with SSL), mobile platforms use only the catalog/fitness/token functions and handle HTTPS via their native stacks.
 
 **CLI model management:** `mollotov ai list` shows approved models and their download status, plus any locally running Ollama models. `mollotov ai pull/rm` manage downloads. `mollotov ai load/unload/status/ask` control inference on devices. All available as MCP tools (`mollotov_ai_models`, `mollotov_ai_pull`, `mollotov_ai_remove`, `mollotov_ai_status`, `mollotov_ai_load`, `mollotov_ai_unload`, `mollotov_ai_ask`, `mollotov_ai_record`).
 
