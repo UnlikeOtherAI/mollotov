@@ -10,8 +10,10 @@ FetchContent_MakeAvailable(cpp_httplib)
 
 add_library(mollotov_core_ai STATIC
   src/ai_c_api.cpp
+  src/hf_cloud_client.cpp
   src/model_catalog.cpp
   src/model_store.cpp
+  src/ollama_client.cpp
 )
 
 target_include_directories(mollotov_core_ai

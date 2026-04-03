@@ -7,6 +7,7 @@
 #include <nlohmann/json.hpp>
 
 #include "model_store.h"
+#include "ollama_client.h"
 
 namespace mollotov::ai_internal {
 
@@ -30,7 +31,8 @@ struct MollotovAiManager {
   std::string hf_token;
   std::string ollama_endpoint = "http://localhost:11434";
   mollotov::ModelStore store;
+  mollotov::OllamaClient ollama;
 
   explicit MollotovAiManager(std::string dir)
-      : models_dir(dir), store(dir) {}
+      : models_dir(dir), store(dir), ollama("http://localhost:11434") {}
 };

@@ -1,5 +1,6 @@
 #include "mollotov/ai_c_api.h"
 #include "ai_c_api_internal.h"
+#include "hf_cloud_client.h"
 #include "model_catalog.h"
 
 extern "C" {
@@ -103,10 +104,56 @@ char* mollotov_ai_download_model(MollotovAiManagerRef mgr, const char* model_id,
     return nullptr;
   }
 }
-void mollotov_ai_set_ollama_endpoint(MollotovAiManagerRef, const char*) {}
-bool mollotov_ai_ollama_reachable(MollotovAiManagerRef) { return false; }
-char* mollotov_ai_ollama_list_models(MollotovAiManagerRef) { return nullptr; }
-char* mollotov_ai_ollama_infer(MollotovAiManagerRef, const char*, const char*) { return nullptr; }
-char* mollotov_ai_hf_infer(MollotovAiManagerRef, const char*, const char*) { return nullptr; }
+void mollotov_ai_set_ollama_endpoint(MollotovAiManagerRef mgr, const char* endpoint) {
+  if (!mgr) return;
+  mgr->ollama.set_endpoint(mollotov::ai_internal::SafeCString(endpoint));
+  mgr->ollama_endpoint = mgr->ollama.endpoint();
+}
+
+bool mollotov_ai_ollama_reachable(MollotovAiManagerRef mgr) {
+  if (!mgr) return false;
+  try {
+    return mgr->ollama.is_reachable();
+  } catch (...) {
+    return false;
+  }
+}
+
+char* mollotov_ai_ollama_list_models(MollotovAiManagerRef mgr) {
+  if (!mgr) return nullptr;
+  try {
+    auto models = mgr->ollama.list_models();
+    return mollotov::ai_internal::CopyString(models.dump());
+  } catch (...) {
+    return nullptr;
+  }
+}
+
+char* mollotov_ai_ollama_infer(MollotovAiManagerRef mgr, const char* model_name,
+                                const char* request_json) {
+  if (!mgr) return nullptr;
+  try {
+    auto req = nlohmann::json::parse(mollotov::ai_internal::SafeCString(request_json));
+    auto result = mgr->ollama.infer(mollotov::ai_internal::SafeCString(model_name), req);
+    return mollotov::ai_internal::CopyString(result.dump());
+  } catch (...) {
+    return nullptr;
+  }
+}
+char* mollotov_ai_hf_infer(MollotovAiManagerRef mgr, const char* model_id,
+                            const char* request_json) {
+  if (!mgr) return nullptr;
+  try {
+    auto req = nlohmann::json::parse(
+        mollotov::ai_internal::SafeCString(request_json));
+    mollotov::HfCloudClient client;
+    auto result = client.infer(
+        mollotov::ai_internal::SafeCString(model_id),
+        mgr->hf_token, req);
+    return mollotov::ai_internal::CopyString(result.dump());
+  } catch (...) {
+    return nullptr;
+  }
+}
 
 }  // extern "C"
