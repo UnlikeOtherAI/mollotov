@@ -12,6 +12,12 @@ set(BUILD_TESTING OFF CACHE BOOL "Disable native tests for Android JNI builds" F
 
 set(MOLLOTOV_NATIVE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../../native)
 
+# Disable httplib in core-ai on Android — HTTPS is handled by OkHttp in Kotlin.
+set(MOLLOTOV_AI_USE_HTTPLIB OFF CACHE BOOL "" FORCE)
+
+# Skip desktop browser engines (CEF/Chromium) — not applicable on Android.
+set(MOLLOTOV_BUILD_DESKTOP_ENGINES OFF CACHE BOOL "" FORCE)
+
 FetchContent_Declare(
   nlohmann_json
   GIT_REPOSITORY https://github.com/nlohmann/json.git
@@ -30,4 +36,5 @@ target_link_libraries(mollotov_jni
   PRIVATE
     mollotov_core_state
     mollotov_core_protocol
+    mollotov_core_ai
 )

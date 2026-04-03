@@ -6,6 +6,7 @@
 #include <string>
 
 #include "mollotov/state_c_api.h"
+#include "mollotov/ai_c_api.h"
 
 namespace {
 
@@ -64,6 +65,16 @@ jstring TakeOwnedCString(JNIEnv* env, char* value) {
 
   const std::string utf8(value);
   mollotov_free_string(value);
+  return Utf8ToJString(env, utf8);
+}
+
+jstring TakeOwnedAiString(JNIEnv* env, char* value) {
+  if (value == nullptr) {
+    return nullptr;
+  }
+
+  const std::string utf8(value);
+  mollotov_ai_free_string(value);
   return Utf8ToJString(env, utf8);
 }
 
@@ -338,6 +349,134 @@ Java_com_mollotov_browser_nativecore_NativeCore_networkTrafficStoreLoadJson(JNIE
   const std::string native_json = JStringToUtf8(env, json);
   mollotov_network_traffic_store_load_json(HandleFromJLong<NetworkTrafficStoreRef>(handle),
                                            native_json.c_str());
+}
+
+// ---- AI Manager ----
+
+using AiManagerRef = MollotovAiManagerRef;
+
+JNIEXPORT jlong JNICALL
+Java_com_mollotov_browser_nativecore_AiManager_aiManagerCreateNative(JNIEnv* env,
+                                                                     jobject,
+                                                                     jstring modelsDir) {
+  const std::string native_dir = JStringToUtf8(env, modelsDir);
+  return JLongFromHandle(mollotov_ai_create(native_dir.c_str()));
+}
+
+JNIEXPORT void JNICALL
+Java_com_mollotov_browser_nativecore_AiManager_aiManagerDestroyNative(JNIEnv*,
+                                                                      jobject,
+                                                                      jlong handle) {
+  mollotov_ai_destroy(HandleFromJLong<AiManagerRef>(handle));
+}
+
+JNIEXPORT void JNICALL
+Java_com_mollotov_browser_nativecore_AiManager_aiSetHfToken(JNIEnv* env,
+                                                            jobject,
+                                                            jlong handle,
+                                                            jstring token) {
+  const std::string native_token = JStringToUtf8(env, token);
+  mollotov_ai_set_hf_token(HandleFromJLong<AiManagerRef>(handle), native_token.c_str());
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_mollotov_browser_nativecore_AiManager_aiGetHfToken(JNIEnv* env,
+                                                            jobject,
+                                                            jlong handle) {
+  return TakeOwnedAiString(env,
+                           mollotov_ai_get_hf_token(HandleFromJLong<AiManagerRef>(handle)));
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_mollotov_browser_nativecore_AiManager_aiListApprovedModels(JNIEnv* env,
+                                                                    jobject,
+                                                                    jlong handle) {
+  return TakeOwnedAiString(env,
+                           mollotov_ai_list_approved_models(HandleFromJLong<AiManagerRef>(handle)));
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_mollotov_browser_nativecore_AiManager_aiModelFitness(JNIEnv* env,
+                                                              jobject,
+                                                              jlong handle,
+                                                              jstring modelId,
+                                                              jdouble ramGB,
+                                                              jdouble diskGB) {
+  const std::string native_model_id = JStringToUtf8(env, modelId);
+  return TakeOwnedAiString(env,
+                           mollotov_ai_model_fitness(HandleFromJLong<AiManagerRef>(handle),
+                                                     native_model_id.c_str(),
+                                                     ramGB, diskGB));
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_mollotov_browser_nativecore_AiManager_aiIsModelDownloaded(JNIEnv* env,
+                                                                    jobject,
+                                                                    jlong handle,
+                                                                    jstring modelId) {
+  const std::string native_model_id = JStringToUtf8(env, modelId);
+  return mollotov_ai_is_model_downloaded(HandleFromJLong<AiManagerRef>(handle),
+                                          native_model_id.c_str());
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_mollotov_browser_nativecore_AiManager_aiModelPath(JNIEnv* env,
+                                                           jobject,
+                                                           jlong handle,
+                                                           jstring modelId) {
+  const std::string native_model_id = JStringToUtf8(env, modelId);
+  return TakeOwnedAiString(env,
+                           mollotov_ai_model_path(HandleFromJLong<AiManagerRef>(handle),
+                                                   native_model_id.c_str()));
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_mollotov_browser_nativecore_AiManager_aiRemoveModel(JNIEnv* env,
+                                                              jobject,
+                                                              jlong handle,
+                                                              jstring modelId) {
+  const std::string native_model_id = JStringToUtf8(env, modelId);
+  return mollotov_ai_remove_model(HandleFromJLong<AiManagerRef>(handle),
+                                   native_model_id.c_str());
+}
+
+JNIEXPORT void JNICALL
+Java_com_mollotov_browser_nativecore_AiManager_aiSetOllamaEndpoint(JNIEnv* env,
+                                                                    jobject,
+                                                                    jlong handle,
+                                                                    jstring endpoint) {
+  const std::string native_endpoint = JStringToUtf8(env, endpoint);
+  mollotov_ai_set_ollama_endpoint(HandleFromJLong<AiManagerRef>(handle),
+                                   native_endpoint.c_str());
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_mollotov_browser_nativecore_AiManager_aiOllamaReachable(JNIEnv*,
+                                                                  jobject,
+                                                                  jlong handle) {
+  return mollotov_ai_ollama_reachable(HandleFromJLong<AiManagerRef>(handle));
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_mollotov_browser_nativecore_AiManager_aiOllamaListModels(JNIEnv* env,
+                                                                   jobject,
+                                                                   jlong handle) {
+  return TakeOwnedAiString(env,
+                           mollotov_ai_ollama_list_models(HandleFromJLong<AiManagerRef>(handle)));
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_mollotov_browser_nativecore_AiManager_aiOllamaInfer(JNIEnv* env,
+                                                              jobject,
+                                                              jlong handle,
+                                                              jstring model,
+                                                              jstring requestJson) {
+  const std::string native_model = JStringToUtf8(env, model);
+  const std::string native_request = JStringToUtf8(env, requestJson);
+  return TakeOwnedAiString(env,
+                           mollotov_ai_ollama_infer(HandleFromJLong<AiManagerRef>(handle),
+                                                     native_model.c_str(),
+                                                     native_request.c_str()));
 }
 
 }  // extern "C"
