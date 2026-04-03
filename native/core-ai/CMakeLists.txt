@@ -1,5 +1,6 @@
 add_library(mollotov_core_ai STATIC
   src/ai_c_api.cpp
+  src/model_catalog.cpp
 )
 
 target_include_directories(mollotov_core_ai
