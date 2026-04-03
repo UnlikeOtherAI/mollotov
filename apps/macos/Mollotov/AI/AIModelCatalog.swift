@@ -33,8 +33,8 @@ enum AIModelCatalog {
         AIApprovedModel(
             id: "gemma-4-e2b-q4",
             name: "Gemma 4 E2B Q4",
-            huggingFaceRepo: "bartowski/gemma-4-E2B-it-GGUF",
-            huggingFaceFile: "gemma-4-E2B-it-Q4_K_M.gguf",
+            huggingFaceRepo: "bartowski/google_gemma-4-E2B-it-GGUF",
+            huggingFaceFile: "google_gemma-4-E2B-it-Q4_K_M.gguf",
             sizeBytes: 2_500_000_000,
             ramWhenLoadedGB: 3.8,
             capabilities: ["text", "vision", "audio"],
@@ -61,8 +61,8 @@ enum AIModelCatalog {
         AIApprovedModel(
             id: "gemma-4-e2b-q8",
             name: "Gemma 4 E2B Q8",
-            huggingFaceRepo: "bartowski/gemma-4-E2B-it-GGUF",
-            huggingFaceFile: "gemma-4-E2B-it-Q8_0.gguf",
+            huggingFaceRepo: "bartowski/google_gemma-4-E2B-it-GGUF",
+            huggingFaceFile: "google_gemma-4-E2B-it-Q8_0.gguf",
             sizeBytes: 5_000_000_000,
             ramWhenLoadedGB: 8,
             capabilities: ["text", "vision", "audio"],
