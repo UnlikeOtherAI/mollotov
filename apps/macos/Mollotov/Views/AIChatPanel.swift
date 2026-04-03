@@ -71,7 +71,6 @@ struct AIChatPanel: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(width: 250)
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
@@ -180,21 +179,16 @@ struct AIChatPanel: View {
     private var modelsTab: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("NATIVE")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(.secondary)
-
+                CollapsibleModelSection(title: "NATIVE", defaultsKey: "com.mollotov.macos.ai-section-native") {
                     ForEach(aiState.nativeModelCards) { card in
                         AINativeModelCardView(card: card, aiState: aiState)
                     }
                 }
 
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 6) {
-                        Text("OLLAMA")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(.secondary)
+                CollapsibleModelSection(
+                    title: "OLLAMA",
+                    defaultsKey: "com.mollotov.macos.ai-section-ollama",
+                    trailing: {
                         Circle()
                             .fill(aiState.ollamaReachable ? Color.green : Color.secondary.opacity(0.6))
                             .frame(width: 8, height: 8)
@@ -202,7 +196,7 @@ struct AIChatPanel: View {
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                     }
-
+                ) {
                     if aiState.ollamaModels.isEmpty {
                         Text(aiState.ollamaReachable ? "No Ollama models detected." : "Ollama is not reachable.")
                             .font(.system(size: 12))
@@ -236,6 +230,58 @@ struct AIChatPanel: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(Color.orange.opacity(0.08))
+    }
+}
+
+private struct CollapsibleModelSection<Content: View, Trailing: View>: View {
+    let title: String
+    let defaultsKey: String
+    let trailing: () -> Trailing
+    let content: () -> Content
+
+    @State private var isExpanded: Bool
+
+    init(
+        title: String,
+        defaultsKey: String,
+        @ViewBuilder trailing: @escaping () -> Trailing = { EmptyView() },
+        @ViewBuilder content: @escaping () -> Content
+    ) {
+        self.title = title
+        self.defaultsKey = defaultsKey
+        self.trailing = trailing
+        self.content = content
+        let saved = UserDefaults.standard.object(forKey: defaultsKey) as? Bool
+        _isExpanded = State(initialValue: saved ?? true)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                withAnimation(.easeOut(duration: 0.15)) {
+                    isExpanded.toggle()
+                }
+                UserDefaults.standard.set(isExpanded, forKey: defaultsKey)
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                    Text(title)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.secondary)
+                    trailing()
+                    Spacer()
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                content()
+            }
+        }
     }
 }
 

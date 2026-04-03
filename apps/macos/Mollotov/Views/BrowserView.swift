@@ -12,8 +12,12 @@ struct BrowserView: View {
     @State private var showHistory = false
     @State private var showNetworkInspector = false
     @StateObject private var aiChatSession = AIChatSession()
-    @State private var isAIPanelOpen = false
+    @State private var isAIPanelOpen: Bool = UserDefaults.standard.bool(forKey: "com.mollotov.macos.ai-panel-open")
     @State private var aiPanelTab: AIPanelTab = .models
+    @State private var aiPanelWidth: CGFloat = {
+        let v = UserDefaults.standard.double(forKey: "com.mollotov.macos.ai-panel-width")
+        return CGFloat(v >= 200 ? v : 250)
+    }()
     @State private var isFloatingMenuOpen = false
     @State private var isIn3DInspector = false
     @State private var inspectorMode = "rotate"
@@ -84,14 +88,14 @@ struct BrowserView: View {
                     rendererSurface
 
                     if isAIPanelOpen {
-                        Divider()
+                        AIPanelResizeHandle(panelWidth: $aiPanelWidth, onDragEnd: persistAIPanelWidth)
                         AIChatPanel(
                             aiState: aiState,
                             session: aiChatSession,
                             selectedTab: $aiPanelTab,
                             onClose: { isAIPanelOpen = false }
                         )
-                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                        .frame(width: aiPanelWidth)
                     }
                 }
             }
@@ -129,7 +133,7 @@ struct BrowserView: View {
                 }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
-            .padding(.trailing, isAIPanelOpen ? 251 : 0)
+            .padding(.trailing, isAIPanelOpen ? aiPanelWidth + 7 : 0)
             .animation(.easeOut(duration: 0.2), value: isAIPanelOpen)
 
             if let message = serverState.shellToastMessage {
@@ -176,7 +180,10 @@ struct BrowserView: View {
         .background(
             WindowChromeBridge(
                 title: windowTitle,
-                minimumWindowSize: viewportState.minimumWindowSize,
+                minimumWindowSize: NSSize(
+                    width: viewportState.minimumWindowSize.width + (isAIPanelOpen ? 206 : 0),
+                    height: viewportState.minimumWindowSize.height
+                ),
                 resolutionLabel: viewportState.resolutionLabel
             )
             .frame(width: 0, height: 0)
@@ -244,6 +251,19 @@ struct BrowserView: View {
         .onReceive(NotificationCenter.default.publisher(for: .snapshot3DExited)) { _ in
             isIn3DInspector = false
             inspectorMode = "rotate"
+        }
+        .onChange(of: isAIPanelOpen) { _, open in
+            UserDefaults.standard.set(open, forKey: "com.mollotov.macos.ai-panel-open")
+            guard let window = NSApp.keyWindow else { return }
+            let panelTotal = aiPanelWidth + 6
+            var frame = window.frame
+            if open {
+                frame.size.width += panelTotal
+            } else {
+                frame.size.width -= panelTotal
+                frame.size.width = max(frame.size.width, ViewportState.minimumShellSize.width)
+            }
+            window.setFrame(frame, display: true, animate: false)
         }
     }
 
@@ -313,6 +333,10 @@ struct BrowserView: View {
             return
         }
         openAIFromMenu()
+    }
+
+    private func persistAIPanelWidth() {
+        UserDefaults.standard.set(Double(aiPanelWidth), forKey: "com.mollotov.macos.ai-panel-width")
     }
 
     private func notifyRendererViewportChangeIfNeeded() {
@@ -677,6 +701,52 @@ private struct WindowBlurOverlay: NSViewRepresentable {
 
     func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
         nsView.alphaValue = opacity
+    }
+}
+
+private struct AIPanelResizeHandle: View {
+    @Binding var panelWidth: CGFloat
+    let onDragEnd: () -> Void
+
+    @State private var dragStartWidth: CGFloat?
+
+    var body: some View {
+        Rectangle()
+            .fill(Color(nsColor: .separatorColor))
+            .frame(width: 1)
+            .padding(.horizontal, 2.5)
+            .contentShape(Rectangle())
+            .onHover { hovering in
+                if hovering {
+                    NSCursor.resizeLeftRight.push()
+                } else {
+                    NSCursor.pop()
+                }
+            }
+            .gesture(
+                DragGesture(minimumDistance: 1)
+                    .onChanged { value in
+                        if dragStartWidth == nil {
+                            dragStartWidth = panelWidth
+                        }
+                        guard let startWidth = dragStartWidth else { return }
+                        let proposed = startWidth - value.translation.width
+                        let newWidth = min(max(proposed, 200), 500)
+                        if let window = NSApp.keyWindow {
+                            let delta = newWidth - panelWidth
+                            if abs(delta) > 0.5 {
+                                var frame = window.frame
+                                frame.size.width += delta
+                                window.setFrame(frame, display: true)
+                            }
+                        }
+                        panelWidth = newWidth
+                    }
+                    .onEnded { _ in
+                        dragStartWidth = nil
+                        onDragEnd()
+                    }
+            )
     }
 }
 
