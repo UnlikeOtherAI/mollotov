@@ -129,6 +129,8 @@ struct BrowserView: View {
                 }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+            .padding(.trailing, isAIPanelOpen ? 251 : 0)
+            .animation(.easeOut(duration: 0.2), value: isAIPanelOpen)
 
             if let message = serverState.shellToastMessage {
                 VStack {
