@@ -57,12 +57,14 @@ struct URLBarView: View {
 
                 addressField
 
-                AIStatusPill(
-                    aiState: aiState,
-                    isOpen: isAIPanelOpen,
-                    action: onAIToggle
-                )
-                .fixedSize(horizontal: true, vertical: false)
+                if aiState.isAvailable {
+                    AIStatusPill(
+                        aiState: aiState,
+                        isOpen: isAIPanelOpen,
+                        action: onAIToggle
+                    )
+                    .fixedSize(horizontal: true, vertical: false)
+                }
 
                 navButton(
                     systemName: "cube.transparent",

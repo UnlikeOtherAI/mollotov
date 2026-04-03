@@ -162,6 +162,7 @@ struct BrowserView: View {
                     onNavigate: navigate,
                     onBack: goBack,
                     onForward: goForward,
+                    showAI: AIState.shared.isAvailable,
                     onAI: { showAI = true },
                     onSnapshot3D: {
                         Task { @MainActor in
@@ -271,6 +272,13 @@ struct BrowserView: View {
         }
         .onChange(of: browserState.pageTitle) { newTitle in
             HistoryStore.shared.updateLatestTitle(for: browserState.currentURL, title: newTitle)
+        }
+        .onChange(of: browserState.isLoading) { isLoading in
+            guard isLoading else { return }
+            guard serverState.handlerContext.isIn3DInspector || isIn3DInspector else { return }
+            serverState.handlerContext.mark3DInspectorInactive(notify: false)
+            isIn3DInspector = false
+            inspectorMode = "rotate"
         }
         .sheet(isPresented: $showSettings) {
             SettingsView(serverState: serverState, onShowWelcome: presentWelcomeFromHelp)

@@ -87,6 +87,42 @@ fun BrowserScreen(
     var lastRecordedUrl by remember { mutableStateOf("") }
     val tabletMobileStagePresetId by TabletViewportPresetStore.selectedPresetId.collectAsState()
     var availableTabletViewportPresets by remember { mutableStateOf(TABLET_VIEWPORT_PRESETS) }
+    val isIn3DInspector by handlerContext.isIn3DInspectorFlow.collectAsState()
+    var inspectorMode by remember { mutableStateOf("rotate") }
+
+    suspend fun toggle3DInspector() {
+        if (handlerContext.isIn3DInspector) {
+            runCatching { handlerContext.evaluateJS(Snapshot3DBridge.EXIT_SCRIPT) }
+            handlerContext.mark3DInspectorInactive()
+            inspectorMode = "rotate"
+            return
+        }
+
+        runCatching { handlerContext.evaluateJS(Snapshot3DBridge.ENTER_SCRIPT) }
+        val active = runCatching { handlerContext.evaluateJS("!!window.__m3d") }.getOrNull()
+        if (active?.contains("true") == true) {
+            handlerContext.isIn3DInspector = true
+            inspectorMode = "rotate"
+            runCatching { handlerContext.evaluateJS(Snapshot3DBridge.setModeScript(inspectorMode)) }
+        }
+    }
+
+    suspend fun set3DInspectorMode(mode: String) {
+        if (!handlerContext.isIn3DInspector) return
+        val normalized = if (mode == "scroll") "scroll" else "rotate"
+        runCatching { handlerContext.evaluateJS(Snapshot3DBridge.setModeScript(normalized)) }
+        inspectorMode = normalized
+    }
+
+    suspend fun zoom3DInspector(delta: Double) {
+        if (!handlerContext.isIn3DInspector) return
+        runCatching { handlerContext.evaluateJS(Snapshot3DBridge.zoomByScript(delta)) }
+    }
+
+    suspend fun reset3DInspectorView() {
+        if (!handlerContext.isIn3DInspector) return
+        runCatching { handlerContext.evaluateJS(Snapshot3DBridge.RESET_VIEW_SCRIPT) }
+    }
 
     // Record history when URL changes
     if (currentUrl != lastRecordedUrl && currentUrl.isNotEmpty()) {
@@ -114,20 +150,10 @@ fun BrowserScreen(
                 onNavigate = { url -> webView?.loadUrl(url) },
                 onBack = { webView?.goBack() },
                 onForward = { webView?.goForward() },
+                showAI = com.mollotov.browser.ai.AIState.isAvailable,
                 onAI = { showAI = true },
                 onSnapshot3D = {
-                    coroutineScope.launch {
-                        if (handlerContext.isIn3DInspector) {
-                            runCatching { handlerContext.evaluateJS(Snapshot3DBridge.EXIT_SCRIPT) }
-                            handlerContext.mark3DInspectorInactive()
-                        } else {
-                            runCatching { handlerContext.evaluateJS(Snapshot3DBridge.ENTER_SCRIPT) }
-                            val active = runCatching { handlerContext.evaluateJS("!!window.__m3d") }.getOrNull()
-                            if (active?.contains("true") == true) {
-                                handlerContext.isIn3DInspector = true
-                            }
-                        }
-                    }
+                    coroutineScope.launch { toggle3DInspector() }
                 },
             )
 
@@ -220,18 +246,7 @@ fun BrowserScreen(
             onNetworkInspector = { showNetworkInspector = true },
             onAI = { showAI = true },
             onSnapshot3D = {
-                coroutineScope.launch {
-                    if (handlerContext.isIn3DInspector) {
-                        runCatching { handlerContext.evaluateJS(Snapshot3DBridge.EXIT_SCRIPT) }
-                        handlerContext.mark3DInspectorInactive()
-                    } else {
-                        runCatching { handlerContext.evaluateJS(Snapshot3DBridge.ENTER_SCRIPT) }
-                        val active = runCatching { handlerContext.evaluateJS("!!window.__m3d") }.getOrNull()
-                        if (active?.contains("true") == true) {
-                            handlerContext.isIn3DInspector = true
-                        }
-                    }
-                }
+                coroutineScope.launch { toggle3DInspector() }
             },
             show3DInspector = FeatureFlags.is3DInspectorEnabled(context),
             showMobileViewportToggle = isTablet,
@@ -244,6 +259,40 @@ fun BrowserScreen(
                 TabletViewportPresetStore.setSelectedPresetId(nextPresetId)
             },
         )
+
+        if (isIn3DInspector) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(bottom = 88.dp),
+                contentAlignment = Alignment.BottomCenter,
+            ) {
+                Inspector3DControlsBar(
+                    mode = inspectorMode,
+                    onSelectMode = { mode ->
+                        coroutineScope.launch { set3DInspectorMode(mode) }
+                    },
+                    onZoomOut = {
+                        coroutineScope.launch { zoom3DInspector(-0.12) }
+                    },
+                    onZoomIn = {
+                        coroutineScope.launch { zoom3DInspector(0.12) }
+                    },
+                    onReset = {
+                        coroutineScope.launch { reset3DInspectorView() }
+                    },
+                    onExit = {
+                        coroutineScope.launch { toggle3DInspector() }
+                    },
+                )
+            }
+        }
+    }
+
+    LaunchedEffect(isIn3DInspector) {
+        if (!isIn3DInspector) {
+            inspectorMode = "rotate"
+        }
     }
 
     if (showSettings) {

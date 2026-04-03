@@ -6,6 +6,7 @@ struct URLBarView: View {
     let onNavigate: (String) -> Void
     let onBack: () -> Void
     let onForward: () -> Void
+    let showAI: Bool
     let onAI: () -> Void
     let onSnapshot3D: () -> Void
 
@@ -45,14 +46,16 @@ struct URLBarView: View {
                 .accessibilityIdentifier("browser.url.field")
                 .onSubmit { navigate() }
 
-            Button(action: onAI) {
-                Image(systemName: "brain")
-                    .font(.system(size: 16, weight: .semibold))
-                    .frame(width: navigationButtonSize, height: navigationButtonSize)
-                    .background(Color(.systemGray6))
-                    .clipShape(Circle())
+            if showAI {
+                Button(action: onAI) {
+                    Image(systemName: "brain")
+                        .font(.system(size: 16, weight: .semibold))
+                        .frame(width: navigationButtonSize, height: navigationButtonSize)
+                        .background(Color(.systemGray6))
+                        .clipShape(Circle())
+                }
+                .accessibilityIdentifier("browser.ai.button")
             }
-            .accessibilityIdentifier("browser.ai.button")
 
             Button(action: onSnapshot3D) {
                 Image(systemName: "cube.transparent")

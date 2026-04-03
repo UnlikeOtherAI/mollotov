@@ -32,6 +32,7 @@ fun URLBar(
     onNavigate: (String) -> Unit,
     onBack: () -> Unit,
     onForward: () -> Unit,
+    showAI: Boolean,
     onAI: () -> Unit,
     onSnapshot3D: () -> Unit,
     modifier: Modifier = Modifier,
@@ -72,8 +73,10 @@ fun URLBar(
                 .padding(horizontal = 4.dp),
         )
 
-        IconButton(onClick = onAI, modifier = Modifier.size(navigationButtonSize)) {
-            Text("AI")
+        if (showAI) {
+            IconButton(onClick = onAI, modifier = Modifier.size(navigationButtonSize)) {
+                Text("AI")
+            }
         }
 
         IconButton(onClick = onSnapshot3D, modifier = Modifier.size(navigationButtonSize)) {
