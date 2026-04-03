@@ -359,7 +359,9 @@ struct BrowserView: View {
         }
 
         try? await serverState.handlerContext.evaluateJS(Snapshot3DBridge.enterScript)
-        let active = try? await serverState.handlerContext.evaluateJSReturningString("!!window.__m3d")
+        // Use a JS string expression so WebKit returns a String rather than NSNumber,
+        // avoiding the "1" vs "true" mismatch from evaluateJSReturningString.
+        let active = try? await serverState.handlerContext.evaluateJSReturningString("window.__m3d ? 'true' : 'false'")
         guard active == "true" else { return }
 
         serverState.handlerContext.isIn3DInspector = true

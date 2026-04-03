@@ -78,35 +78,35 @@ struct AIChatPanel: View {
     private var header: some View {
         HStack(spacing: 6) {
             ForEach(AIPanelTab.allCases, id: \.self) { tab in
-                Button {
-                    selectedTab = tab
-                } label: {
-                    Text(tab.rawValue)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(selectedTab == tab ? Color.accentColor : .secondary)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(
-                            Capsule(style: .continuous)
-                                .fill(selectedTab == tab ? Color.accentColor.opacity(0.16) : Color.clear)
-                        )
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("browser.ai.tab.\(tab.rawValue.lowercased())")
+                Text(tab.rawValue)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(selectedTab == tab ? Color.accentColor : .secondary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(selectedTab == tab ? Color.accentColor.opacity(0.16) : Color.clear)
+                    )
+                    .overlay(
+                        AppKitInvisibleButton(
+                            accessibilityID: "browser.ai.tab.\(tab.rawValue.lowercased())",
+                            accessibilityLabel: tab.rawValue
+                        ) { selectedTab = tab }
+                    )
             }
 
             Spacer()
 
-            Button(action: onClose) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 28, height: 28)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("browser.ai.panel.close")
+            Image(systemName: "xmark")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(.secondary)
+                .frame(width: 28, height: 28)
+                .overlay(
+                    AppKitInvisibleButton(
+                        accessibilityID: "browser.ai.panel.close",
+                        accessibilityLabel: "Close AI panel"
+                    ) { onClose() }
+                )
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)

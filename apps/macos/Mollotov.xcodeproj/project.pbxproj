@@ -33,6 +33,7 @@
 		52698080F050A35F497008AF /* RendererState.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE5748C499201EFFBA3807DB /* RendererState.swift */; };
 		53AEC20EFF3F4E970C1B4789 /* RendererEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEAFBD413B4422142E5E8EB2 /* RendererEngine.swift */; };
 		575109F16E508640719CEBC2 /* AIChatPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 223DCB7A84A6CF2A772EDD8B /* AIChatPanel.swift */; };
+		A1B2C3D4E5F60718293A4B5C /* AppKitComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1C2D3E4F5061728394A5B6C /* AppKitComponents.swift */; };
 		5A253299557771C8136237E6 /* WKWebViewRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBDD8D7C74821BCEA52DA0A8 /* WKWebViewRenderer.swift */; };
 		617ED286D4D49B4C388F2527 /* NetworkTrafficStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3E8E0DA5886C252FE1BCE75 /* NetworkTrafficStore.swift */; };
 		6474BE5B3FBDAAC77ADE63C4 /* Chromium Embedded Framework.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 281B211E466DC23877A0CFAA /* Chromium Embedded Framework.framework */; };
@@ -108,6 +109,7 @@
 		1C5CB8EFBD176E045F6DBD06 /* WelcomeCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeCardView.swift; sourceTree = "<group>"; };
 		1DA139A3CF468F423C529E96 /* LLMHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMHandler.swift; sourceTree = "<group>"; };
 		223DCB7A84A6CF2A772EDD8B /* AIChatPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIChatPanel.swift; sourceTree = "<group>"; };
+		B1C2D3E4F5061728394A5B6C /* AppKitComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppKitComponents.swift; sourceTree = "<group>"; };
 		281B211E466DC23877A0CFAA /* Chromium Embedded Framework.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = "Chromium Embedded Framework.framework"; path = "Frameworks/Chromium Embedded Framework.framework"; sourceTree = "<group>"; };
 		309E4F27B9334A3F85201824 /* Mollotov.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Mollotov.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		3165F3E062D65F1295516C83 /* SystemPrompt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemPrompt.swift; sourceTree = "<group>"; };
@@ -313,6 +315,7 @@
 			children = (
 				223DCB7A84A6CF2A772EDD8B /* AIChatPanel.swift */,
 				02B6E378CD08BC024643B704 /* AIStatusPill.swift */,
+				B1C2D3E4F5061728394A5B6C /* AppKitComponents.swift */,
 				0215848A303CA575C381B8E3 /* BookmarksView.swift */,
 				10C625D56E93B41DC885E496 /* BrowserView.swift */,
 				AF87ABB3FE3E6A86205ACC2C /* FloatingMenuView.swift */,
@@ -585,6 +588,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				575109F16E508640719CEBC2 /* AIChatPanel.swift in Sources */,
+				A1B2C3D4E5F60718293A4B5C /* AppKitComponents.swift in Sources */,
 				8E059CD0A918C3B132A18C20 /* AIHandler.swift in Sources */,
 				818EDC831C382C3B4AF0BAB6 /* AIManager.swift in Sources */,
 				00F6B75E56A9FC9ECA87171D /* AIModelCatalog.swift in Sources */,
