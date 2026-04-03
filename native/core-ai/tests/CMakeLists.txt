@@ -1,0 +1,7 @@
+function(add_ai_test name)
+  add_executable(${name} ${ARGN})
+  target_link_libraries(${name} PRIVATE mollotov_core_ai)
+  add_test(NAME ${name} COMMAND ${name})
+endfunction()
+
+add_ai_test(test_ai_catalog test_ai_catalog.cpp)
