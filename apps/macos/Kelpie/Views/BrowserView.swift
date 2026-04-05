@@ -260,16 +260,6 @@ struct BrowserView: View {
         }
         .onChange(of: isAIPanelOpen) { _, open in
             UserDefaults.standard.set(open, forKey: "com.kelpie.macos.ai-panel-open")
-            guard let window = NSApp.keyWindow else { return }
-            let panelTotal = aiPanelWidth + 6
-            var frame = window.frame
-            if open {
-                frame.size.width += panelTotal
-            } else {
-                frame.size.width -= panelTotal
-                frame.size.width = max(frame.size.width, ViewportState.minimumShellSize.width)
-            }
-            window.setFrame(frame, display: true, animate: false)
         }
     }
 
@@ -786,12 +776,6 @@ private final class ResizeHandleView: NSView {
               let startX = c.dragStartX else { return }
         let dx = startX - event.locationInWindow.x
         let newWidth = min(max(startWidth + dx, 200), 500)
-        let delta = newWidth - c.panelWidth
-        if abs(delta) > 0.5, let window = self.window {
-            var frame = window.frame
-            frame.size.width += delta
-            window.setFrame(frame, display: true)
-        }
         c.panelWidth = newWidth
     }
 
