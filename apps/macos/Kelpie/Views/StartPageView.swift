@@ -17,83 +17,80 @@ struct StartPageView: View {
     }
 
     var body: some View {
-        ZStack {
-            // Exact background color sampled from icon corner
-            iconBackgroundColor
-                .ignoresSafeArea()
-
-            // Kelpie icon at 30% opacity, full bleed
-            if let img = NSImage(named: "WelcomeIcon") {
-                Image(nsImage: img)
-                    .resizable()
-                    .scaledToFill()
-                    .opacity(0.30)
-                    .ignoresSafeArea()
-            }
-
-            // Scrollable content
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 36) {
-                    // App icon header
-                    HStack {
-                        Spacer()
-                        if let img = NSImage(named: "WelcomeIcon") {
-                            Image(nsImage: img)
-                                .resizable()
-                                .frame(width: 120, height: 120)
-                                .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
-                                .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
-                        }
-                        Spacer()
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 36) {
+                // App icon header
+                HStack {
+                    Spacer()
+                    if let img = NSImage(named: "WelcomeIcon") {
+                        Image(nsImage: img)
+                            .resizable()
+                            .frame(width: 120, height: 120)
+                            .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+                            .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
                     }
-                    .padding(.top, 40)
+                    Spacer()
+                }
+                .padding(.top, 40)
 
-                    if !bookmarkStore.bookmarks.isEmpty {
-                        StartPageSection(title: "Favourites") {
-                            LazyVGrid(
-                                columns: [GridItem(.adaptive(minimum: 72, maximum: 96))],
-                                alignment: .leading,
-                                spacing: 16
-                            ) {
-                                ForEach(bookmarkStore.bookmarks) { bm in
-                                    BookmarkTileView(bookmark: bm) { onNavigate(bm.url) }
-                                }
+                if !bookmarkStore.bookmarks.isEmpty {
+                    StartPageSection(title: "Favourites") {
+                        LazyVGrid(
+                            columns: [GridItem(.adaptive(minimum: 72, maximum: 96))],
+                            alignment: .leading,
+                            spacing: 16
+                        ) {
+                            ForEach(bookmarkStore.bookmarks) { bm in
+                                BookmarkTileView(bookmark: bm) { onNavigate(bm.url) }
                             }
                         }
-                    }
-
-                    let recent = Array(historyStore.entries.prefix(20))
-                    if !recent.isEmpty {
-                        StartPageSection(title: "Recent") {
-                            VStack(spacing: 0) {
-                                ForEach(recent) { entry in
-                                    HistoryRowView(
-                                        entry: entry,
-                                        onTap: { onNavigate(entry.url) },
-                                        onRemove: { historyStore.remove(id: entry.id) }
-                                    )
-                                    if entry.id != recent.last?.id {
-                                        Divider().opacity(0.15)
-                                    }
-                                }
-                            }
-                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-                        }
-                    }
-
-                    if bookmarkStore.bookmarks.isEmpty && historyStore.entries.isEmpty {
-                        Spacer(minLength: 100)
-                        Text("Open a website to get started")
-                            .font(.system(size: 15))
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity)
                     }
                 }
-                .frame(maxWidth: 720)
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, 40)
-                .padding(.vertical, 48)
+
+                let recent = Array(historyStore.entries.prefix(20))
+                if !recent.isEmpty {
+                    StartPageSection(title: "Recent") {
+                        VStack(spacing: 0) {
+                            ForEach(recent) { entry in
+                                HistoryRowView(
+                                    entry: entry,
+                                    onTap: { onNavigate(entry.url) },
+                                    onRemove: { historyStore.remove(id: entry.id) }
+                                )
+                                if entry.id != recent.last?.id {
+                                    Divider().opacity(0.15)
+                                }
+                            }
+                        }
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                    }
+                }
+
+                if bookmarkStore.bookmarks.isEmpty && historyStore.entries.isEmpty {
+                    Spacer(minLength: 100)
+                    Text("Open a website to get started")
+                        .font(.system(size: 15))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                }
             }
+            .frame(maxWidth: 720)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 40)
+            .padding(.vertical, 48)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background {
+            ZStack {
+                iconBackgroundColor
+                if let img = NSImage(named: "WelcomeIcon") {
+                    Image(nsImage: img)
+                        .resizable()
+                        .scaledToFill()
+                        .opacity(0.30)
+                }
+            }
+            .clipped()
         }
     }
 }
