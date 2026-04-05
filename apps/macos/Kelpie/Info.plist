@@ -20,6 +20,8 @@
     <array>
         <string>_kelpie._tcp</string>
     </array>
+    <key>NSQuitAlwaysKeepsWindows</key>
+    <false/>
     <key>NSAppTransportSecurity</key>
     <dict>
         <key>NSAllowsArbitraryLoads</key>
