@@ -1,4 +1,6 @@
 enum Snapshot3DBridge {
+
+// swiftlint:disable line_length
     static let enterScript = #"""
     (function() {
         'use strict';

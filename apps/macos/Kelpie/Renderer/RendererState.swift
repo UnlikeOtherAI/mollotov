@@ -4,8 +4,8 @@ import Foundation
 @MainActor
 final class RendererState: ObservableObject {
     enum Engine: String, CaseIterable {
-        case webkit = "webkit"
-        case chromium = "chromium"
+        case webkit
+        case chromium
 
         var displayName: String {
             switch self {

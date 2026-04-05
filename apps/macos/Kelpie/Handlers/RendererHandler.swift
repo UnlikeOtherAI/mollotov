@@ -33,7 +33,7 @@ struct RendererHandler {
     private func getRenderer() async -> [String: Any] {
         successResponse([
             "engine": rendererState.activeEngine.rawValue,
-            "available": RendererState.Engine.allCases.map(\.rawValue),
+            "available": RendererState.Engine.allCases.map(\.rawValue)
         ])
     }
 }

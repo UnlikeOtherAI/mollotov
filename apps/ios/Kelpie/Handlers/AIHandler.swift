@@ -23,7 +23,7 @@ struct AIHandler {
             var response = successResponse([
                 "loaded": state.isLoaded,
                 "backend": state.backend,
-                "capabilities": state.capabilities,
+                "capabilities": state.capabilities
             ])
 
             if state.backend == "ollama", let model = state.activeModel {
@@ -59,7 +59,7 @@ struct AIHandler {
                     "model": ollamaModel,
                     "backend": "ollama",
                     "ollamaEndpoint": endpoint,
-                    "loadTimeMs": elapsedMs(since: start),
+                    "loadTimeMs": elapsedMs(since: start)
                 ])
             } catch let error as AIHandlerError {
                 return error.response
@@ -89,7 +89,7 @@ struct AIHandler {
                 "loaded": state.isLoaded,
                 "backend": state.backend,
                 "capabilities": state.capabilities,
-                "loadTimeMs": elapsedMs(since: start),
+                "loadTimeMs": elapsedMs(since: start)
             ]
         }
         return successResponse(payload)
@@ -158,7 +158,7 @@ struct AIHandler {
             return successResponse([
                 "response": response,
                 "tokensUsed": 0,
-                "inferenceTimeMs": elapsedMs(since: start),
+                "inferenceTimeMs": elapsedMs(since: start)
             ])
         } catch {
             return errorResponse(
@@ -188,7 +188,7 @@ struct AIHandler {
                 return successResponse([
                     "response": content,
                     "tokensUsed": result["eval_count"] as? Int ?? 0,
-                    "inferenceTimeMs": elapsedMs(since: start),
+                    "inferenceTimeMs": elapsedMs(since: start)
                 ])
             }
 
@@ -199,7 +199,7 @@ struct AIHandler {
             return successResponse([
                 "response": response,
                 "tokensUsed": result["eval_count"] as? Int ?? 0,
-                "inferenceTimeMs": elapsedMs(since: start),
+                "inferenceTimeMs": elapsedMs(since: start)
             ])
         } catch let error as AIHandlerError {
             return error.response
@@ -221,7 +221,7 @@ struct AIHandler {
                 return successResponse([
                     "recording": false,
                     "audio": result.audio.base64EncodedString(),
-                    "durationMs": result.durationMs,
+                    "durationMs": result.durationMs
                 ])
             case "status":
                 return successResponse(await Self.recorder.snapshot())
@@ -258,7 +258,7 @@ struct AIHandler {
         var payload: [String: Any] = [
             "model": model,
             "prompt": prompt,
-            "stream": false,
+            "stream": false
         ]
 
         if let maxTokens = body["maxTokens"] as? Int {
@@ -283,7 +283,7 @@ struct AIHandler {
         if let prompt = nonEmptyString(body["prompt"]) {
             normalizedMessages.append([
                 "role": "user",
-                "content": prompt,
+                "content": prompt
             ])
         }
 
@@ -294,7 +294,7 @@ struct AIHandler {
         return [
             "model": model,
             "messages": normalizedMessages,
-            "stream": false,
+            "stream": false
         ]
     }
 

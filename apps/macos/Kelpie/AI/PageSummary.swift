@@ -26,7 +26,7 @@ struct PageSummary {
     }
 
     @MainActor
-    static func gather(from context: HandlerContext) async -> PageSummary {
+    static func gather(from context: HandlerContext) async -> Self {
         let counts = (try? await context.evaluateJSReturningJSON(
             """
             (function() {
@@ -52,7 +52,7 @@ struct PageSummary {
 
         let errors = context.consoleMessages.filter { ($0["level"] as? String) == "error" }.count
 
-        return PageSummary(
+        return Self(
             title: counts["title"] as? String ?? context.currentTitle,
             url: counts["url"] as? String ?? context.currentURL?.absoluteString ?? "",
             wordCount: counts["wordCount"] as? Int ?? 0,

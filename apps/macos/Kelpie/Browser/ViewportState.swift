@@ -4,8 +4,8 @@ import Combine
 enum DeviceKind { case phone, tablet, laptop }
 
 enum ViewportOrientation: String {
-    case portrait = "portrait"
-    case landscape = "landscape"
+    case portrait
+    case landscape
 }
 
 struct DesktopViewportPreset: Identifiable, Equatable {
@@ -35,8 +35,7 @@ private func viewportPresetSortValue(_ label: String) -> Double {
 }
 
 private func loadPresetsFromNative()
-    -> (phones: [DesktopViewportPreset], tablets: [DesktopViewportPreset], laptops: [DesktopViewportPreset])
-{
+    -> (phones: [DesktopViewportPreset], tablets: [DesktopViewportPreset], laptops: [DesktopViewportPreset]) {
     var phones: [DesktopViewportPreset] = []
     var tablets: [DesktopViewportPreset] = []
     var laptops: [DesktopViewportPreset] = []
@@ -47,14 +46,14 @@ private func loadPresetsFromNative()
                              : p.kind == KELPIE_DEVICE_KIND_LAPTOP ? .laptop
                              : .phone
         let preset = DesktopViewportPreset(
-            id:                   cstr(p.id),
-            name:                 cstr(p.name),
-            label:                cstr(p.label),
-            menuLabel:            cstr(p.menu_label),
-            kind:                 kind,
-            displaySizeLabel:     cstr(p.display_size_label),
+            id: cstr(p.id),
+            name: cstr(p.name),
+            label: cstr(p.label),
+            menuLabel: cstr(p.menu_label),
+            kind: kind,
+            displaySizeLabel: cstr(p.display_size_label),
             pixelResolutionLabel: cstr(p.pixel_resolution_label),
-            portraitSize:         CGSize(width: CGFloat(p.portrait_width), height: CGFloat(p.portrait_height))
+            portraitSize: CGSize(width: CGFloat(p.portrait_width), height: CGFloat(p.portrait_height))
         )
         switch kind {
         case .tablet: tablets.append(preset)
@@ -75,7 +74,7 @@ private func loadPresetsFromNative()
 }
 
 private let _nativePresets = loadPresetsFromNative()
-let macPhonePresets:  [DesktopViewportPreset] = _nativePresets.phones
+let macPhonePresets: [DesktopViewportPreset] = _nativePresets.phones
 let macTabletPresets: [DesktopViewportPreset] = _nativePresets.tablets
 let macLaptopPresets: [DesktopViewportPreset] = _nativePresets.laptops
 let allMacViewportPresets = macPhonePresets + macTabletPresets + macLaptopPresets
@@ -127,7 +126,7 @@ final class ViewportState: ObservableObject {
     // MARK: - Scale
 
     var canScaleDown: Bool { scale > Self.minScale + 0.001 }
-    var canScaleUp:   Bool { scale < Self.maxScale - 0.001 }
+    var canScaleUp: Bool { scale < Self.maxScale - 0.001 }
     var scalePercentLabel: String { "\(Int((scale * 100).rounded()))%" }
 
     func scaleUp() {
@@ -158,17 +157,17 @@ final class ViewportState: ObservableObject {
         let height = defaults.double(forKey: shellWindowHeightDefaultsKey)
         guard width > 0, height > 0 else { return nil }
         return NSSize(
-            width:  max(width.rounded(.down),  minimumShellSize.width),
+            width: max(width.rounded(.down), minimumShellSize.width),
             height: max(height.rounded(.down), minimumShellSize.height)
         )
     }
 
     static func persistShellWindowSize(_ size: NSSize) {
         let normalized = NSSize(
-            width:  max(size.width.rounded(.down),  minimumShellSize.width),
+            width: max(size.width.rounded(.down), minimumShellSize.width),
             height: max(size.height.rounded(.down), minimumShellSize.height)
         )
-        UserDefaults.standard.set(normalized.width,  forKey: shellWindowWidthDefaultsKey)
+        UserDefaults.standard.set(normalized.width, forKey: shellWindowWidthDefaultsKey)
         UserDefaults.standard.set(normalized.height, forKey: shellWindowHeightDefaultsKey)
     }
 
@@ -184,7 +183,7 @@ final class ViewportState: ObservableObject {
         }
     }
 
-    var availablePhonePresets:  [DesktopViewportPreset] { availablePresets.filter { $0.kind == .phone  } }
+    var availablePhonePresets: [DesktopViewportPreset] { availablePresets.filter { $0.kind == .phone } }
     var availableTabletPresets: [DesktopViewportPreset] { availablePresets.filter { $0.kind == .tablet } }
     var availableLaptopPresets: [DesktopViewportPreset] { availablePresets.filter { $0.kind == .laptop } }
     var supportsOrientationSelection: Bool {
@@ -255,7 +254,7 @@ final class ViewportState: ObservableObject {
     @discardableResult
     func resizeViewport(width: Int?, height: Int?) -> CGSize {
         let current = currentViewportDimensions
-        let requestedWidth  = max(width  ?? current.width,  1)
+        let requestedWidth  = max(width ?? current.width, 1)
         let requestedHeight = max(height ?? current.height, 1)
         mode = .custom
         requestedCustomViewportSize = CGSize(width: requestedWidth, height: requestedHeight)

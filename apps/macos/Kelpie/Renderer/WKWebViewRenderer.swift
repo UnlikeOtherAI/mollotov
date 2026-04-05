@@ -32,8 +32,8 @@ final class WKWebViewRenderer: NSObject, RendererEngine, WKScriptMessageHandler,
 
         let ucc = config.userContentController
         // Inject network bridge FIRST (saves postMessage ref before console bridge masks messageHandlers)
-        ucc.addUserScript(WKWebViewRenderer.networkBridgeScript)
-        ucc.addUserScript(WKWebViewRenderer.consoleBridgeScript)
+        ucc.addUserScript(Self.networkBridgeScript)
+        ucc.addUserScript(Self.consoleBridgeScript)
 
         webView = WKWebView(frame: NSRect(x: 0, y: 0, width: 1280, height: 800), configuration: config)
 
@@ -193,8 +193,12 @@ final class WKWebViewRenderer: NSObject, RendererEngine, WKScriptMessageHandler,
 
     // MARK: - WKUIDelegate
 
-    nonisolated func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
-                             for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+    nonisolated func webView(
+        _ webView: WKWebView,
+        createWebViewWith configuration: WKWebViewConfiguration,
+        for navigationAction: WKNavigationAction,
+        windowFeatures: WKWindowFeatures
+    ) -> WKWebView? {
         if navigationAction.targetFrame == nil {
             webView.load(navigationAction.request)
         }

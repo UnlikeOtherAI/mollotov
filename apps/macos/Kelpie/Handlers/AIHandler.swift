@@ -77,7 +77,7 @@ struct AIHandler {
                 "model": model,
                 "backend": "native",
                 "capabilities": nativeState.capabilities,
-                "memoryUsageMB": engine.memoryUsageMB,
+                "memoryUsageMB": engine.memoryUsageMB
             ])
         }
 
@@ -87,7 +87,7 @@ struct AIHandler {
                 "model": model,
                 "backend": "ollama",
                 "capabilities": backendState.capabilities,
-                "ollamaEndpoint": backendState.ollamaEndpoint ?? defaultOllamaEndpoint,
+                "ollamaEndpoint": backendState.ollamaEndpoint ?? defaultOllamaEndpoint
             ])
         }
 
@@ -117,7 +117,7 @@ struct AIHandler {
             return successResponse([
                 "model": ollamaModel,
                 "backend": "ollama",
-                "loadTimeMs": elapsedMs(since: start),
+                "loadTimeMs": elapsedMs(since: start)
             ])
         }
 
@@ -133,7 +133,7 @@ struct AIHandler {
         switch resolution {
         case .failure(let error):
             return error
-        case .success(let path, let name, let capabilities):
+        case let .success(path, name, capabilities):
             do {
                 let nativeState = await MainActor.run { (engine.isLoaded, engine.modelName) }
                 if nativeState.0 {
@@ -145,7 +145,7 @@ struct AIHandler {
                 return successResponse([
                     "model": name,
                     "backend": "native",
-                    "loadTimeMs": elapsedMs(since: start),
+                    "loadTimeMs": elapsedMs(since: start)
                 ])
             } catch let error as InferenceEngine.InferenceError {
                 return mapInferenceError(error)
@@ -212,7 +212,7 @@ struct AIHandler {
                 return successResponse([
                     "response": result.text,
                     "tokensUsed": result.tokensUsed,
-                    "inferenceTimeMs": result.inferenceTimeMs,
+                    "inferenceTimeMs": result.inferenceTimeMs
                 ])
             } catch {
                 return errorResponse(code: "OLLAMA_DISCONNECTED", message: error.localizedDescription)
@@ -242,7 +242,7 @@ struct AIHandler {
                 var response = successResponse([
                     "response": parsed.answer,
                     "tokensUsed": result.tokensUsed,
-                    "inferenceTimeMs": result.inferenceTimeMs,
+                    "inferenceTimeMs": result.inferenceTimeMs
                 ])
                 if let transcription = parsed.transcription {
                     response["transcription"] = transcription
@@ -264,7 +264,7 @@ struct AIHandler {
             var response = successResponse([
                 "response": result.answer,
                 "tokensUsed": result.totalTokens,
-                "inferenceTimeMs": result.totalTimeMs,
+                "inferenceTimeMs": result.totalTimeMs
             ])
             if let transcription = result.transcription {
                 response["transcription"] = transcription
@@ -282,7 +282,7 @@ struct AIHandler {
 
         switch action {
         case "start":
-            let state = await MainActor.run { (AIHandler.recorder.isRecording, AIHandler.recorder.hasPendingAudio) }
+            let state = await MainActor.run { (Self.recorder.isRecording, Self.recorder.hasPendingAudio) }
             guard !state.0 else {
                 return errorResponse(
                     code: "RECORDING_ALREADY_ACTIVE",
@@ -291,7 +291,7 @@ struct AIHandler {
             }
 
             do {
-                try await AIHandler.recorder.start()
+                try await Self.recorder.start()
                 return successResponse(["recording": true])
             } catch let error as AudioRecorder.RecordingError {
                 return mapRecordingError(error)
@@ -300,7 +300,7 @@ struct AIHandler {
             }
 
         case "stop":
-            let state = await MainActor.run { (AIHandler.recorder.isRecording, AIHandler.recorder.hasPendingAudio) }
+            let state = await MainActor.run { (Self.recorder.isRecording, Self.recorder.hasPendingAudio) }
             guard state.0 || state.1 else {
                 return errorResponse(
                     code: "NO_RECORDING_ACTIVE",
@@ -309,24 +309,24 @@ struct AIHandler {
             }
 
             let result = await MainActor.run { () -> (audio: Data, elapsedMs: Int) in
-                let audio = AIHandler.recorder.stop()
-                return (audio, AIHandler.recorder.elapsedMs)
+                let audio = Self.recorder.stop()
+                return (audio, Self.recorder.elapsedMs)
             }
             return successResponse([
                 "audio": result.audio.base64EncodedString(),
-                "durationMs": result.elapsedMs,
+                "durationMs": result.elapsedMs
             ])
 
         case "status":
             let state = await MainActor.run {
                 (
-                    recording: AIHandler.recorder.isRecording,
-                    elapsedMs: AIHandler.recorder.elapsedMs
+                    recording: Self.recorder.isRecording,
+                    elapsedMs: Self.recorder.elapsedMs
                 )
             }
             return successResponse([
                 "recording": state.recording,
-                "elapsedMs": state.elapsedMs,
+                "elapsedMs": state.elapsedMs
             ])
 
         default:
@@ -489,7 +489,6 @@ struct AIHandler {
         )
     }
 
-
     private func inferWithOllama(
         endpoint: String,
         model: String,
@@ -513,7 +512,7 @@ struct AIHandler {
             let payload: [String: Any] = [
                 "model": model,
                 "messages": requestMessages,
-                "stream": false,
+                "stream": false
             ]
             let response = try await postJSON(url: url, payload: payload)
             let message = response["message"] as? [String: Any]
@@ -530,7 +529,7 @@ struct AIHandler {
         var payload: [String: Any] = [
             "model": model,
             "prompt": userPrompt,
-            "stream": false,
+            "stream": false
         ]
         if let image {
             payload["images"] = [image.base64EncodedString()]
@@ -697,4 +696,3 @@ struct AIHandler {
 
     private let defaultOllamaEndpoint = "http://localhost:11434"
 }
-

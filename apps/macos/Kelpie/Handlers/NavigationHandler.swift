@@ -34,7 +34,7 @@ struct NavigationHandler {
         return successResponse([
             "url": context.currentURL?.absoluteString ?? urlString,
             "title": context.currentTitle,
-            "loadTime": loadTime,
+            "loadTime": loadTime
         ])
     }
 

@@ -35,6 +35,7 @@ final class AIState: ObservableObject {
         get {
             let stored = UserDefaults.standard.string(forKey: DefaultsKey.ollamaEndpoint)
             return stored?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                // swiftlint:disable:next force_unwrapping
                 ? stored!
                 : Self.defaultOllamaEndpoint
         }

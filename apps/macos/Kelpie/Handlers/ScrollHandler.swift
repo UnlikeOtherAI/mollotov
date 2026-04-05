@@ -1,5 +1,7 @@
 import WebKit
 
+// swiftlint:disable line_length
+
 /// Handles scroll, scroll2, scrollToTop, scrollToBottom, scrollToY.
 ///
 /// Every scroll operation also syncs `window.__m3d.scrollX/Y` when the 3D

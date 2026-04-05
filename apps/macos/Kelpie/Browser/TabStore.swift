@@ -10,7 +10,7 @@ final class Tab: ObservableObject, Identifiable {
     @Published var title: String = "Start Page"
     @Published var currentURL: String = ""
     @Published var isLoading: Bool = false
-    @Published var favicon: NSImage? = nil
+    @Published var favicon: NSImage?
     @Published var isStartPage: Bool = true
 
     init() {

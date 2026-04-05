@@ -11,7 +11,7 @@ struct StartPageView: View {
               let tiff = img.tiffRepresentation,
               let rep = NSBitmapImageRep(data: tiff),
               let c = rep.colorAt(x: 0, y: 0) else {
-            return Color(red: 232/255, green: 241/255, blue: 249/255)
+            return Color(red: 232 / 255, green: 241 / 255, blue: 249 / 255)
         }
         return Color(nsColor: c)
     }
@@ -129,7 +129,7 @@ private struct BookmarkTileView: View {
             Color(red: 0.85, green: 0.55, blue: 0.40),
             Color(red: 0.70, green: 0.50, blue: 0.85),
             Color(red: 0.85, green: 0.75, blue: 0.35),
-            Color(red: 0.50, green: 0.75, blue: 0.80),
+            Color(red: 0.50, green: 0.75, blue: 0.80)
         ]
         let host = URL(string: bookmark.url)?.host ?? bookmark.url
         let hash = host.unicodeScalars.reduce(0) { $0 &+ Int($1.value) }
@@ -179,7 +179,7 @@ private struct HistoryRowView: View {
             Color(red: 0.85, green: 0.55, blue: 0.40),
             Color(red: 0.70, green: 0.50, blue: 0.85),
             Color(red: 0.85, green: 0.75, blue: 0.35),
-            Color(red: 0.50, green: 0.75, blue: 0.80),
+            Color(red: 0.50, green: 0.75, blue: 0.80)
         ]
         let host = URL(string: entry.url)?.host ?? entry.url
         let hash = host.unicodeScalars.reduce(0) { $0 &+ Int($1.value) }

@@ -2,7 +2,7 @@ import WebKit
 
 /// JavaScript bridge that intercepts XMLHttpRequest and fetch to capture network traffic.
 /// Must be injected BEFORE ConsoleHandler.bridgeScript (which masks messageHandlers).
-struct NetworkBridge {
+enum NetworkBridge {
     static var bridgeScript: WKUserScript {
         let js = """
         (function() {

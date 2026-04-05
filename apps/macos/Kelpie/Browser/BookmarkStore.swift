@@ -119,7 +119,7 @@ final class BookmarkStore: ObservableObject {
                 "id": bookmark.id.uuidString,
                 "title": bookmark.title,
                 "url": bookmark.url,
-                "createdAt": Self.iso8601Formatter.string(from: bookmark.createdAt),
+                "createdAt": Self.iso8601Formatter.string(from: bookmark.createdAt)
             ]
         }
     }
@@ -183,7 +183,7 @@ final class BookmarkStore: ObservableObject {
             "id": bookmark.id.uuidString,
             "title": bookmark.title,
             "url": bookmark.url,
-            "createdAt": iso8601Formatter.string(from: bookmark.createdAt),
+            "createdAt": iso8601Formatter.string(from: bookmark.createdAt)
         ]
     }
 

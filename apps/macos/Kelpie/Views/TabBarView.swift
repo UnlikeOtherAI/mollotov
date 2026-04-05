@@ -193,7 +193,7 @@ final class TabBarContainerView: NSView {
             scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
             scrollView.topAnchor.constraint(equalTo: topAnchor),
             scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
-            scrollView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -(28 + 6)),
+            scrollView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -(28 + 6))
         ])
     }
 
@@ -223,7 +223,8 @@ final class TabBarContainerView: NSView {
         }
     }
 
-    required init?(coder: NSCoder) { fatalError() }
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("Not implemented") }
 }
 
 // MARK: - TabPillView
@@ -306,7 +307,7 @@ final class TabPillView: NSView {
             // Title — fills the middle
             titleField.leadingAnchor.constraint(equalTo: letterAvatar.trailingAnchor, constant: 5),
             titleField.trailingAnchor.constraint(equalTo: closeButton.leadingAnchor, constant: -4),
-            titleField.centerYAnchor.constraint(equalTo: centerYAnchor),
+            titleField.centerYAnchor.constraint(equalTo: centerYAnchor)
         ])
 
         // Subscribe to tab changes via Combine (NOT KVO on @Published)
@@ -386,7 +387,8 @@ final class TabPillView: NSView {
         onClose?(tab.id)
     }
 
-    required init?(coder: NSCoder) { fatalError() }
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("Not implemented") }
 }
 
 // MARK: - LetterAvatarView
@@ -401,7 +403,7 @@ final class LetterAvatarView: NSView {
         NSColor(calibratedHue: 0.07, saturation: 0.60, brightness: 0.80, alpha: 1), // orange
         NSColor(calibratedHue: 0.87, saturation: 0.50, brightness: 0.75, alpha: 1), // purple
         NSColor(calibratedHue: 0.54, saturation: 0.55, brightness: 0.72, alpha: 1), // teal
-        NSColor(calibratedHue: 0.97, saturation: 0.55, brightness: 0.78, alpha: 1), // rose
+        NSColor(calibratedHue: 0.97, saturation: 0.55, brightness: 0.78, alpha: 1) // rose
     ]
 
     override var isFlipped: Bool { true }
@@ -423,7 +425,7 @@ final class LetterAvatarView: NSView {
 
         NSLayoutConstraint.activate([
             label.centerXAnchor.constraint(equalTo: centerXAnchor),
-            label.centerYAnchor.constraint(equalTo: centerYAnchor),
+            label.centerYAnchor.constraint(equalTo: centerYAnchor)
         ])
     }
 
@@ -439,9 +441,10 @@ final class LetterAvatarView: NSView {
 
         // Deterministic color from domain hash
         let hash = abs(domain.unicodeScalars.reduce(0) { $0 &* 31 &+ Int($1.value) })
-        let color = LetterAvatarView.palette[hash % LetterAvatarView.palette.count]
+        let color = Self.palette[hash % Self.palette.count]
         layer?.backgroundColor = color.cgColor
     }
 
-    required init?(coder: NSCoder) { fatalError() }
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("Not implemented") }
 }

@@ -9,6 +9,7 @@ final class AIManager {
     private let ref: KelpieAiManagerRef
 
     init(modelsDir: String) {
+        // swiftlint:disable:next force_unwrapping
         ref = kelpie_ai_create(modelsDir)!
     }
 

@@ -24,6 +24,7 @@ struct AIApprovedModel: Identifiable, Equatable {
     let description: AIModelDescription
 
     var downloadURL: URL {
+        // swiftlint:disable:next force_unwrapping
         URL(string: "https://huggingface.co/\(huggingFaceRepo)/resolve/main/\(huggingFaceFile)")!
     }
 }
@@ -48,11 +49,11 @@ enum AIModelCatalog {
                 strengths: [
                     "Describes screenshots and visual page layouts",
                     "Summarises articles and extracts key information",
-                    "Answers spoken questions with native audio input",
+                    "Answers spoken questions with native audio input"
                 ],
                 limitations: [
                     "Image and audio prompts are slower than text-only prompts",
-                    "Long pages may need tighter prompting to stay focused",
+                    "Long pages may need tighter prompting to stay focused"
                 ],
                 bestFor: "General local browsing assistance with text, vision, and audio input",
                 speedRating: "moderate"
@@ -76,16 +77,16 @@ enum AIModelCatalog {
                 strengths: [
                     "Produces more accurate answers on nuanced questions",
                     "Handles complex visual layouts more reliably",
-                    "Retains the same screenshot and audio support as Q4",
+                    "Retains the same screenshot and audio support as Q4"
                 ],
                 limitations: [
                     "Needs substantially more RAM than the Q4 build",
-                    "Runs slower than the Q4 build on the same hardware",
+                    "Runs slower than the Q4 build on the same hardware"
                 ],
                 bestFor: "Accuracy-focused local analysis when memory headroom is available",
                 speedRating: "moderate"
             )
-        ),
+        )
     ]
 
     static func approvedModel(id: String) -> AIApprovedModel? {

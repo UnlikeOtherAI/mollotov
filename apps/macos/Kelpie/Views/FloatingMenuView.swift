@@ -1,10 +1,12 @@
 import SwiftUI
 import AppKit
 
+// swiftlint:disable line_length
+
 /// App icon background color — warm peach/orange.
-private let kelpieOrange = NSColor(calibratedRed: 244/255, green: 176/255, blue: 120/255, alpha: 1)
+private let kelpieOrange = NSColor(calibratedRed: 244 / 255, green: 176 / 255, blue: 120 / 255, alpha: 1)
 /// Richer menu item color — more red/saturated for contrast against the FAB.
-private let menuItemOrange = NSColor(calibratedRed: 240/255, green: 148/255, blue: 90/255, alpha: 1)
+private let menuItemOrange = NSColor(calibratedRed: 240 / 255, green: 148 / 255, blue: 90 / 255, alpha: 1)
 private enum FloatingMenuLayout {
     static let fabSize: CGFloat = 52
     static let menuItemSize: CGFloat = 52
@@ -81,7 +83,7 @@ struct FloatingMenuView: View {
             .init(id: "history", icon: "clock.arrow.circlepath", accessibilityID: "browser.floating-menu.clock-arrow-circlepath", tooltip: "History", action: onHistory),
             .init(id: "network-inspector", icon: "antenna.radiowaves.left.and.right", accessibilityID: "browser.floating-menu.antenna-radiowaves-left-and-right", tooltip: "Network", action: onNetworkInspector),
             .init(id: "ai", icon: "brain", accessibilityID: "browser.floating-menu.brain", tooltip: "AI", action: onAI),
-            .init(id: "settings", icon: "gear", accessibilityID: "browser.floating-menu.gear", tooltip: "Settings", action: onSettings),
+            .init(id: "settings", icon: "gear", accessibilityID: "browser.floating-menu.gear", tooltip: "Settings", action: onSettings)
         ]
 
         if FeatureFlags.is3DInspectorEnabled {
@@ -304,6 +306,7 @@ private final class FloatingMenuContainerView: NSView {
         addSubview(tooltipView)
     }
 
+    @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
@@ -394,7 +397,7 @@ private final class FloatingMenuContainerView: NSView {
         let fabFrame = rect(center: layout.fabCenter, diameter: FloatingMenuLayout.fabSize)
         toggleButton?.frame = fabFrame
 
-        let targetFrames = buttons.enumerated().map { index, _ in
+        let targetFrames = buttons.indices.map { index in
             rect(
                 center: isOpen ? layout.centerForItem(index: index) : layout.fabCenter,
                 diameter: FloatingMenuLayout.menuItemSize
@@ -546,10 +549,11 @@ private final class FloatingMenuActionButton: NSButton {
             iconView.centerXAnchor.constraint(equalTo: centerXAnchor),
             iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
             iconView.widthAnchor.constraint(equalToConstant: symbolName == "flame.fill" ? 22 : 18),
-            iconView.heightAnchor.constraint(equalToConstant: symbolName == "flame.fill" ? 22 : 18),
+            iconView.heightAnchor.constraint(equalToConstant: symbolName == "flame.fill" ? 22 : 18)
         ])
     }
 
+    @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
@@ -602,10 +606,11 @@ private final class FloatingMenuTooltipView: NSView {
             textField.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
             textField.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
             textField.topAnchor.constraint(equalTo: topAnchor, constant: 6),
-            textField.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
+            textField.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6)
         ])
     }
 
+    @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }

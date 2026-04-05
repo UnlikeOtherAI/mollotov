@@ -11,9 +11,9 @@ struct DeviceInfo {
     let port: Int
     let version: String
 
-    static func externalDisplay(port: Int, screenSize: CGSize, scale: CGFloat) -> DeviceInfo {
+    static func externalDisplay(port: Int, screenSize: CGSize, scale: CGFloat) -> Self {
         let device = UIDevice.current
-        return DeviceInfo(
+        return Self(
             id: DeviceIdentity.id + "-tv",
             name: device.name + " (TV)",
             model: modelIdentifier(),
@@ -24,12 +24,12 @@ struct DeviceInfo {
         )
     }
 
-    static func current(port: Int) -> DeviceInfo {
+    static func current(port: Int) -> Self {
         let device = UIDevice.current
         let screen = UIScreen.main
         let bounds = screen.bounds
         let scale = screen.scale
-        return DeviceInfo(
+        return Self(
             id: DeviceIdentity.id,
             name: device.name,
             model: modelIdentifier(),
@@ -49,7 +49,7 @@ struct DeviceInfo {
             "width": String(width),
             "height": String(height),
             "port": String(port),
-            "version": version,
+            "version": version
         ]
     }
 

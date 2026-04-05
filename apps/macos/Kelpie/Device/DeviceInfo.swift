@@ -12,11 +12,12 @@ struct DeviceInfo {
     let port: Int
     let version: String
 
-    static func current(port: Int) -> DeviceInfo {
+    static func current(port: Int) -> Self {
+        // swiftlint:disable:next force_unwrapping
         let screen = NSScreen.main ?? NSScreen.screens.first!
         let scale = screen.backingScaleFactor
         let size = screen.frame.size
-        return DeviceInfo(
+        return Self(
             id: DeviceIdentity.id,
             name: Host.current().localizedName ?? "Mac",
             model: modelIdentifier(),
@@ -37,7 +38,7 @@ struct DeviceInfo {
             "height": String(height),
             "port": String(port),
             "version": version,
-            "engine": engine,
+            "engine": engine
         ]
     }
 

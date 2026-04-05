@@ -89,7 +89,7 @@ final class PillButtonView: NSButton {
             brainIcon.widthAnchor.constraint(equalToConstant: 14),
             brainIcon.heightAnchor.constraint(equalToConstant: 14),
             eyeIcon.widthAnchor.constraint(equalToConstant: 13),
-            eyeIcon.heightAnchor.constraint(equalToConstant: 13),
+            eyeIcon.heightAnchor.constraint(equalToConstant: 13)
         ])
 
         applyColors()
@@ -156,5 +156,6 @@ final class PillButtonView: NSButton {
         name.replacingOccurrences(of: " E2B", with: "")
     }
 
-    required init?(coder: NSCoder) { fatalError() }
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("Not implemented") }
 }

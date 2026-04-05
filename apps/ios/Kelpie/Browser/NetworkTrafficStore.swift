@@ -132,7 +132,7 @@ final class NetworkTrafficStore: ObservableObject {
             "responseBody": entry.responseBody ?? "",
             "startTime": Self.iso8601Formatter.string(from: entry.startTime),
             "duration": entry.duration,
-            "size": entry.size,
+            "size": entry.size
         ]
     }
 
@@ -175,7 +175,7 @@ final class NetworkTrafficStore: ObservableObject {
                 "contentType": entry.contentType,
                 "category": entry.category,
                 "duration": entry.duration,
-                "size": entry.size,
+                "size": entry.size
             ]
         }
     }

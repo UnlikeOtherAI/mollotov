@@ -8,8 +8,6 @@ final class CEFRenderer: RendererEngine {
         var didResume = false
     }
 
-
-
     private final class CEFHostView: NSView {
         var onWindowReady: (() -> Void)?
         var onBoundsReady: (() -> Void)?
@@ -156,8 +154,11 @@ final class CEFRenderer: RendererEngine {
             // loop mode — the cookie store is never accessible via the C API.
             // Workaround: load the URL first, then inject cookies via JS after
             // the page loads and reload so they take effect for all requests.
-            NSLog("[CEFRenderer] will inject %d cookies via JS after load, url=%@",
-                  pendingCookies.count, urlToLoad.absoluteString)
+            NSLog(
+                "[CEFRenderer] will inject %d cookies via JS after load, url=%@",
+                pendingCookies.count,
+                urlToLoad.absoluteString
+            )
             let cookiesToInject = pendingCookies
             pendingCookies.removeAll()
             pendingDeleteAllCookies = false
@@ -304,7 +305,7 @@ final class CEFRenderer: RendererEngine {
                         .name: name,
                         .value: value,
                         .domain: domain,
-                        .path: path,
+                        .path: path
                     ]
                     if let httpOnly = dict["httpOnly"] as? Bool, httpOnly {
                         props[.init("HttpOnly")] = "TRUE"

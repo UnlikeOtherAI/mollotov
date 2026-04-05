@@ -19,7 +19,6 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         OrientationManager.shared.lock
     }
 
-
 }
 
 @main

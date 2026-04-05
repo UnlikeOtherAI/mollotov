@@ -135,7 +135,7 @@ final class NetworkTrafficStore: ObservableObject {
             "responseBody": entry.responseBody ?? "",
             "startTime": Self.iso8601Formatter.string(from: entry.startTime),
             "duration": entry.duration,
-            "size": entry.size,
+            "size": entry.size
         ]
     }
 
@@ -313,7 +313,7 @@ final class NetworkTrafficStore: ObservableObject {
                 "contentType": stringValue(in: item, keys: ["content_type", "contentType"]) ?? "",
                 "category": stringValue(in: item, keys: ["category"]) ?? "",
                 "duration": intValue(in: item, keys: ["duration"]),
-                "size": intValue(in: item, keys: ["size"]),
+                "size": intValue(in: item, keys: ["size"])
             ]
         }
     }
@@ -332,7 +332,7 @@ final class NetworkTrafficStore: ObservableObject {
             "responseBody": entry.responseBody ?? NSNull(),
             "startTime": iso8601Formatter.string(from: entry.startTime),
             "duration": entry.duration,
-            "size": entry.size,
+            "size": entry.size
         ]
     }
 

@@ -1,6 +1,8 @@
 import AppKit
 import WebKit
 
+// swiftlint:disable line_length
+
 /// Handles cookies, storage, clipboard, dialogs, keyboard, viewport, and unsupported endpoints.
 struct BrowserManagementHandler {
     let context: HandlerContext
@@ -85,8 +87,7 @@ struct BrowserManagementHandler {
             return errorResponse(code: "MISSING_PARAM", message: "name and value required")
         }
         var props: [HTTPCookiePropertyKey: Any] = [.name: name, .value: value, .path: body["path"] as? String ?? "/"]
-        if let domain = body["domain"] as? String { props[.domain] = domain }
-        else { props[.domain] = context.currentURL?.host ?? "localhost" }
+        if let domain = body["domain"] as? String { props[.domain] = domain } else { props[.domain] = context.currentURL?.host ?? "localhost" }
         if let cookie = HTTPCookie(properties: props) {
             await context.setCookie(cookie)
             return successResponse()
@@ -106,11 +107,9 @@ struct BrowserManagementHandler {
             await context.deleteAllCookies()
             return successResponse(["deleted": deleted])
         }
-        for cookie in all {
-            if cookie.name == name {
-                await context.deleteCookie(cookie)
-                deleted += 1
-            }
+        for cookie in all where cookie.name == name {
+            await context.deleteCookie(cookie)
+            deleted += 1
         }
         return successResponse(["deleted": deleted])
     }
@@ -224,7 +223,7 @@ struct BrowserManagementHandler {
         return successResponse([
             "viewport": ["width": Int(viewport.width), "height": Int(viewport.height)],
             "originalViewport": ["width": stage.width, "height": stage.height],
-            "activePresetId": NSNull(),
+            "activePresetId": NSNull()
         ])
     }
 
@@ -234,7 +233,7 @@ struct BrowserManagementHandler {
         await context.waitForViewportSize(viewport)
         return successResponse([
             "viewport": ["width": Int(viewport.width), "height": Int(viewport.height)],
-            "activePresetId": NSNull(),
+            "activePresetId": NSNull()
         ])
     }
 
@@ -252,8 +251,8 @@ struct BrowserManagementHandler {
                 "error": [
                     "code": "INVALID_PARAM",
                     "message": "Viewport preset \(presetID) is not available for the current macOS window geometry",
-                    "reason": "unavailable",
-                ],
+                    "reason": "unavailable"
+                ]
             ]
         }
         guard let viewport = viewportState.selectPreset(presetID) else {
@@ -267,12 +266,12 @@ struct BrowserManagementHandler {
                 "id": preset.id,
                 "name": preset.name,
                 "inches": preset.displaySizeLabel,
-                "pixels": preset.pixelResolutionLabel,
+                "pixels": preset.pixelResolutionLabel
             ],
             "viewport": [
                 "width": Int(viewport.width),
-                "height": Int(viewport.height),
-            ],
+                "height": Int(viewport.height)
+            ]
         ])
     }
 

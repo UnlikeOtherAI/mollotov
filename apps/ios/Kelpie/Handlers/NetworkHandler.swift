@@ -67,7 +67,7 @@ struct NetworkHandler {
                 "entries": limited,
                 "count": limited.count,
                 "hasMore": filtered.count > limit,
-                "summary": buildSummary(filtered),
+                "summary": buildSummary(filtered)
             ])
         } catch {
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
@@ -137,7 +137,7 @@ struct NetworkHandler {
             "totalTransferSize": totalTransfer,
             "byType": byType,
             "errors": errors,
-            "loadTime": Int(maxEnd),
+            "loadTime": Int(maxEnd)
         ]
     }
 

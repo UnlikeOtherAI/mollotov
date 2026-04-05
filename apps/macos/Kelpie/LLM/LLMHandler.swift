@@ -1,5 +1,7 @@
 import AppKit
 
+// swiftlint:disable line_length
+
 /// Handles LLM-optimized endpoints: accessibility, find, visible, pageText, formState.
 struct LLMHandler {
     let context: HandlerContext
@@ -150,7 +152,7 @@ struct LLMHandler {
                 "width": Int(image.size.width * 1.0),
                 "height": Int(image.size.height * 1.0),
                 "format": "png",
-                "annotations": annotations,
+                "annotations": annotations
             ])
         } catch {
             return errorResponse(code: "SCREENSHOT_FAILED", message: error.localizedDescription)

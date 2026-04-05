@@ -14,7 +14,7 @@ enum FaviconExtractor {
             Task {
                 do {
                     let (data, response) = try await URLSession.shared.data(from: faviconURL)
-                    let image = FaviconExtractor.decodeImage(data: data, response: response, url: faviconURL)
+                    let image = Self.decodeImage(data: data, response: response, url: faviconURL)
                     await MainActor.run { completion(image) }
                 } catch {
                     await MainActor.run { completion(nil) }

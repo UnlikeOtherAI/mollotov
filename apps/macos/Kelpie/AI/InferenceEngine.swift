@@ -169,6 +169,7 @@ final class InferenceEngine: ObservableObject, @unchecked Sendable {
                     batch.token[i] = tokens[i]
                     batch.pos[i] = Int32(i)
                     batch.n_seq_id[i] = 1
+                    // swiftlint:disable:next force_unwrapping
                     batch.seq_id[i]![0] = 0
                     batch.logits[i] = 0
                 }
@@ -182,6 +183,7 @@ final class InferenceEngine: ObservableObject, @unchecked Sendable {
 
                 // Set up sampler
                 let sparams = llama_sampler_chain_default_params()
+                // swiftlint:disable:next force_unwrapping
                 let sampler = llama_sampler_chain_init(sparams)!
                 defer { llama_sampler_free(sampler) }
 
@@ -210,6 +212,7 @@ final class InferenceEngine: ObservableObject, @unchecked Sendable {
                     batch.token[0] = newTokenId
                     batch.pos[0] = curPos
                     batch.n_seq_id[0] = 1
+                    // swiftlint:disable:next force_unwrapping
                     batch.seq_id[0]![0] = 0
                     batch.logits[0] = 1
                     batch.n_tokens = 1

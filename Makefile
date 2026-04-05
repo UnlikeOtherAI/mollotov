@@ -3,7 +3,8 @@
         ios-build ios-run \
         android-build android-run \
         macos-build macos-run \
-        gecko-runtime
+        gecko-runtime \
+        lint-swift
 
 REPO_ROOT := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
@@ -68,6 +69,14 @@ cli-link:
 	cd $(CLI_DIR) && pnpm link --global
 	@echo "✓ kelpie linked — run 'kelpie --help' to verify"
 
+# ── SwiftLint ─────────────────────────────────────────────────────────────────
+
+lint-swift:
+	@echo "→ Linting Swift (iOS)..."
+	/opt/homebrew/bin/swiftlint lint --strict apps/ios/Kelpie
+	@echo "→ Linting Swift (macOS)..."
+	/opt/homebrew/bin/swiftlint lint --strict apps/macos/Kelpie
+
 # ── iOS ────────────────────────────────────────────────────────────────────────
 
 ios:
@@ -81,7 +90,7 @@ ios:
 		$(MAKE) ios-run   IOS_TARGET="$$IOS_TARGET" IOS_TYPE="$$IOS_TYPE"; \
 	fi
 
-ios-build:
+ios-build: lint-swift
 	@if [ "$(IOS_TYPE)" = "device" ]; then \
 		echo "→ Building iOS app (device $(IOS_TARGET))..."; \
 		xcodebuild \
@@ -157,7 +166,7 @@ android-run:
 
 macos: macos-build macos-run
 
-macos-build:
+macos-build: lint-swift
 	@echo "→ Building macOS app..."
 	xcodebuild \
 		-project $(MACOS_PROJECT) \

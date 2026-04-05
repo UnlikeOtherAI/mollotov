@@ -32,7 +32,7 @@ enum FontAwesome {
             resourcesDir?.appendingPathComponent("FontAwesome6Brands-Regular.otf"),
             resourcesDir?.appendingPathComponent("Resources/FontAwesome6Brands-Regular.otf"),
             Bundle.main.url(forResource: "FontAwesome6Brands-Regular", withExtension: "otf"),
-            Bundle.main.url(forResource: "FontAwesome6Brands-Regular", withExtension: "otf", subdirectory: "Resources"),
+            Bundle.main.url(forResource: "FontAwesome6Brands-Regular", withExtension: "otf", subdirectory: "Resources")
         ]
         return candidates.compactMap { $0 }.first { FileManager.default.fileExists(atPath: $0.path) }
     }

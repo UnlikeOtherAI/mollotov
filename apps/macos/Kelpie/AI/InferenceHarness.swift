@@ -126,6 +126,7 @@ struct InferenceHarness {
             )) ?? [:]
 
         case "get_dom":
+            // swiftlint:disable:next force_unwrapping
             let selector = (args["selector"]?.isEmpty == false) ? args["selector"]! : "body"
             payload = (try? await context.evaluateJSReturningJSON(
                 """
@@ -221,7 +222,7 @@ struct InferenceHarness {
         case "get_console":
             payload = [
                 "count": context.consoleMessages.count,
-                "messages": Array(context.consoleMessages.suffix(20)),
+                "messages": Array(context.consoleMessages.suffix(20))
             ]
 
         case "get_network":
@@ -252,7 +253,7 @@ struct InferenceHarness {
                     "name": cookie.name,
                     "value": cookie.value,
                     "domain": cookie.domain,
-                    "path": cookie.path,
+                    "path": cookie.path
                 ]
             }
             payload = ["count": cookies.count, "cookies": cookies]

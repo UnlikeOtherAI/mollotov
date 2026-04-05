@@ -68,7 +68,7 @@ enum SharedCookieJar {
                     cookie.value,
                     cookie.expiresDate?.timeIntervalSince1970.description ?? "",
                     cookie.isHTTPOnly ? "1" : "0",
-                    cookie.isSecure ? "1" : "0",
+                    cookie.isSecure ? "1" : "0"
                 ].joined(separator: "\u{1F}")
             }
             .sorted()
@@ -102,7 +102,7 @@ enum SharedCookieJar {
             .name: stored.name,
             .value: stored.value,
             .domain: stored.domain,
-            .path: stored.path,
+            .path: stored.path
         ]
         if let expires = stored.expires {
             properties[.expires] = expires

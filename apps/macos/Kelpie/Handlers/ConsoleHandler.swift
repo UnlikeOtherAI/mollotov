@@ -24,7 +24,7 @@ struct ConsoleHandler {
         return successResponse([
             "messages": limited,
             "count": limited.count,
-            "hasMore": messages.count > limit,
+            "hasMore": messages.count > limit
         ])
     }
 
@@ -37,7 +37,7 @@ struct ConsoleHandler {
                 error["type"] = "console-error"
                 return error
             },
-            "count": errors.count,
+            "count": errors.count
         ])
     }
 

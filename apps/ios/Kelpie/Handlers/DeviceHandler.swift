@@ -34,7 +34,7 @@ struct DeviceHandler {
             "devicePixelRatio": scale,
             "platform": "ios",
             "deviceName": deviceInfo.name,
-            "orientation": orientation,
+            "orientation": orientation
         ]
     }
 
@@ -48,7 +48,7 @@ struct DeviceHandler {
             "supportsViewportPresets": true,
             "presets": tabletViewportPresets.map(viewportPresetPayload),
             "availablePresetIds": availablePresetIDs,
-            "activePresetId": activePresetID,
+            "activePresetId": activePresetID
         ])
     }
 
@@ -60,17 +60,17 @@ struct DeviceHandler {
                 "id": deviceInfo.id,
                 "name": deviceInfo.name,
                 "model": deviceInfo.model,
-                "platform": "ios",
+                "platform": "ios"
             ],
             "display": [
                 "width": deviceInfo.width,
                 "height": deviceInfo.height,
-                "scale": await screen.scale,
+                "scale": await screen.scale
             ],
             "network": ["ip": "0.0.0.0", "port": deviceInfo.port],
             "browser": ["engine": "WebKit", "version": device.systemVersion],
             "app": ["version": deviceInfo.version, "build": "1"],
-            "system": ["os": "iOS", "osVersion": device.systemVersion],
+            "system": ["os": "iOS", "osVersion": device.systemVersion]
         ]
     }
 
@@ -85,7 +85,7 @@ struct DeviceHandler {
         }
         return successResponse([
             "orientation": isLandscape ? "landscape" : "portrait",
-            "locked": locked as Any,
+            "locked": locked as Any
         ])
     }
 
@@ -127,7 +127,7 @@ struct DeviceHandler {
             [
                 "role": scene.session.role.rawValue,
                 "state": "\(scene.activationState.rawValue)",
-                "configuration": scene.session.configuration.name ?? "nil",
+                "configuration": scene.session.configuration.name ?? "nil"
             ]
         }
         let mgr = ExternalDisplayManager.shared
@@ -142,13 +142,13 @@ struct DeviceHandler {
                 "hidden": win.isHidden,
                 "hasScene": win.windowScene != nil,
                 "frame": ["x": win.frame.origin.x, "y": win.frame.origin.y, "w": win.frame.width, "h": win.frame.height],
-                "bounds": ["x": win.bounds.origin.x, "y": win.bounds.origin.y, "w": win.bounds.width, "h": win.bounds.height],
+                "bounds": ["x": win.bounds.origin.x, "y": win.bounds.origin.y, "w": win.bounds.width, "h": win.bounds.height]
             ]
             if let vcView = win.rootViewController?.view {
                 vcViewInfo = [
                     "exists": true,
                     "frame": ["x": vcView.frame.origin.x, "y": vcView.frame.origin.y, "w": vcView.frame.width, "h": vcView.frame.height],
-                    "bounds": ["x": vcView.bounds.origin.x, "y": vcView.bounds.origin.y, "w": vcView.bounds.width, "h": vcView.bounds.height],
+                    "bounds": ["x": vcView.bounds.origin.x, "y": vcView.bounds.origin.y, "w": vcView.bounds.width, "h": vcView.bounds.height]
                 ]
             }
         }
@@ -164,8 +164,8 @@ struct DeviceHandler {
                     "contentSize": ["w": sv.contentSize.width, "h": sv.contentSize.height],
                     "contentOffset": ["x": sv.contentOffset.x, "y": sv.contentOffset.y],
                     "zoomScale": sv.zoomScale,
-                    "contentInset": ["t": sv.contentInset.top, "l": sv.contentInset.left, "b": sv.contentInset.bottom, "r": sv.contentInset.right],
-                ],
+                    "contentInset": ["t": sv.contentInset.top, "l": sv.contentInset.left, "b": sv.contentInset.bottom, "r": sv.contentInset.right]
+                ]
             ]
         }
 
@@ -219,7 +219,7 @@ struct DeviceHandler {
                     "height": s.bounds.height,
                     "scale": s.scale,
                     "nativeScale": s.nativeScale,
-                    "mirrored": s.mirrored != nil,
+                    "mirrored": s.mirrored != nil
                 ]
             },
             "scenes": scenes,
@@ -227,12 +227,12 @@ struct DeviceHandler {
                 "connected": mgr.isConnected,
                 "attachPath": mgr.attachPath ?? "none",
                 "port": mgr.externalPort,
-                "syncEnabled": mgr.isSyncEnabled,
+                "syncEnabled": mgr.isSyncEnabled
             ],
             "window": windowInfo,
             "vcView": vcViewInfo,
             "webView": webViewInfo,
-            "html": htmlInfo,
+            "html": htmlInfo
         ])
     }
 
@@ -242,7 +242,7 @@ struct DeviceHandler {
         return successResponse([
             "connected": ExternalDisplayManager.shared.isConnected,
             "attachPath": ExternalDisplayManager.shared.attachPath ?? "none",
-            "port": ExternalDisplayManager.shared.externalPort,
+            "port": ExternalDisplayManager.shared.externalPort
         ])
     }
 
@@ -258,7 +258,7 @@ struct DeviceHandler {
         ExternalDisplayManager.shared.setSyncEnabled(enabled)
         return successResponse([
             "enabled": enabled,
-            "connected": ExternalDisplayManager.shared.isConnected,
+            "connected": ExternalDisplayManager.shared.isConnected
         ])
     }
 
@@ -267,7 +267,7 @@ struct DeviceHandler {
         successResponse([
             "enabled": ExternalDisplayManager.shared.isSyncEnabled,
             "connected": ExternalDisplayManager.shared.isConnected,
-            "attachPath": ExternalDisplayManager.shared.attachPath as Any,
+            "attachPath": ExternalDisplayManager.shared.attachPath as Any
         ])
     }
 
@@ -301,7 +301,7 @@ struct DeviceHandler {
             "tabs": true,
             "iframes": true,
             "dialogs": true,
-            "viewportPresets": true,
+            "viewportPresets": true
         ]
     }
 
@@ -314,13 +314,13 @@ struct DeviceHandler {
             "viewport": [
                 "portrait": [
                     "width": Int(preset.portraitSize.width),
-                    "height": Int(preset.portraitSize.height),
+                    "height": Int(preset.portraitSize.height)
                 ],
                 "landscape": [
                     "width": Int(preset.portraitSize.height),
-                    "height": Int(preset.portraitSize.width),
-                ],
-            ],
+                    "height": Int(preset.portraitSize.width)
+                ]
+            ]
         ]
     }
 }

@@ -1,5 +1,7 @@
 import WebKit
 
+// swiftlint:disable line_length
+
 /// Handles scroll, scroll2, scrollToTop, scrollToBottom.
 struct ScrollHandler {
     let context: HandlerContext

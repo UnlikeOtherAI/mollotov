@@ -137,7 +137,7 @@ final class AIState: ObservableObject {
     func loadOllamaModel(name: String) async -> Bool {
         await sendControlRequest(method: "ai-load", body: [
             "model": "ollama:\(name)",
-            "ollamaEndpoint": ollamaEndpoint,
+            "ollamaEndpoint": ollamaEndpoint
         ])
     }
 
@@ -197,6 +197,7 @@ final class AIState: ObservableObject {
                     if error.contains("auth_required") {
                         self.lastError = "This model requires a Hugging Face token."
                         self.onAuthFailureNavigate?(
+                            // swiftlint:disable:next force_unwrapping
                             URL(string: "https://huggingface.co/settings/tokens")!
                         )
                     } else {
@@ -346,6 +347,7 @@ final class AIState: ObservableObject {
         guard let serverPort else {
             throw NSError(domain: "AIState", code: 3, userInfo: [NSLocalizedDescriptionKey: "Local AI server is not ready yet."])
         }
+        // swiftlint:disable:next force_unwrapping
         let url = URL(string: "http://127.0.0.1:\(serverPort)/v1/\(method)")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"

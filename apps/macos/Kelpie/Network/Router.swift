@@ -16,7 +16,7 @@ final class Router: @unchecked Sendable {
         guard let handler = routes[method] else {
             return (404, [
                 "success": false,
-                "error": ["code": "NOT_FOUND", "message": "Unknown method: \(method)"],
+                "error": ["code": "NOT_FOUND", "message": "Unknown method: \(method)"]
             ])
         }
         let result = await handler(body)
@@ -58,13 +58,11 @@ final class Router: @unchecked Sendable {
             "resize-viewport", "reset-viewport", "set-viewport-preset", "is-element-obscured",
             "toast", "safari-auth",
             "ai-status", "ai-load", "ai-unload", "ai-infer", "ai-record",
-            "set-orientation", "get-orientation",
+            "set-orientation", "get-orientation"
         ]
-        for method in methods {
-            if routes[method] == nil {
-                register(method) { _ in
-                    ["success": false, "error": ["code": "NOT_IMPLEMENTED", "message": "\(method) not yet implemented"]]
-                }
+        for method in methods where routes[method] == nil {
+            register(method) { _ in
+                ["success": false, "error": ["code": "NOT_IMPLEMENTED", "message": "\(method) not yet implemented"]]
             }
         }
     }

@@ -147,7 +147,7 @@ struct URLBarView: View {
                         accessibilityLabel: "Scroll mode",
                         width: 40,
                         iconSize: 13
-                    ),
+                    )
                 ],
                 selectedID: inspectorMode,
                 accessibilityID: "browser.snapshot3d.mode",
@@ -277,7 +277,7 @@ struct URLBarView: View {
                     accessibilityLabel: "Chromium",
                     width: 54,
                     iconSize: 16
-                ),
+                )
             ],
             selectedID: rendererState.activeEngine.rawValue,
             accessibilityID: "browser.renderer.switch",
@@ -309,7 +309,7 @@ struct URLBarView: View {
                     accessibilityLabel: "Landscape",
                     width: 40,
                     iconSize: 12
-                ),
+                )
             ],
             selectedID: viewportState.reportedOrientation.rawValue,
             accessibilityID: "browser.orientation.switch",
@@ -376,4 +376,3 @@ struct URLBarView: View {
         onNavigate(url)
     }
 }
-

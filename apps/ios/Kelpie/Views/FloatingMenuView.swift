@@ -2,9 +2,9 @@ import SwiftUI
 import UIKit
 
 /// App icon background color — warm peach/orange.
-private let kelpieOrange = Color(red: 244/255, green: 176/255, blue: 120/255)
+private let kelpieOrange = Color(red: 244 / 255, green: 176 / 255, blue: 120 / 255)
 /// Richer menu item color — more red/saturated for contrast against the FAB.
-private let menuItemOrange = Color(red: 240/255, green: 148/255, blue: 90/255)
+private let menuItemOrange = Color(red: 240 / 255, green: 148 / 255, blue: 90 / 255)
 
 /// UIKit blur that works over WKWebView content (SwiftUI materials cannot blur UIKit views).
 private struct NativeBlur: UIViewRepresentable {
@@ -165,7 +165,7 @@ struct FloatingMenuView: View {
             .init(icon: "clock.arrow.circlepath", elementId: "browser.menu.history", tint: .white, closesMenu: true, action: onHistory),
             .init(icon: "antenna.radiowaves.left.and.right", elementId: "browser.menu.network-inspector", tint: .white, closesMenu: true, action: onNetworkInspector),
             .init(icon: "brain", elementId: "browser.menu.ai", tint: .white, closesMenu: true, action: onAI),
-            .init(icon: "gear", elementId: "browser.menu.settings", tint: .white, closesMenu: true, action: onSettings),
+            .init(icon: "gear", elementId: "browser.menu.settings", tint: .white, closesMenu: true, action: onSettings)
         ]
 
         if show3DInspector {
@@ -219,8 +219,14 @@ struct FloatingMenuView: View {
         return max(baseSpreadRadius, requiredRadius)
     }
 
-    private func menuItemOffset(index: Int, itemCount: Int, fanDirection: CGFloat,
-                                fabX: CGFloat, fabY: CGFloat, geo: GeometryProxy) -> CGSize {
+    private func menuItemOffset(
+        index: Int,
+        itemCount: Int,
+        fanDirection: CGFloat,
+        fabX: CGFloat,
+        fabY: CGFloat,
+        geo: GeometryProxy
+    ) -> CGSize {
         let angle = fanAngle(direction: fanDirection, index: index, itemCount: itemCount)
         let spreadRadius = spreadRadius(for: itemCount)
         let rawDx: CGFloat = isOpen ? CGFloat(cos(angle.radians)) * spreadRadius : 0
@@ -232,10 +238,22 @@ struct FloatingMenuView: View {
     }
 
     @ViewBuilder
-    private func menuItemView(icon: String, elementId: String, index: Int, itemCount: Int, fanDirection: CGFloat,
-                              action: @escaping () -> Void, tint: Color, closesMenu: Bool,
-                              background: Color, border: Color, borderWidth: CGFloat,
-                              fabX: CGFloat, fabY: CGFloat, geo: GeometryProxy) -> some View {
+    private func menuItemView(
+        icon: String,
+        elementId: String,
+        index: Int,
+        itemCount: Int,
+        fanDirection: CGFloat,
+        action: @escaping () -> Void,
+        tint: Color,
+        closesMenu: Bool,
+        background: Color,
+        border: Color,
+        borderWidth: CGFloat,
+        fabX: CGFloat,
+        fabY: CGFloat,
+        geo: GeometryProxy
+    ) -> some View {
         let offset = menuItemOffset(
             index: index,
             itemCount: itemCount,
@@ -274,8 +292,14 @@ struct FloatingMenuView: View {
     }
 
     @ViewBuilder
-    private func mobileViewportPresetPicker(mobileToggleIndex: Int, itemCount: Int, fanDirection: CGFloat,
-                                            fabX: CGFloat, fabY: CGFloat, geo: GeometryProxy) -> some View {
+    private func mobileViewportPresetPicker(
+        mobileToggleIndex: Int,
+        itemCount: Int,
+        fanDirection: CGFloat,
+        fabX: CGFloat,
+        fabY: CGFloat,
+        geo: GeometryProxy
+    ) -> some View {
         let anchorOffset = menuItemOffset(
             index: mobileToggleIndex,
             itemCount: itemCount,
@@ -355,9 +379,16 @@ struct FloatingMenuView: View {
         let closesMenu: Bool
         let action: () -> Void
 
-        init(icon: String, elementId: String, tint: Color,
-             background: Color = menuItemOrange, border: Color = .clear, borderWidth: CGFloat = 0,
-             closesMenu: Bool, action: @escaping () -> Void) {
+        init(
+            icon: String,
+            elementId: String,
+            tint: Color,
+            background: Color = menuItemOrange,
+            border: Color = .clear,
+            borderWidth: CGFloat = 0,
+            closesMenu: Bool,
+            action: @escaping () -> Void
+        ) {
             self.icon = icon
             self.elementId = elementId
             self.tint = tint

@@ -8,7 +8,7 @@ final class HandlerContext: NSObject, WKScriptMessageHandler {
     var isIn3DInspector = false
     let safariAuth = SafariAuthHelper()
 
-    nonisolated override init() { super.init() }
+    override nonisolated init() { super.init() }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard let body = message.body as? [String: Any] else { return }

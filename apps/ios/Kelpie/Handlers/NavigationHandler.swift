@@ -34,7 +34,7 @@ struct NavigationHandler {
         return successResponse([
             "url": webView.url?.absoluteString ?? urlString,
             "title": webView.title ?? "",
-            "loadTime": loadTime,
+            "loadTime": loadTime
         ])
     }
 

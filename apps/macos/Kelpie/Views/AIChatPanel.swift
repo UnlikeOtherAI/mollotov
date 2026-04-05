@@ -213,12 +213,13 @@ struct AIChatPanel: View {
                         .popover(isPresented: $showHFTokenPopover, arrowEdge: .bottom) {
                             HFTokenPopover(token: $aiState.huggingFaceToken)
                         }
+                    },
+                    content: {
+                        ForEach(aiState.nativeModelCards) { card in
+                            AINativeModelCardView(card: card, aiState: aiState)
+                        }
                     }
-                ) {
-                    ForEach(aiState.nativeModelCards) { card in
-                        AINativeModelCardView(card: card, aiState: aiState)
-                    }
-                }
+                )
 
                 CollapsibleModelSection(
                     title: "OLLAMA",
@@ -230,18 +231,19 @@ struct AIChatPanel: View {
                         Text(aiState.ollamaReachable ? "online" : "offline")
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
-                    }
-                ) {
-                    if aiState.ollamaModels.isEmpty {
-                        Text(aiState.ollamaReachable ? "No Ollama models detected." : "Ollama is not reachable.")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(aiState.ollamaModels) { model in
-                            AIOllamaModelCardView(model: model, aiState: aiState)
+                    },
+                    content: {
+                        if aiState.ollamaModels.isEmpty {
+                            Text(aiState.ollamaReachable ? "No Ollama models detected." : "Ollama is not reachable.")
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(aiState.ollamaModels) { model in
+                                AIOllamaModelCardView(model: model, aiState: aiState)
+                            }
                         }
                     }
-                }
+                )
             }
             .padding(12)
         }

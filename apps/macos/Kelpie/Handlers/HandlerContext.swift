@@ -9,10 +9,10 @@ final class HandlerContext {
 
     /// Populated by BrowserView so tab handlers can drive the full tab lifecycle.
     var tabStore: TabStore?
-    var onNewTab: (() -> Tab)? = nil
-    var onSwitchTab: ((UUID) -> Void)? = nil
-    var onCloseTab: ((UUID) -> Void)? = nil
-    var onWillLoad: (() -> Void)? = nil
+    var onNewTab: (() -> Tab)?
+    var onSwitchTab: ((UUID) -> Void)?
+    var onCloseTab: ((UUID) -> Void)?
+    var onWillLoad: (() -> Void)?
     private var sharedCookiePoller: Timer?
     private var lastSharedCookieSignature: String = ""
     private var lastSharedCookieModifiedAt: Date?

@@ -127,7 +127,7 @@ final class AudioRecorder {
     func snapshot() -> [String: Any] {
         [
             "recording": isRecording,
-            "elapsedMs": elapsedMs,
+            "elapsedMs": elapsedMs
         ]
     }
 
@@ -209,9 +209,12 @@ final class AudioRecorder {
         let riffSize = UInt32(36) + dataSize
 
         var header = Data()
+        // swiftlint:disable:next force_unwrapping
         header.append("RIFF".data(using: .ascii)!)
         header.append(littleEndianBytes(riffSize))
+        // swiftlint:disable:next force_unwrapping
         header.append("WAVE".data(using: .ascii)!)
+        // swiftlint:disable:next force_unwrapping
         header.append("fmt ".data(using: .ascii)!)
         header.append(littleEndianBytes(UInt32(16)))
         header.append(littleEndianBytes(UInt16(1)))
@@ -220,6 +223,7 @@ final class AudioRecorder {
         header.append(littleEndianBytes(UInt32(byteRate)))
         header.append(littleEndianBytes(UInt16(blockAlign)))
         header.append(littleEndianBytes(UInt16(bitsPerSample)))
+        // swiftlint:disable:next force_unwrapping
         header.append("data".data(using: .ascii)!)
         header.append(littleEndianBytes(dataSize))
         header.append(pcm)

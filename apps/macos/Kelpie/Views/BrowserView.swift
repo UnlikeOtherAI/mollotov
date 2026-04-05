@@ -27,7 +27,7 @@ struct BrowserView: View {
     @State private var showWelcome = false
     @State private var welcomePresentationSource: WelcomeCardPresentationSource = .automatic
     @AppStorage("skipInsecureWarning") private var skipInsecureWarning = false
-    @State private var pendingInsecureURL: URL? = nil
+    @State private var pendingInsecureURL: URL?
 
     var body: some View {
         ZStack {
@@ -575,12 +575,12 @@ private struct ViewportStageView<Content: View>: View {
             let scale  = chrome ? stageScale : 1.0
 
             // Visual size of the viewport after applying scale.
-            let scaledW = (vp.width  * scale).rounded(.down)
+            let scaledW = (vp.width * scale).rounded(.down)
             let scaledH = (vp.height * scale).rounded(.down)
             let chromeH: CGFloat = chrome ? (Self.stageChromeHeight + 10) : 0
 
             let canvasSize = CGSize(
-                width:  max(scaledW, geometry.size.width),
+                width: max(scaledW, geometry.size.width),
                 height: max(scaledH + chromeH, geometry.size.height)
             )
 
@@ -603,8 +603,8 @@ private struct ViewportStageView<Content: View>: View {
                                 content()
                                     .frame(width: vp.width, height: vp.height)
                                     .scaleEffect(scale, anchor: .center)
-                                    .padding(.horizontal, -(vp.width  * (1 - scale)) / 2)
-                                    .padding(.vertical,   -(vp.height * (1 - scale)) / 2)
+                                    .padding(.horizontal, -(vp.width * (1 - scale)) / 2)
+                                    .padding(.vertical, -(vp.height * (1 - scale)) / 2)
                                     .background(Color.black)
                                     .clipShape(RoundedRectangle(cornerRadius: chrome ? 16 : 0, style: .continuous))
                                     .overlay(
@@ -904,7 +904,7 @@ private final class ResizeHandleView: NSView {
             bar.widthAnchor.constraint(equalToConstant: 1),
             bar.centerXAnchor.constraint(equalTo: centerXAnchor),
             bar.topAnchor.constraint(equalTo: topAnchor),
-            bar.bottomAnchor.constraint(equalTo: bottomAnchor),
+            bar.bottomAnchor.constraint(equalTo: bottomAnchor)
         ])
     }
 
@@ -944,7 +944,8 @@ private final class ResizeHandleView: NSView {
 
     override var acceptsFirstResponder: Bool { true }
 
-    required init?(coder: NSCoder) { fatalError() }
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("Not implemented") }
 }
 
 // MARK: - AppKit-backed viewport close button
@@ -1003,7 +1004,7 @@ private final class ViewportCloseButtonView: NSButton {
             iconView.centerXAnchor.constraint(equalTo: centerXAnchor),
             iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
             iconView.widthAnchor.constraint(equalToConstant: 12),
-            iconView.heightAnchor.constraint(equalToConstant: 12),
+            iconView.heightAnchor.constraint(equalToConstant: 12)
         ])
     }
 
@@ -1016,7 +1017,8 @@ private final class ViewportCloseButtonView: NSButton {
     }
 
     override var intrinsicContentSize: NSSize { NSSize(width: 28, height: 28) }
-    required init?(coder: NSCoder) { fatalError() }
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("Not implemented") }
 }
 
 private final class ResolutionTitlebarAccessoryController: NSTitlebarAccessoryViewController {

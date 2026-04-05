@@ -18,6 +18,7 @@ struct DeviceHandler {
 
     @MainActor
     private func getViewport() async -> [String: Any] {
+        // swiftlint:disable:next force_unwrapping
         let screen = NSScreen.main ?? NSScreen.screens.first!
         let scale = screen.backingScaleFactor
         let viewport = viewportState.currentViewportDimensions
@@ -28,7 +29,7 @@ struct DeviceHandler {
             "devicePixelRatio": scale,
             "platform": "macos",
             "deviceName": deviceInfo.name,
-            "orientation": orientation,
+            "orientation": orientation
         ]
     }
 
@@ -45,45 +46,46 @@ struct DeviceHandler {
                     "viewport": [
                         "portrait": [
                             "width": Int(preset.portraitSize.width),
-                            "height": Int(preset.portraitSize.height),
+                            "height": Int(preset.portraitSize.height)
                         ],
                         "landscape": [
                             "width": Int(preset.portraitSize.height),
-                            "height": Int(preset.portraitSize.width),
-                        ],
-                    ],
+                            "height": Int(preset.portraitSize.width)
+                        ]
+                    ]
                 ]
             },
             "availablePresetIds": viewportState.availablePresets.map(\.id),
-            "activePresetId": viewportState.activePresetId as Any,
+            "activePresetId": viewportState.activePresetId as Any
         ])
     }
 
     @MainActor
     private func getDeviceInfoResponse() async -> [String: Any] {
+        // swiftlint:disable:next force_unwrapping
         let screen = NSScreen.main ?? NSScreen.screens.first!
         return [
             "device": [
                 "id": deviceInfo.id,
                 "name": deviceInfo.name,
                 "model": deviceInfo.model,
-                "platform": "macos",
+                "platform": "macos"
             ],
             "display": [
                 "width": deviceInfo.width,
                 "height": deviceInfo.height,
-                "scale": screen.backingScaleFactor,
+                "scale": screen.backingScaleFactor
             ],
             "network": ["ip": "0.0.0.0", "port": deviceInfo.port],
             "browser": [
                 "engine": rendererState.activeEngine.rawValue,
-                "version": ProcessInfo.processInfo.operatingSystemVersionString,
+                "version": ProcessInfo.processInfo.operatingSystemVersionString
             ],
             "app": ["version": deviceInfo.version, "build": "1"],
             "system": [
                 "os": "macOS",
-                "osVersion": ProcessInfo.processInfo.operatingSystemVersionString,
-            ],
+                "osVersion": ProcessInfo.processInfo.operatingSystemVersionString
+            ]
         ]
     }
 
@@ -109,7 +111,7 @@ struct DeviceHandler {
             "iframes": true,
             "dialogs": true,
             "rendererSwitching": true,
-            "viewportPresets": true,
+            "viewportPresets": true
         ]
     }
 
@@ -117,7 +119,7 @@ struct DeviceHandler {
     private func getOrientation() async -> [String: Any] {
         successResponse([
             "orientation": viewportState.reportedOrientation.rawValue,
-            "locked": viewportState.supportsOrientationSelection ? viewportState.reportedOrientation.rawValue : NSNull(),
+            "locked": viewportState.supportsOrientationSelection ? viewportState.reportedOrientation.rawValue : NSNull()
         ])
     }
 
@@ -136,8 +138,8 @@ struct DeviceHandler {
                 "error": [
                     "code": "INVALID_STATE",
                     "message": "Auto orientation is not supported for staged macOS viewports. Use a named preset and set portrait or landscape explicitly.",
-                    "reason": "auto-unsupported",
-                ],
+                    "reason": "auto-unsupported"
+                ]
             ]
         default:
             return errorResponse(code: "INVALID_PARAM", message: "orientation must be portrait, landscape, or auto")
@@ -150,19 +152,19 @@ struct DeviceHandler {
                 error = [
                     "code": "INVALID_STATE",
                     "message": "Orientation can only be changed on macOS when a named viewport preset is active. Select a smaller viewport preset first.",
-                    "reason": "full-viewport",
+                    "reason": "full-viewport"
                 ]
             case .custom:
                 error = [
                     "code": "INVALID_STATE",
                     "message": "Orientation cannot be changed for raw custom macOS viewports. Resize explicitly or switch to a named viewport preset first.",
-                    "reason": "custom-viewport",
+                    "reason": "custom-viewport"
                 ]
             case .preset:
                 error = [
                     "code": "INVALID_STATE",
                     "message": "Orientation could not be changed for the current macOS viewport mode.",
-                    "reason": "unavailable",
+                    "reason": "unavailable"
                 ]
             }
             return ["success": false, "error": error]
@@ -184,8 +186,8 @@ struct DeviceHandler {
             "activePresetId": viewportState.activePresetId as Any,
             "viewport": [
                 "width": viewport.width,
-                "height": viewport.height,
-            ],
+                "height": viewport.height
+            ]
         ])
     }
 }

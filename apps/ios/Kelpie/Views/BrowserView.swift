@@ -42,13 +42,13 @@ let tabletViewportPresets: [TabletViewportPreset] = {
     for i in 0 ..< count {
         guard let p = kelpie_viewport_preset_get(Int32(i))?.pointee else { continue }
         result.append(TabletViewportPreset(
-            id:                   _cstr(p.id),
-            name:                 _cstr(p.name),
-            label:                _cstr(p.label),
-            menuLabel:            _cstr(p.menu_label),
-            displaySizeLabel:     _cstr(p.display_size_label),
+            id: _cstr(p.id),
+            name: _cstr(p.name),
+            label: _cstr(p.label),
+            menuLabel: _cstr(p.menu_label),
+            displaySizeLabel: _cstr(p.display_size_label),
             pixelResolutionLabel: _cstr(p.pixel_resolution_label),
-            portraitSize:         CGSize(width: CGFloat(p.portrait_width), height: CGFloat(p.portrait_height))
+            portraitSize: CGSize(width: CGFloat(p.portrait_width), height: CGFloat(p.portrait_height))
         ))
     }
     return result.sorted {
@@ -451,8 +451,7 @@ struct BrowserView: View {
     private var activeTabletViewportPreset: TabletViewportPreset? {
         guard isPad else { return nil }
         return tabletViewportPresets
-            .filter { availableIPadViewportPresetIDs.contains($0.id) }
-            .first { $0.id == iPadMobileStagePresetID }
+            .first { availableIPadViewportPresetIDs.contains($0.id) && $0.id == iPadMobileStagePresetID }
     }
 
     private var availableTabletViewportPresetOptions: [MobileViewportPresetOption] {

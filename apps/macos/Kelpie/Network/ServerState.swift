@@ -119,6 +119,7 @@ final class ServerState: ObservableObject {
         DeviceHandler(
             context: ctx,
             deviceInfo: deviceInfo,
+            // swiftlint:disable:next force_unwrapping
             rendererState: rendererState!,
             viewportState: viewportState
         ).register(on: router)
@@ -138,6 +139,7 @@ final class ServerState: ObservableObject {
         // Renderer switching handler
         RendererHandler(
             context: ctx,
+            // swiftlint:disable:next force_unwrapping
             rendererState: rendererState!,
             onSwitch: { [weak self] engine in
                 await self?.switchRenderer(to: engine)
@@ -152,6 +154,7 @@ final class ServerState: ObservableObject {
 
         rendererState.isSwitching = true
 
+        // swiftlint:disable:next force_unwrapping
         let source = handlerContext.renderer!
         let target = renderer(for: engine)
 
@@ -264,8 +267,15 @@ final class ServerState: ObservableObject {
                 let name = String(cString: interface.ifa_name)
                 if name == "en0" || name == "en1" {
                     var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-                    getnameinfo(interface.ifa_addr, socklen_t(interface.ifa_addr.pointee.sa_len),
-                                &hostname, socklen_t(hostname.count), nil, 0, NI_NUMERICHOST)
+                    getnameinfo(
+                        interface.ifa_addr,
+                        socklen_t(interface.ifa_addr.pointee.sa_len),
+                        &hostname,
+                        socklen_t(hostname.count),
+                        nil,
+                        0,
+                        NI_NUMERICHOST
+                    )
                     address = String(cString: hostname)
                     break
                 }

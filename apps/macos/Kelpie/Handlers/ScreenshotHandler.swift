@@ -37,7 +37,7 @@ struct ScreenshotHandler {
                 "image": imageData.base64EncodedString(),
                 "width": bitmap.pixelsWide,
                 "height": bitmap.pixelsHigh,
-                "format": format,
+                "format": format
             ])
         } catch {
             return errorResponse(code: "SCREENSHOT_FAILED", message: error.localizedDescription)

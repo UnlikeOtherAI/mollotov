@@ -74,7 +74,7 @@ final class HistoryStore: ObservableObject {
                 "id": entry.id.uuidString,
                 "url": entry.url,
                 "title": entry.title,
-                "timestamp": Self.iso8601Formatter.string(from: entry.timestamp),
+                "timestamp": Self.iso8601Formatter.string(from: entry.timestamp)
             ]
         }
     }

@@ -1,5 +1,7 @@
 import WebKit
 
+// swiftlint:disable line_length
+
 /// Handles DOM queries: getDOM, querySelector, querySelectorAll, getElementText, getAttributes.
 struct DOMHandler {
     let context: HandlerContext

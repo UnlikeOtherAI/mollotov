@@ -63,7 +63,7 @@ final class ToolbarButtonView: NSButton {
             iconView.centerXAnchor.constraint(equalTo: centerXAnchor),
             iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
             iconView.widthAnchor.constraint(equalToConstant: 16),
-            iconView.heightAnchor.constraint(equalToConstant: 16),
+            iconView.heightAnchor.constraint(equalToConstant: 16)
         ])
 
         updateIcon(systemName: systemName)
@@ -98,7 +98,8 @@ final class ToolbarButtonView: NSButton {
         }
     }
 
-    required init?(coder: NSCoder) { fatalError() }
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("Not implemented") }
 }
 
 // MARK: - AppKit segmented strip
@@ -106,9 +107,9 @@ final class ToolbarButtonView: NSButton {
 struct AppKitSegmentedStrip: NSViewRepresentable {
     struct Item: Equatable {
         let id: String
-        var title: String? = nil
-        var imageName: String? = nil
-        var systemImageName: String? = nil
+        var title: String?
+        var imageName: String?
+        var systemImageName: String?
         let accessibilityID: String
         let accessibilityLabel: String
         let width: CGFloat
@@ -160,8 +161,12 @@ struct AppKitSegmentedStrip: NSViewRepresentable {
             } else {
                 tooltipPanel?.close()
                 tv = SegmentedTooltipView()
-                let panel = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel],
-                                    backing: .buffered, defer: true)
+                let panel = NSPanel(
+                    contentRect: .zero,
+                    styleMask: [.borderless, .nonactivatingPanel],
+                    backing: .buffered,
+                    defer: true
+                )
                 panel.isOpaque = false
                 panel.backgroundColor = .clear
                 panel.hasShadow = false
@@ -190,7 +195,7 @@ struct AppKitSegmentedStrip: NSViewRepresentable {
                 NSAnimationContext.runAnimationGroup({ ctx in
                     ctx.duration = 0.15; ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
                     panel.animator().alphaValue = 0
-                }) { panel.orderOut(nil) }
+                }, completionHandler: { panel.orderOut(nil) })
             }
             hideWorkItem = workItem
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: workItem)
@@ -264,10 +269,11 @@ final class SegmentedStripContainerView: NSView {
             stackView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 3),
             stackView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -3),
             stackView.topAnchor.constraint(equalTo: topAnchor, constant: 2),
-            stackView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -2),
+            stackView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -2)
         ])
     }
 
+    @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
@@ -329,7 +335,7 @@ final class SegmentedStripButton: NSButton {
                 iconView.centerXAnchor.constraint(equalTo: centerXAnchor),
                 iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
                 iconView.widthAnchor.constraint(equalToConstant: item.iconSize),
-                iconView.heightAnchor.constraint(equalToConstant: item.iconSize),
+                iconView.heightAnchor.constraint(equalToConstant: item.iconSize)
             ])
         } else {
             title = item.title ?? ""
@@ -338,7 +344,7 @@ final class SegmentedStripButton: NSButton {
 
         NSLayoutConstraint.activate([
             widthAnchor.constraint(equalToConstant: item.width),
-            heightAnchor.constraint(equalToConstant: 30),
+            heightAnchor.constraint(equalToConstant: 30)
         ])
 
         updateAppearance()
@@ -378,7 +384,7 @@ final class SegmentedStripButton: NSButton {
                 string: title,
                 attributes: [
                     .font: NSFont.systemFont(ofSize: 12, weight: .semibold),
-                    .foregroundColor: isSegmentSelected ? NSColor.white : NSColor.labelColor.withAlphaComponent(0.82),
+                    .foregroundColor: isSegmentSelected ? NSColor.white : NSColor.labelColor.withAlphaComponent(0.82)
                 ]
             )
         }
@@ -386,6 +392,7 @@ final class SegmentedStripButton: NSButton {
         alphaValue = isEnabled ? 1.0 : 0.5
     }
 
+    @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
@@ -409,11 +416,12 @@ final class SegmentedTooltipView: NSView {
             label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
             label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
             label.topAnchor.constraint(equalTo: topAnchor, constant: 6),
-            label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
+            label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6)
         ])
     }
 
-    required init?(coder: NSCoder) { fatalError() }
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("Not implemented") }
 
     func setText(_ text: String) { label.stringValue = text; layoutSubtreeIfNeeded() }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }

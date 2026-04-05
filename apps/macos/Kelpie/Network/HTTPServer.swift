@@ -29,6 +29,7 @@ final class HTTPServer: @unchecked Sendable {
         do {
             let params = NWParameters.tcp
             params.allowLocalEndpointReuse = true
+            // swiftlint:disable:next force_unwrapping
             listener = try NWListener(using: params, on: NWEndpoint.Port(rawValue: port)!)
         } catch {
             print("[HTTPServer] Failed to create listener: \(error)")
@@ -115,11 +116,9 @@ final class HTTPServer: @unchecked Sendable {
     }
 
     private func parseContentLength(_ headers: String) -> Int {
-        for line in headers.components(separatedBy: "\r\n") {
-            if line.lowercased().hasPrefix("content-length:") {
-                let value = line.dropFirst("content-length:".count).trimmingCharacters(in: .whitespaces)
-                return Int(value) ?? 0
-            }
+        for line in headers.components(separatedBy: "\r\n") where line.lowercased().hasPrefix("content-length:") {
+            let value = line.dropFirst("content-length:".count).trimmingCharacters(in: .whitespaces)
+            return Int(value) ?? 0
         }
         return 0
     }
