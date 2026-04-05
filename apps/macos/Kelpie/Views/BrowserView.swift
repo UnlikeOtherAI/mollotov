@@ -103,10 +103,11 @@ struct BrowserView: View {
                         if let tab = tabStore.activeTab { activateTab(tab) }
                     }
                 )
-                .frame(height: 34)
-                .opacity(rendererState.activeEngine == .chromium ? 0 : 1)
+                .frame(height: tabStore.tabs.count > 1 && rendererState.activeEngine != .chromium ? 34 : 0)
+                .opacity(tabStore.tabs.count > 1 && rendererState.activeEngine != .chromium ? 1 : 0)
+                .allowsHitTesting(tabStore.tabs.count > 1 && rendererState.activeEngine != .chromium)
+                .animation(.easeOut(duration: 0.3), value: tabStore.tabs.count > 1)
                 .animation(.easeOut(duration: 0.3), value: rendererState.activeEngine)
-                .allowsHitTesting(rendererState.activeEngine != .chromium)
 
                 HStack(spacing: 0) {
                     // Renderer with overlays — FloatingMenuView only covers this area
