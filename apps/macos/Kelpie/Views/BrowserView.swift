@@ -24,7 +24,7 @@ struct BrowserView: View {
     @State private var inspectorMode = "rotate"
     @State private var hostWindow: NSWindow?
     @AppStorage("hideWelcomeCard") private var hideWelcome = false
-    @State private var showWelcome = true
+    @State private var showWelcome = false
     @State private var welcomePresentationSource: WelcomeCardPresentationSource = .automatic
     @AppStorage("skipInsecureWarning") private var skipInsecureWarning = false
     @State private var pendingInsecureURL: URL? = nil
