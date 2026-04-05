@@ -47,6 +47,7 @@ iOS and Android must be kept as absolute mirrors with full feature parity. Every
 - Package manager: pnpm.
 - CLI: TypeScript, native apps: Swift (iOS) / Kotlin (Android).
 - npm scope: `@unlikeotherai/kelpie`.
+- Company name: **UnlikeOtherAI** — no spaces, always one word.
 
 ## Agent Behavior Rules
 
