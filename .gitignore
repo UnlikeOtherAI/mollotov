@@ -16,8 +16,16 @@ dist/
 
 # Build output
 build/
+.build/
+.build-*/
 .gradle/
 local.properties
+apps/ios/build/
+apps/ios/build-*/
+apps/macos/.build/
+apps/windows/.build-*/
+native/.build/
+native/.build-*/
 
 # Test
 coverage/
@@ -26,3 +34,10 @@ vendor/
 apps/macos/Frameworks/
 tmp/
 .cache/
+
+# CLI scratch output (screenshots, annotated runs, test output dirs)
+packages/cli/*.png
+packages/cli/tests/output/
+
+# Legacy/archived assets
+assets/old/

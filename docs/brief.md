@@ -142,6 +142,6 @@ The `getDeviceInfo` endpoint (see [api/core.md](api/core.md)) includes an `isSim
 
 The canonical app icon is a kawaii fire character in pastel yellow-to-orange tones.
 
-- **Source file (1024x1024)**: [icon-1024.png](icon-1024.png) — use this for App Store and Play Store submission
-- **Assets directory**: `assets/icon-1024.png`
+- **Source file (1024x1024)**: [extended-1024.png](extended-1024.png) — use this for App Store and Play Store submission
+- **Assets directory**: `assets/extended-1024.png`
 - **Style**: Flat pastel, kawaii Japanese-style fire, happy/chuckling expression, no outlines, no text
