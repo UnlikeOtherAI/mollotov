@@ -6,6 +6,8 @@ import Darwin
 
 extension Notification.Name {
     static let showWelcomeCard = Notification.Name("com.kelpie.browser.macos.show-welcome-card")
+    static let newTab   = Notification.Name("com.kelpie.browser.macos.new-tab")
+    static let closeTab = Notification.Name("com.kelpie.browser.macos.close-tab")
 }
 
 enum WelcomeCardPresentationSource: String {
@@ -140,6 +142,16 @@ struct BrowserCommandBridge: NSViewRepresentable {
 private struct BrowserCommands: Commands {
     var body: some Commands {
         CommandGroup(after: .newItem) {
+            Button("New Tab") {
+                NotificationCenter.default.post(name: .newTab, object: nil)
+            }
+            .keyboardShortcut("t", modifiers: .command)
+
+            Button("Close Tab") {
+                NotificationCenter.default.post(name: .closeTab, object: nil)
+            }
+            .keyboardShortcut("w", modifiers: .command)
+
             Button("New Window") {
                 openNewWindow()
             }

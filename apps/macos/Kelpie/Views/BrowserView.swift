@@ -7,6 +7,7 @@ struct BrowserView: View {
     @ObservedObject var rendererState: RendererState
     @ObservedObject var viewportState: ViewportState
     @ObservedObject private var aiState = AIState.shared
+    @StateObject private var tabStore = TabStore()
     @State private var showSettings = false
     @State private var showBookmarks = false
     @State private var showHistory = false
@@ -84,6 +85,27 @@ struct BrowserView: View {
                 )
                 .fixedSize(horizontal: false, vertical: true)
                 .layoutPriority(1)
+
+                TabBarView(
+                    tabStore: tabStore,
+                    onNewTab: {
+                        let tab = tabStore.addTab()
+                        connectNewTab(tab)
+                    },
+                    onCloseTab: { id in
+                        let wasActive = tabStore.activeTabID == id
+                        tabStore.closeTab(id: id)
+                        if wasActive, let next = tabStore.activeTab { activateTab(next) }
+                    },
+                    onSelectTab: { id in
+                        tabStore.selectTab(id: id)
+                        if let tab = tabStore.activeTab { activateTab(tab) }
+                    }
+                )
+                .frame(height: 34)
+                .opacity(rendererState.activeEngine == .chromium ? 0 : 1)
+                .animation(.easeOut(duration: 0.3), value: rendererState.activeEngine)
+                .allowsHitTesting(rendererState.activeEngine != .chromium)
 
                 HStack(spacing: 0) {
                     // Renderer with overlays — FloatingMenuView only covers this area
@@ -216,6 +238,7 @@ struct BrowserView: View {
             NetworkInspectorView()
         }
         .onAppear {
+            connectNewTab(tabStore.tabs[0])
             // Remove focus from URL bar on launch
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 NSApplication.shared.keyWindow?.makeFirstResponder(nil)
@@ -258,6 +281,20 @@ struct BrowserView: View {
             isIn3DInspector = false
             inspectorMode = "rotate"
         }
+        .onReceive(NotificationCenter.default.publisher(for: .newTab)) { _ in
+            guard rendererState.activeEngine != .chromium else { return }
+            let tab = tabStore.addTab()
+            connectNewTab(tab)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .closeTab)) { _ in
+            if rendererState.activeEngine == .chromium {
+                NSApp.keyWindow?.close()
+                return
+            }
+            guard let id = tabStore.activeTabID else { return }
+            tabStore.closeTab(id: id)
+            if let next = tabStore.activeTab { activateTab(next) }
+        }
         .onChange(of: isAIPanelOpen) { _, open in
             UserDefaults.standard.set(open, forKey: "com.kelpie.macos.ai-panel-open")
         }
@@ -287,6 +324,10 @@ struct BrowserView: View {
 
     @MainActor
     private func connectRendererState() async {
+        // WebKit renderer state is managed per-tab by connectNewTab.
+        // Only wire onStateChange for the Chromium renderer here.
+        guard rendererState.activeEngine == .chromium else { return }
+
         for _ in 0..<10 {
             if let renderer = serverState.handlerContext.renderer {
                 renderer.onStateChange = { [weak browserState, weak handlerContext = serverState.handlerContext] in
@@ -311,6 +352,26 @@ struct BrowserView: View {
         browserState.canGoBack = renderer.canGoBack
         browserState.canGoForward = renderer.canGoForward
         browserState.progress = renderer.estimatedProgress
+    }
+
+    private func connectNewTab(_ tab: Tab) {
+        serverState.setActiveWebKitRenderer(tab.renderer)
+        sync(browserState: browserState, from: tab.renderer)
+        tab.renderer.onStateChange = { [weak tab, weak browserState, weak serverState] in
+            guard let tab, let browserState, let serverState else { return }
+            Task { @MainActor in
+                tab.title = tab.renderer.currentTitle.isEmpty ? "New Tab" : tab.renderer.currentTitle
+                tab.currentURL = tab.renderer.currentURL?.absoluteString ?? ""
+                tab.isLoading = tab.renderer.isLoading
+                // Only sync browserState when this tab is still the active renderer
+                guard serverState.wkRenderer === tab.renderer else { return }
+                sync(browserState: browserState, from: tab.renderer)
+            }
+        }
+    }
+
+    private func activateTab(_ tab: Tab) {
+        connectNewTab(tab)
     }
 
     private func navigate(_ urlString: String) {
