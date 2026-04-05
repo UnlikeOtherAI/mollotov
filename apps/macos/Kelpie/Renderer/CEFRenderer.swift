@@ -270,7 +270,7 @@ final class CEFRenderer: RendererEngine {
                     continuation.resume(throwing: error)
                 } else if let jsonString = result {
                     if let data = jsonString.data(using: .utf8),
-                       let parsed = try? JSONSerialization.jsonObject(with: data) {
+                       let parsed = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) {
                         continuation.resume(returning: parsed)
                     } else {
                         continuation.resume(returning: jsonString)

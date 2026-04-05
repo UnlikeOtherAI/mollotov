@@ -115,7 +115,7 @@ The 3D view shows DOM depth (tree nesting), not CSS paint order. Position, z-ind
 
 **Limitations:** Canvas, WebGL, and video elements appear as opaque layers. Cross-origin iframes appear as labeled blocks (showing the iframe's domain). Closed shadow DOM roots are not traversable. Hover detection degrades at steep rotation angles. Pages with more than 5,000 visible elements are capped with a warning toast.
 
-API: `snapshot-3d-enter`, `snapshot-3d-exit`, `snapshot-3d-status`.
+API: `snapshot-3d-enter`, `snapshot-3d-exit`, `snapshot-3d-status`, `snapshot-3d-set-mode`, `snapshot-3d-zoom`, `snapshot-3d-reset-view` (MCP: `kelpie_snapshot_3d_enter`, `kelpie_snapshot_3d_exit`, `kelpie_snapshot_3d_status`, `kelpie_snapshot_3d_set_mode`, `kelpie_snapshot_3d_zoom`, `kelpie_snapshot_3d_reset_view`).
 
 ## Bookmarks
 

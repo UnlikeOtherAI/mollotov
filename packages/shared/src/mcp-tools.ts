@@ -50,6 +50,12 @@ export const BrowserMcpTools = [
   "kelpie_screenshot_annotated",
   "kelpie_click_annotation",
   "kelpie_fill_annotation",
+  "kelpie_snapshot_3d_enter",
+  "kelpie_snapshot_3d_exit",
+  "kelpie_snapshot_3d_status",
+  "kelpie_snapshot_3d_set_mode",
+  "kelpie_snapshot_3d_zoom",
+  "kelpie_snapshot_3d_reset_view",
   "kelpie_get_visible_elements",
   "kelpie_get_page_text",
   "kelpie_get_form_state",
@@ -115,6 +121,12 @@ export const BrowserToolUnsupportedPlatforms = {
   kelpie_set_viewport_preset: ["linux", "windows"],
   kelpie_set_orientation: ["linux", "windows"],
   kelpie_safari_auth: ["linux", "windows"],
+  kelpie_snapshot_3d_enter: ["linux", "windows"],
+  kelpie_snapshot_3d_exit: ["linux", "windows"],
+  kelpie_snapshot_3d_status: ["linux", "windows"],
+  kelpie_snapshot_3d_set_mode: ["linux", "windows"],
+  kelpie_snapshot_3d_zoom: ["linux", "windows"],
+  kelpie_snapshot_3d_reset_view: ["linux", "windows"],
 } satisfies Partial<Record<BrowserMcpTool, readonly Platform[]>>;
 
 /** CLI-level MCP tools (discovery + group commands) */
@@ -247,4 +259,10 @@ export const httpToMcp: Record<string, BrowserMcpTool> = {
   "ai-unload": "kelpie_ai_unload",
   "ai-infer": "kelpie_ai_ask",
   "ai-record": "kelpie_ai_record",
+  "snapshot-3d-enter": "kelpie_snapshot_3d_enter",
+  "snapshot-3d-exit": "kelpie_snapshot_3d_exit",
+  "snapshot-3d-status": "kelpie_snapshot_3d_status",
+  "snapshot-3d-set-mode": "kelpie_snapshot_3d_set_mode",
+  "snapshot-3d-zoom": "kelpie_snapshot_3d_zoom",
+  "snapshot-3d-reset-view": "kelpie_snapshot_3d_reset_view",
 };

@@ -58,6 +58,7 @@ class Router {
             "show-keyboard", "hide-keyboard", "get-keyboard-state",
             "resize-viewport", "reset-viewport", "set-viewport-preset", "is-element-obscured",
             "snapshot-3d-enter", "snapshot-3d-exit", "snapshot-3d-status",
+            "snapshot-3d-set-mode", "snapshot-3d-zoom", "snapshot-3d-reset-view",
         )
         for (method in methods) {
             if (!routes.containsKey(method)) {

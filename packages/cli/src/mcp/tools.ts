@@ -126,6 +126,14 @@ export const browserTools: BrowserToolDef[] = [
   { name: "kelpie_click_annotation", description: "Click an annotated element by index", method: "clickAnnotation", schema: { device, index: z.number().describe("Annotation index") }, bodyFromArgs: passthrough },
   { name: "kelpie_fill_annotation", description: "Fill an annotated element by index", method: "fillAnnotation", schema: { device, index: z.number().describe("Annotation index"), value: z.string().describe("Value to fill") }, bodyFromArgs: passthrough },
 
+  // 3D DOM inspector (macOS only)
+  { name: "kelpie_snapshot_3d_enter", description: "Enter the 3D DOM inspector view. Applies 3D transforms to the current page to visualize stacking depth. macOS only.", method: "snapshot3dEnter", schema: { device }, bodyFromArgs: passthrough },
+  { name: "kelpie_snapshot_3d_exit", description: "Exit the 3D DOM inspector and restore the normal page view. macOS only.", method: "snapshot3dExit", schema: { device }, bodyFromArgs: passthrough },
+  { name: "kelpie_snapshot_3d_status", description: "Return whether the 3D DOM inspector is currently active. macOS only.", method: "snapshot3dStatus", schema: { device }, bodyFromArgs: passthrough },
+  { name: "kelpie_snapshot_3d_set_mode", description: "Switch the 3D inspector interaction mode between rotate (orbit the scene) and scroll (pan the page). macOS only.", method: "snapshot3dSetMode", schema: { device, mode: z.enum(["rotate", "scroll"]).describe("Interaction mode") }, bodyFromArgs: passthrough },
+  { name: "kelpie_snapshot_3d_zoom", description: "Zoom the 3D inspector scene. Provide either a signed 'delta' (e.g. 0.1 to zoom in, -0.1 to zoom out) or 'direction' ('in' | 'out'). macOS only.", method: "snapshot3dZoom", schema: { device, delta: z.number().optional().describe("Signed zoom delta (positive=in, negative=out)"), direction: z.enum(["in", "out"]).optional().describe("Zoom direction") }, bodyFromArgs: passthrough },
+  { name: "kelpie_snapshot_3d_reset_view", description: "Reset the 3D inspector camera to its default rotation and scale. macOS only.", method: "snapshot3dResetView", schema: { device }, bodyFromArgs: passthrough },
+
   // Visible elements
   { name: "kelpie_get_visible_elements", description: "Get all visible elements in the viewport", method: "getVisibleElements", schema: { device, interactableOnly: z.boolean().optional(), includeText: z.boolean().optional() }, bodyFromArgs: passthrough },
 

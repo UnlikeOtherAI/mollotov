@@ -251,6 +251,27 @@ Check whether 3D DOM inspection mode is currently active.
 - Body: none
 - Response: `{success: true, active: true|false}`
 
+### `snapshot-3d-set-mode`
+Switch the interaction mode of the active 3D inspector session between rotating the scene and scrolling the underlying page.
+
+- Method: POST
+- Body: `{mode: "rotate" | "scroll"}`
+- Response: `{success: true, mode: "rotate" | "scroll"}` or error (`NOT_ACTIVE`, `INVALID_MODE`, `JS_ERROR`)
+
+### `snapshot-3d-zoom`
+Zoom the 3D inspector camera. Provide either a signed `delta` (positive zooms in, negative zooms out) or a `direction` shortcut.
+
+- Method: POST
+- Body: `{delta?: number}` or `{direction?: "in" | "out"}`
+- Response: `{success: true, delta: number}` or error (`NOT_ACTIVE`, `INVALID_DIRECTION`, `MISSING_PARAM`, `JS_ERROR`)
+
+### `snapshot-3d-reset-view`
+Reset the 3D inspector camera rotation and scale to defaults.
+
+- Method: POST
+- Body: none
+- Response: `{success: true}` or error (`NOT_ACTIVE`, `JS_ERROR`)
+
 ## Mutation Observation
 
 ### `watchMutations`
