@@ -16,5 +16,12 @@
 	</array>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Kelpie uses the microphone to capture voice prompts for local AI.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+		<key>NSAllowsArbitraryLoadsInWebContent</key>
+		<true/>
+	</dict>
 </dict>
 </plist>
