@@ -13,14 +13,34 @@ enum FaviconExtractor {
             }
             Task {
                 do {
-                    let (data, _) = try await URLSession.shared.data(from: faviconURL)
-                    let image = NSImage(data: data)
+                    let (data, response) = try await URLSession.shared.data(from: faviconURL)
+                    let image = FaviconExtractor.decodeImage(data: data, response: response, url: faviconURL)
                     await MainActor.run { completion(image) }
                 } catch {
                     await MainActor.run { completion(nil) }
                 }
             }
         }
+    }
+
+    /// NSImage(data:) silently returns nil for SVG payloads. Writing to a
+    /// temp file with the correct extension lets NSImage pick the right decoder.
+    private static func decodeImage(data: Data, response: URLResponse, url: URL) -> NSImage? {
+        let isSVG = (response as? HTTPURLResponse)?.mimeType?.contains("svg") == true
+            || url.pathExtension.lowercased() == "svg"
+        if isSVG {
+            let tmp = FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString + ".svg")
+            do {
+                try data.write(to: tmp)
+                let img = NSImage(contentsOf: tmp)
+                try? FileManager.default.removeItem(at: tmp)
+                return img
+            } catch {
+                return nil
+            }
+        }
+        return NSImage(data: data)
     }
 
     private static let faviconScript = """
