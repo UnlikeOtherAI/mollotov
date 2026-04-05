@@ -61,8 +61,6 @@ final class ServerState: ObservableObject {
         let activeRenderer = renderer(for: startEngine)
         handlerContext.renderer = activeRenderer
         handlerContext.startSharedCookieSync()
-        let homeURL = URL(string: UserDefaults.standard.string(forKey: "homeURL") ?? defaultHomeURL)!
-        awaitSharedCookieImportThenLoad(url: homeURL)
 
         registerHandlers()
         router.registerStubs()
