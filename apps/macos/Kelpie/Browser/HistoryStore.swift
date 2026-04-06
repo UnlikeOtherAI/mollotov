@@ -1,6 +1,7 @@
 import Foundation
 
 /// In-memory navigation history with persistence to UserDefaults.
+@MainActor
 final class HistoryStore: ObservableObject {
     static let shared = HistoryStore()
 

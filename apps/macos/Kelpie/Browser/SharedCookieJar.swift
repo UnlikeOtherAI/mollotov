@@ -17,6 +17,11 @@ enum SharedCookieJar {
         let expires: Date?
         let isHTTPOnly: Bool
         let isSecure: Bool
+        let sameSite: String?
+
+        private enum CodingKeys: String, CodingKey {
+            case name, value, domain, path, expires, isHTTPOnly, isSecure, sameSite
+        }
     }
 
     private struct Payload: Codable {
@@ -68,7 +73,8 @@ enum SharedCookieJar {
                     cookie.value,
                     cookie.expiresDate?.timeIntervalSince1970.description ?? "",
                     cookie.isHTTPOnly ? "1" : "0",
-                    cookie.isSecure ? "1" : "0"
+                    cookie.isSecure ? "1" : "0",
+                    cookie.sameSitePolicy?.rawValue ?? ""
                 ].joined(separator: "\u{1F}")
             }
             .sorted()
@@ -93,7 +99,8 @@ enum SharedCookieJar {
             path: cookie.path,
             expires: cookie.expiresDate,
             isHTTPOnly: cookie.isHTTPOnly,
-            isSecure: cookie.isSecure
+            isSecure: cookie.isSecure,
+            sameSite: cookie.sameSitePolicy?.rawValue
         )
     }
 
@@ -112,6 +119,9 @@ enum SharedCookieJar {
         }
         if stored.isSecure {
             properties[.secure] = "TRUE"
+        }
+        if let sameSite = stored.sameSite {
+            properties[HTTPCookiePropertyKey("SameSite")] = sameSite
         }
         return HTTPCookie(properties: properties)
     }

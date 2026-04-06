@@ -6,8 +6,9 @@ import Foundation
 enum CookieMigrator {
     static func migrate(from source: any RendererEngine, to target: any RendererEngine) async {
         guard source.engineName != "chromium" else {
-            // The current CEF bridge crashes when exporting its cookie store during a switch.
-            // Keep the switch alive until the bridge can expose cookies safely.
+            let snapshot = SharedCookieJar.load()
+            guard !snapshot.cookies.isEmpty else { return }
+            await target.setCookies(snapshot.cookies)
             return
         }
         let cookies = await source.allCookies()

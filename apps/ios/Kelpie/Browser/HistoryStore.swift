@@ -2,6 +2,7 @@ import Foundation
 
 /// Persists history via the shared native core-state library.
 /// Xcode still needs the bridge and static libs configured manually; see apps/ios/NATIVE_INTEGRATION.md.
+@MainActor
 final class HistoryStore: ObservableObject {
     static let shared = HistoryStore()
 
