@@ -36,6 +36,10 @@ import { registerHome } from "./home.js";
 import { registerBrowser } from "./browser.js";
 import { registerAI } from "./ai.js";
 import { registerScript } from "./script.js";
+import { registerRenderer } from "./renderer.js";
+import { registerFullscreen } from "./fullscreen.js";
+import { registerOrientation } from "./orientation.js";
+import { registerViewportPreset } from "./viewport-preset.js";
 
 export function registerAllCommands(program: Command): void {
   // Discovery
@@ -82,6 +86,12 @@ export function registerAllCommands(program: Command): void {
   registerPageText(program);
   registerFormState(program);
   registerFind(program);
+
+  // Display & Viewport
+  registerRenderer(program);
+  registerFullscreen(program);
+  registerOrientation(program);
+  registerViewportPreset(program);
 
   // Group Commands
   registerGroup(program);
