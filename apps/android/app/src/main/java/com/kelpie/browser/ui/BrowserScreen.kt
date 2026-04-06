@@ -28,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -41,12 +42,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kelpie.browser.FeatureFlags
 import com.kelpie.browser.browser.BrowserState
 import com.kelpie.browser.browser.HistoryStore
+import com.kelpie.browser.browser.KeyboardObserver
 import com.kelpie.browser.browser.WebViewContainer
 import com.kelpie.browser.device.DeviceInfo
 import com.kelpie.browser.handlers.HandlerContext
@@ -77,6 +80,7 @@ fun BrowserScreen(
     var showNetworkInspector by remember { mutableStateOf(false) }
     var showAI by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val composeView = LocalView.current
     val isTablet = remember(context) { context.isTabletDevice() }
     val coroutineScope = rememberCoroutineScope()
     var showWelcome by remember { mutableStateOf(shouldShowWelcome(context)) }
@@ -88,6 +92,16 @@ fun BrowserScreen(
     var availableTabletViewportPresets by remember { mutableStateOf(TABLET_VIEWPORT_PRESETS) }
     val isIn3DInspector by handlerContext.isIn3DInspectorFlow.collectAsState()
     var inspectorMode by remember { mutableStateOf("rotate") }
+    val keyboardObserver = remember(composeView.rootView) { KeyboardObserver(composeView.rootView) }
+
+    DisposableEffect(keyboardObserver) {
+        handlerContext.keyboardObserver = keyboardObserver
+        onDispose {
+            if (handlerContext.keyboardObserver === keyboardObserver) {
+                handlerContext.keyboardObserver = null
+            }
+        }
+    }
 
     suspend fun toggle3DInspector() {
         if (handlerContext.isIn3DInspector) {

@@ -448,6 +448,8 @@ Response:
 
 ## Keyboard & Viewport Simulation
 
+On Android, keyboard visibility and height are derived from live `WindowInsets` observation. Kelpie computes keyboard height as `ime.bottom - navigationBars.bottom`, clamps it at zero, and converts reported heights and visible viewport dimensions to dp.
+
 ### `showKeyboard`
 Programmatically show the soft keyboard by focusing an input element. Simulates a real user tapping a text field — the keyboard appears, the viewport shrinks, and the page reflows exactly as it would on a real device. Essential for testing that form fields remain visible and accessible when the keyboard is open.
 

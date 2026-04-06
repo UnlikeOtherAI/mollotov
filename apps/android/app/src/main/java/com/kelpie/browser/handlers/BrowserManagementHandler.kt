@@ -151,15 +151,49 @@ class BrowserManagementHandler(
         if (selector != null) {
             ctx.evaluateJS("document.querySelector('${selector.replace("'", "\\'")}')?.focus()")
         }
-        return successResponse(mapOf("keyboardVisible" to true))
+        val state = keyboardStatePayload()
+        return successResponse(
+            mapOf(
+                "keyboardVisible" to state["visible"],
+                "keyboardHeight" to state["height"],
+                "visibleViewport" to state["visibleViewport"],
+            ),
+        )
     }
 
     private suspend fun hideKeyboard(): Map<String, Any?> {
         ctx.evaluateJS("document.activeElement?.blur()")
-        return successResponse(mapOf("keyboardVisible" to false))
+        val state = keyboardStatePayload()
+        return successResponse(
+            mapOf(
+                "keyboardVisible" to state["visible"],
+                "keyboardHeight" to state["height"],
+                "visibleViewport" to state["visibleViewport"],
+            ),
+        )
     }
 
-    private fun getKeyboardState(): Map<String, Any?> = successResponse(mapOf("visible" to false, "height" to 0, "type" to "default"))
+    private fun getKeyboardState(): Map<String, Any?> = successResponse(keyboardStatePayload())
+
+    private fun keyboardStatePayload(): Map<String, Any?> {
+        val keyboardObserver = ctx.keyboardObserver
+        val displayMetrics = appContext.resources.displayMetrics
+        val density = displayMetrics.density
+        val keyboardHeightPx = keyboardObserver?.height ?: 0
+        val viewportWidthDp = (displayMetrics.widthPixels / density).toInt()
+        val viewportHeightDp = ((displayMetrics.heightPixels - keyboardHeightPx).coerceAtLeast(0) / density).toInt()
+
+        return mapOf(
+            "visible" to (keyboardObserver?.isVisible ?: false),
+            "height" to (keyboardHeightPx / density).toInt(),
+            "type" to "default",
+            "visibleViewport" to
+                mapOf(
+                    "width" to viewportWidthDp,
+                    "height" to viewportHeightDp,
+                ),
+        )
+    }
 
     private fun resizeViewport(body: Map<String, Any?>): Map<String, Any?> {
         val w = (body["width"] as? Int) ?: 360
