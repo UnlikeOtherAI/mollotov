@@ -276,11 +276,41 @@ class BrowserManagementHandler(
         val js =
             "(function(){var el=document.querySelector('$safe');if(!el)return null;" +
                 "var r=el.getBoundingClientRect();" +
-                "return{element:{selector:'$safe',rect:{x:r.x,y:r.y,width:r.width,height:r.height}}," +
-                "obscured:false,reason:null};})()"
+                "return{x:r.x,y:r.y,width:r.width,height:r.height,bottom:r.bottom};})()"
         return try {
-            val result = ctx.evaluateJSReturningJSON(js)
-            if (result.isEmpty()) errorResponse("ELEMENT_NOT_FOUND", "Element not found") else successResponse(result)
+            val rect = ctx.evaluateJSReturningJSON(js)
+            if (rect.isEmpty()) return errorResponse("ELEMENT_NOT_FOUND", "Element not found")
+
+            val elementBottomCss = (rect["bottom"] as? Number)?.toDouble() ?: 0.0
+            val elementRect =
+                mapOf(
+                    "x" to rect["x"],
+                    "y" to rect["y"],
+                    "width" to rect["width"],
+                    "height" to rect["height"],
+                )
+
+            val keyboardObserver = ctx.keyboardObserver
+            val displayMetrics = appContext.resources.displayMetrics
+            val density = displayMetrics.density
+            val screenHeightDp = displayMetrics.heightPixels / density
+            val keyboardHeightPx = keyboardObserver?.height ?: 0
+            val keyboardHeightDp = keyboardHeightPx / density
+            val visibleHeightDp = screenHeightDp - keyboardHeightDp
+
+            val keyboardVisible = keyboardObserver?.isVisible ?: false
+            val obscured = keyboardVisible && elementBottomCss > visibleHeightDp
+            val overlapDp = if (obscured) (elementBottomCss - visibleHeightDp).toInt() else null
+
+            successResponse(
+                mapOf(
+                    "element" to mapOf("selector" to safe, "rect" to elementRect),
+                    "obscured" to obscured,
+                    "reason" to if (obscured) "keyboard" else null,
+                    "keyboardOverlap" to overlapDp,
+                    "suggestion" to if (obscured) "scroll-into-view" else null,
+                ),
+            )
         } catch (e: Exception) {
             errorResponse("EVAL_ERROR", e.message ?: "Unknown error")
         }
