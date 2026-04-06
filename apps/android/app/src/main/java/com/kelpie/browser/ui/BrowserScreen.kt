@@ -200,6 +200,7 @@ fun BrowserScreen(
                         ) {
                             WebViewContainer(
                                 browserState = browserState,
+                                dialogState = handlerContext.dialogState,
                                 handlerContext = handlerContext,
                                 modifier = Modifier.fillMaxSize(),
                                 onWebViewCreated = { wv ->
@@ -212,6 +213,7 @@ fun BrowserScreen(
                     } else {
                         WebViewContainer(
                             browserState = browserState,
+                            dialogState = handlerContext.dialogState,
                             handlerContext = handlerContext,
                             modifier = Modifier.fillMaxSize(),
                             onWebViewCreated = { wv ->

@@ -42,9 +42,9 @@ class BrowserManagementHandler(
         router.register("switch-to-main") { successResponse(mapOf("context" to "main")) }
         router.register("get-iframe-context") { successResponse(mapOf("context" to "main")) }
         // Dialogs
-        router.register("get-dialog") { successResponse(mapOf("showing" to false, "dialog" to null)) }
-        router.register("handle-dialog") { successResponse(mapOf("action" to (it["action"] ?: "accept"), "dialogType" to "none")) }
-        router.register("set-dialog-auto-handler") { successResponse(mapOf("enabled" to (it["enabled"] ?: true))) }
+        router.register("get-dialog") { getDialog() }
+        router.register("handle-dialog") { handleDialog(it) }
+        router.register("set-dialog-auto-handler") { setDialogAutoHandler(it) }
         // Tabs (stub)
         router.register("get-tabs") { getTabs() }
         router.register("new-tab") { successResponse(mapOf("tab" to mapOf("id" to 0, "url" to (it["url"] ?: ""), "title" to "", "active" to true), "tabCount" to 1)) }
@@ -269,6 +269,46 @@ class BrowserManagementHandler(
     private fun switchToIframe(body: Map<String, Any?>): Map<String, Any?> {
         val id = (body["iframeId"] as? Int) ?: 0
         return successResponse(mapOf("iframe" to mapOf("id" to id, "src" to ""), "context" to "iframe"))
+    }
+
+    private fun getDialog(): Map<String, Any?> {
+        val dialog = ctx.dialogState.current ?: return successResponse(mapOf("showing" to false, "dialog" to null))
+        return successResponse(
+            mapOf(
+                "showing" to true,
+                "dialog" to
+                    mapOf(
+                        "type" to dialog.type,
+                        "message" to dialog.message,
+                        "defaultValue" to dialog.defaultText,
+                    ),
+            ),
+        )
+    }
+
+    private fun handleDialog(body: Map<String, Any?>): Map<String, Any?> {
+        val action = body["action"] as? String ?: "accept"
+        val text = body["promptText"] as? String ?: body["text"] as? String
+        val handled = ctx.dialogState.handle(action, text) ?: return errorResponse("NO_DIALOG", "No dialog is currently showing")
+        return successResponse(
+            mapOf(
+                "action" to action,
+                "dialogType" to handled.type,
+            ),
+        )
+    }
+
+    private fun setDialogAutoHandler(body: Map<String, Any?>): Map<String, Any?> {
+        val enabled = body["enabled"] as? Boolean ?: true
+        val defaultAction = body["defaultAction"] as? String ?: "accept"
+        ctx.dialogState.autoHandler =
+            if (enabled && defaultAction != "queue") {
+                defaultAction
+            } else {
+                null
+            }
+        ctx.dialogState.autoPromptText = body["promptText"] as? String ?: ""
+        return successResponse(mapOf("enabled" to enabled))
     }
 
     private suspend fun getTabs(): Map<String, Any?> {

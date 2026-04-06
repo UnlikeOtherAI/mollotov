@@ -15,6 +15,7 @@ import com.kelpie.browser.devtools.ConsoleHandler
 @Composable
 fun WebViewContainer(
     browserState: BrowserState,
+    dialogState: DialogState,
     handlerContext: com.kelpie.browser.handlers.HandlerContext? = null,
     modifier: Modifier = Modifier,
     consoleHandler: ConsoleHandler? = null,
@@ -44,6 +45,7 @@ fun WebViewContainer(
                             url: String,
                             favicon: Bitmap?,
                         ) {
+                            dialogState.dismissPending()
                             browserState.updateUrl(url)
                             browserState.updateLoading(true)
                             handlerContext?.mark3DInspectorInactive()
@@ -103,6 +105,61 @@ fun WebViewContainer(
                             newProgress: Int,
                         ) {
                             browserState.updateProgress(newProgress)
+                        }
+
+                        override fun onJsAlert(
+                            view: WebView,
+                            url: String?,
+                            message: String?,
+                            result: android.webkit.JsResult,
+                        ): Boolean {
+                            dialogState.enqueue(
+                                DialogState.PendingDialog(
+                                    type = "alert",
+                                    message = message.orEmpty(),
+                                    defaultText = null,
+                                    jsResult = result,
+                                    jsPromptResult = null,
+                                ),
+                            )
+                            return true
+                        }
+
+                        override fun onJsConfirm(
+                            view: WebView,
+                            url: String?,
+                            message: String?,
+                            result: android.webkit.JsResult,
+                        ): Boolean {
+                            dialogState.enqueue(
+                                DialogState.PendingDialog(
+                                    type = "confirm",
+                                    message = message.orEmpty(),
+                                    defaultText = null,
+                                    jsResult = result,
+                                    jsPromptResult = null,
+                                ),
+                            )
+                            return true
+                        }
+
+                        override fun onJsPrompt(
+                            view: WebView,
+                            url: String?,
+                            message: String?,
+                            defaultValue: String?,
+                            result: android.webkit.JsPromptResult,
+                        ): Boolean {
+                            dialogState.enqueue(
+                                DialogState.PendingDialog(
+                                    type = "prompt",
+                                    message = message.orEmpty(),
+                                    defaultText = defaultValue,
+                                    jsResult = null,
+                                    jsPromptResult = result,
+                                ),
+                            )
+                            return true
                         }
                     }
 

@@ -281,7 +281,7 @@ On iPad, the same help actions are also exposed directly from the app menu, imme
 
 ## Dialogs
 
-Detect, accept, or dismiss JavaScript alerts, confirms, and prompts. Configure auto-handling (always accept, always dismiss, or queue for manual decision).
+Detect, accept, or dismiss JavaScript alerts, confirms, and prompts. Configure auto-handling (always accept, always dismiss, or queue for manual decision). Queued dialogs are cleared if a new navigation starts so the browser never stays blocked on a stale native dialog callback.
 
 ## Request Interception (Android)
 

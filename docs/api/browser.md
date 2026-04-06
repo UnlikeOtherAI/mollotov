@@ -64,6 +64,8 @@ Response:
 
 When set to `"queue"`, dialogs are captured and returned by `getDialog` instead of being auto-handled.
 
+Queued dialogs are tied to the current page. If a new navigation starts before the dialog is handled, Kelpie dismisses the pending dialog to avoid leaving the WebView blocked on a stale result.
+
 ---
 
 ## Tabs

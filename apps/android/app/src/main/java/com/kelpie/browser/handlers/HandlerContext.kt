@@ -3,6 +3,7 @@ package com.kelpie.browser.handlers
 import android.os.Handler
 import android.os.Looper
 import android.webkit.WebView
+import com.kelpie.browser.browser.DialogState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.json.Json
@@ -20,6 +21,7 @@ private val json =
 private val mainHandler = Handler(Looper.getMainLooper())
 
 class HandlerContext {
+    val dialogState = DialogState()
     var webView: WebView? = null
     val chromeAuth =
         com.kelpie.browser.browser

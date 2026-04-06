@@ -137,6 +137,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        handlerContext.dialogState.dismissPending()
         super.onDestroy()
         httpServer?.stop()
         mdnsAdvertiser?.unregister()
