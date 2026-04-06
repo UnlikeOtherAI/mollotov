@@ -2,7 +2,6 @@ package com.kelpie.browser.network
 
 import android.util.Log
 import io.ktor.http.ContentType
-import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.call
@@ -28,9 +27,12 @@ import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 
-private val json = Json { ignoreUnknownKeys = true; isLenient = true }
+private val json =
+    Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+    }
 
 class HTTPServer(
     private val port: Int,
@@ -41,34 +43,35 @@ class HTTPServer(
         private set
 
     fun start() {
-        engine = embeddedServer(Netty, port = port) {
-            install(ContentNegotiation) { json(json) }
+        engine =
+            embeddedServer(Netty, port = port) {
+                install(ContentNegotiation) { json(json) }
 
-            routing {
-                get("/health") {
-                    call.respondText("""{"status":"ok"}""", ContentType.Application.Json)
+                routing {
+                    get("/health") {
+                        call.respondText("""{"status":"ok"}""", ContentType.Application.Json)
+                    }
+
+                    post("/v1/{method}") {
+                        val method = call.parameters["method"] ?: ""
+                        val bodyText = call.receiveText()
+                        val body = parseJsonBody(bodyText)
+
+                        val (status, result) = router.handle(method, body)
+                        val responseJson = mapToJsonString(result)
+
+                        call.respondText(
+                            text = responseJson,
+                            contentType = ContentType.Application.Json,
+                            status = HttpStatusCode.fromValue(status),
+                        )
+                    }
                 }
-
-                post("/v1/{method}") {
-                    val method = call.parameters["method"] ?: ""
-                    val bodyText = call.receiveText()
-                    val body = parseJsonBody(bodyText)
-
-                    val (status, result) = router.handle(method, body)
-                    val responseJson = mapToJsonString(result)
-
-                    call.respondText(
-                        text = responseJson,
-                        contentType = ContentType.Application.Json,
-                        status = HttpStatusCode.fromValue(status),
-                    )
-                }
+            }.also {
+                it.start(wait = false)
+                isRunning = true
+                Log.i("HTTPServer", "Started on port $port")
             }
-        }.also {
-            it.start(wait = false)
-            isRunning = true
-            Log.i("HTTPServer", "Started on port $port")
-        }
     }
 
     fun stop() {
@@ -87,41 +90,39 @@ class HTTPServer(
         }
     }
 
-    private fun jsonObjectToMap(obj: JsonObject): Map<String, Any?> =
-        obj.entries.associate { (k, v) -> k to jsonElementToAny(v) }
+    private fun jsonObjectToMap(obj: JsonObject): Map<String, Any?> = obj.entries.associate { (k, v) -> k to jsonElementToAny(v) }
 
-    private fun jsonElementToAny(element: JsonElement): Any? = when (element) {
-        is JsonNull -> null
-        is JsonPrimitive -> when {
-            element.isString -> element.content
-            element.booleanOrNull != null -> element.boolean
-            element.intOrNull != null -> element.int
-            element.doubleOrNull != null -> element.double
-            else -> element.content
+    private fun jsonElementToAny(element: JsonElement): Any? =
+        when (element) {
+            is JsonNull -> null
+            is JsonPrimitive ->
+                when {
+                    element.isString -> element.content
+                    element.booleanOrNull != null -> element.boolean
+                    element.intOrNull != null -> element.int
+                    element.doubleOrNull != null -> element.double
+                    else -> element.content
+                }
+            is JsonObject -> jsonObjectToMap(element)
+            is kotlinx.serialization.json.JsonArray -> element.map { jsonElementToAny(it) }
         }
-        is JsonObject -> jsonObjectToMap(element)
-        is kotlinx.serialization.json.JsonArray -> element.map { jsonElementToAny(it) }
-    }
 
-    private fun mapToJsonString(map: Map<String, Any?>): String {
-        return json.encodeToString(JsonElement.serializer(), mapToJsonElement(map))
-    }
+    private fun mapToJsonString(map: Map<String, Any?>): String = json.encodeToString(JsonElement.serializer(), mapToJsonElement(map))
 
-    private fun mapToJsonElement(map: Map<String, Any?>): JsonElement {
-        return JsonObject(map.entries.associate { (k, v) -> k to anyToJsonElement(v) })
-    }
+    private fun mapToJsonElement(map: Map<String, Any?>): JsonElement = JsonObject(map.entries.associate { (k, v) -> k to anyToJsonElement(v) })
 
     @Suppress("UNCHECKED_CAST")
-    private fun anyToJsonElement(value: Any?): JsonElement = when (value) {
-        null -> JsonNull
-        is Boolean -> JsonPrimitive(value)
-        is Int -> JsonPrimitive(value)
-        is Long -> JsonPrimitive(value)
-        is Double -> JsonPrimitive(value)
-        is Float -> JsonPrimitive(value)
-        is String -> JsonPrimitive(value)
-        is Map<*, *> -> mapToJsonElement(value as Map<String, Any?>)
-        is List<*> -> kotlinx.serialization.json.JsonArray(value.map { anyToJsonElement(it) })
-        else -> JsonPrimitive(value.toString())
-    }
+    private fun anyToJsonElement(value: Any?): JsonElement =
+        when (value) {
+            null -> JsonNull
+            is Boolean -> JsonPrimitive(value)
+            is Int -> JsonPrimitive(value)
+            is Long -> JsonPrimitive(value)
+            is Double -> JsonPrimitive(value)
+            is Float -> JsonPrimitive(value)
+            is String -> JsonPrimitive(value)
+            is Map<*, *> -> mapToJsonElement(value as Map<String, Any?>)
+            is List<*> -> kotlinx.serialization.json.JsonArray(value.map { anyToJsonElement(it) })
+            else -> JsonPrimitive(value.toString())
+        }
 }

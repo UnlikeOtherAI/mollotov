@@ -9,15 +9,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -45,11 +44,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.kelpie.browser.FeatureFlags
 import com.kelpie.browser.browser.BrowserState
 import com.kelpie.browser.browser.HistoryStore
 import com.kelpie.browser.browser.WebViewContainer
 import com.kelpie.browser.device.DeviceInfo
-import com.kelpie.browser.FeatureFlags
 import com.kelpie.browser.handlers.HandlerContext
 import com.kelpie.browser.handlers.Snapshot3DBridge
 import com.kelpie.browser.network.Router
@@ -158,20 +157,22 @@ fun BrowserScreen(
             )
 
             BoxWithConstraints(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
             ) {
                 val fittingPresets = tabletViewportPresetsThatFit(maxWidth = maxWidth, maxHeight = maxHeight)
                 val selectedPreset = fittingPresets.firstOrNull { it.id == tabletMobileStagePresetId }
                 val mobileStageActive = selectedPreset != null
-                val stageSize = selectedPreset?.let {
-                    tabletMobileStageSize(
-                        preset = it,
-                        maxWidth = maxWidth,
-                        maxHeight = maxHeight,
-                    )
-                }
+                val stageSize =
+                    selectedPreset?.let {
+                        tabletMobileStageSize(
+                            preset = it,
+                            maxWidth = maxWidth,
+                            maxHeight = maxHeight,
+                        )
+                    }
 
                 LaunchedEffect(maxWidth, maxHeight) {
                     availableTabletViewportPresets = fittingPresets
@@ -183,11 +184,12 @@ fun BrowserScreen(
                 }
 
                 Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            if (mobileStageActive) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.background,
-                        ),
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .background(
+                                if (mobileStageActive) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.background,
+                            ),
                     contentAlignment = Alignment.Center,
                 ) {
                     if (mobileStageActive && stageSize != null) {
@@ -251,9 +253,10 @@ fun BrowserScreen(
             show3DInspector = FeatureFlags.is3DInspectorEnabled(context),
             showMobileViewportToggle = isTablet,
             mobileViewportPresets = availableTabletViewportPresets,
-            selectedMobileViewportPresetId = availableTabletViewportPresets
-                .firstOrNull { it.id == tabletMobileStagePresetId }
-                ?.id,
+            selectedMobileViewportPresetId =
+                availableTabletViewportPresets
+                    .firstOrNull { it.id == tabletMobileStagePresetId }
+                    ?.id,
             onSelectMobileViewportPreset = { presetId ->
                 val nextPresetId = if (tabletMobileStagePresetId == presetId) null else presetId
                 TabletViewportPresetStore.setSelectedPresetId(nextPresetId)
@@ -262,9 +265,10 @@ fun BrowserScreen(
 
         if (isIn3DInspector) {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(bottom = 88.dp),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(bottom = 88.dp),
                 contentAlignment = Alignment.BottomCenter,
             ) {
                 Inspector3DControlsBar(
@@ -390,9 +394,10 @@ fun BrowserScreen(
 @Composable
 private fun AIStatusSheet(onDismiss: () -> Unit) {
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 16.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 16.dp),
     ) {
         Text("Local AI", style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.size(12.dp))
@@ -408,11 +413,12 @@ private fun AIStatusSheet(onDismiss: () -> Unit) {
         }
         Spacer(Modifier.size(12.dp))
         Text(
-            text = if (com.kelpie.browser.ai.AIState.isAvailable) {
-                "AI is available from the browser shell and the HTTP API."
-            } else {
-                "Platform AI is unavailable on this device right now. You can still load an Ollama model over the API."
-            },
+            text =
+                if (com.kelpie.browser.ai.AIState.isAvailable) {
+                    "AI is available from the browser shell and the HTTP API."
+                } else {
+                    "Platform AI is unavailable on this device right now. You can still load an Ollama model over the API."
+                },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -424,7 +430,10 @@ private fun AIStatusSheet(onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun AIInfoRow(label: String, value: String) {
+private fun AIInfoRow(
+    label: String,
+    value: String,
+) {
     Row(modifier = Modifier.fillMaxWidth()) {
         Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.weight(1f))
@@ -432,8 +441,7 @@ private fun AIInfoRow(label: String, value: String) {
     }
 }
 
-private fun Context.isTabletDevice(): Boolean =
-    resources.configuration.smallestScreenWidthDp >= 600
+private fun Context.isTabletDevice(): Boolean = resources.configuration.smallestScreenWidthDp >= 600
 
 @Composable
 private fun TabletViewportStage(
@@ -443,40 +451,45 @@ private fun TabletViewportStage(
     content: @Composable () -> Unit,
 ) {
     Column(
-        modifier = Modifier
-            .size(stageSize.first, stageSize.second + 48.dp),
+        modifier =
+            Modifier
+                .size(stageSize.first, stageSize.second + 48.dp),
     ) {
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .size(height = 38.dp, width = stageSize.first),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .size(height = 38.dp, width = stageSize.first),
         ) {
             Text(
                 text = "${preset.displaySizeLabel} • ${preset.pixelResolutionLabel}",
                 color = Color.White,
                 fontSize = 11.sp,
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(Color.Black.copy(alpha = 0.9f))
-                    .border(1.dp, Color.White.copy(alpha = 0.9f), RoundedCornerShape(18.dp))
-                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                modifier =
+                    Modifier
+                        .align(Alignment.Center)
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(Color.Black.copy(alpha = 0.9f))
+                        .border(1.dp, Color.White.copy(alpha = 0.9f), RoundedCornerShape(18.dp))
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
             )
 
             Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(start = 0.dp),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(start = 0.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(
                     contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .size(34.dp)
-                        .clip(CircleShape)
-                        .background(Color.Black.copy(alpha = 0.9f))
-                        .border(1.dp, Color.White.copy(alpha = 0.9f), CircleShape)
-                        .clickable { onClose() },
+                    modifier =
+                        Modifier
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .background(Color.Black.copy(alpha = 0.9f))
+                            .border(1.dp, Color.White.copy(alpha = 0.9f), CircleShape)
+                            .clickable { onClose() },
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Close,
@@ -490,16 +503,18 @@ private fun TabletViewportStage(
         }
 
         Box(
-            modifier = Modifier
-                .padding(top = 10.dp)
-                .size(stageSize.first, stageSize.second)
-                .shadow(18.dp, RoundedCornerShape(26.dp)),
+            modifier =
+                Modifier
+                    .padding(top = 10.dp)
+                    .size(stageSize.first, stageSize.second)
+                    .shadow(18.dp, RoundedCornerShape(26.dp)),
         ) {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(26.dp))
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f), RoundedCornerShape(26.dp)),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(26.dp))
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f), RoundedCornerShape(26.dp)),
             ) {
                 content()
             }

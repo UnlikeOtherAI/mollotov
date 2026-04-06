@@ -15,8 +15,12 @@ object FeatureFlags {
         }
     }
 
-    fun set3DInspectorEnabled(context: Context, enabled: Boolean) {
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    fun set3DInspectorEnabled(
+        context: Context,
+        enabled: Boolean,
+    ) {
+        context
+            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
             .putBoolean(KEY_ENABLE_3D_INSPECTOR, enabled)
             .apply()

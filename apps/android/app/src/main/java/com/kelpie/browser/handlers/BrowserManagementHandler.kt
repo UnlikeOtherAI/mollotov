@@ -3,15 +3,18 @@ package com.kelpie.browser.handlers
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import androidx.compose.ui.unit.dp
 import com.kelpie.browser.network.Router
 import com.kelpie.browser.network.errorResponse
 import com.kelpie.browser.network.successResponse
 import com.kelpie.browser.ui.TabletViewportPresetStore
 import com.kelpie.browser.ui.tabletMobileStageSize
 import com.kelpie.browser.ui.tabletViewportPreset
-import androidx.compose.ui.unit.dp
 
-class BrowserManagementHandler(private val ctx: HandlerContext, private val appContext: Context) {
+class BrowserManagementHandler(
+    private val ctx: HandlerContext,
+    private val appContext: Context,
+) {
     fun register(router: Router) {
         // Cookies
         router.register("get-cookies") { getCookies(it) }
@@ -57,11 +60,16 @@ class BrowserManagementHandler(private val ctx: HandlerContext, private val appC
 
     private suspend fun getCookies(body: Map<String, Any?>): Map<String, Any?> {
         val name = body["name"] as? String
-        val js = if (name != null) {
-            "(function(){var cookies=document.cookie.split(';').map(function(c){var p=c.trim().split('=');return{name:p[0],value:p.slice(1).join('='),domain:location.hostname,path:'/'};}).filter(function(c){return c.name==='${name.replace("'", "\\'")}';});return{cookies:cookies,count:cookies.length};})()"
-        } else {
-            "(function(){var cookies=document.cookie.split(';').filter(Boolean).map(function(c){var p=c.trim().split('=');return{name:p[0],value:p.slice(1).join('='),domain:location.hostname,path:'/'};});return{cookies:cookies,count:cookies.length};})()"
-        }
+        val js =
+            if (name != null) {
+                "(function(){var cookies=document.cookie.split(';').map(function(c){" +
+                    "var p=c.trim().split('=');" +
+                    "return{name:p[0],value:p.slice(1).join('='),domain:location.hostname,path:'/'};}" +
+                    ").filter(function(c){return c.name==='${name.replace("'", "\\'")}';});" +
+                    "return{cookies:cookies,count:cookies.length};})()"
+            } else {
+                "(function(){var cookies=document.cookie.split(';').filter(Boolean).map(function(c){var p=c.trim().split('=');return{name:p[0],value:p.slice(1).join('='),domain:location.hostname,path:'/'};});return{cookies:cookies,count:cookies.length};})()"
+            }
         return try {
             successResponse(ctx.evaluateJSReturningJSON(js))
         } catch (e: Exception) {
@@ -92,11 +100,12 @@ class BrowserManagementHandler(private val ctx: HandlerContext, private val appC
         val type = body["type"] as? String ?: "local"
         val key = body["key"] as? String
         val storage = if (type == "session") "sessionStorage" else "localStorage"
-        val js = if (key != null) {
-            "({entries:{'${key.replace("'", "\\'")}':$storage.getItem('${key.replace("'", "\\'")}')},count:1,type:'$type'})"
-        } else {
-            "(function(){var e={};for(var i=0;i<$storage.length;i++){var k=$storage.key(i);e[k]=$storage.getItem(k);}return{entries:e,count:$storage.length,type:'$type'};})()"
-        }
+        val js =
+            if (key != null) {
+                "({entries:{'${key.replace("'", "\\'")}':$storage.getItem('${key.replace("'", "\\'")}')},count:1,type:'$type'})"
+            } else {
+                "(function(){var e={};for(var i=0;i<$storage.length;i++){var k=$storage.key(i);e[k]=$storage.getItem(k);}return{entries:e,count:$storage.length,type:'$type'};})()"
+            }
         return try {
             successResponse(ctx.evaluateJSReturningJSON(js))
         } catch (e: Exception) {
@@ -122,7 +131,11 @@ class BrowserManagementHandler(private val ctx: HandlerContext, private val appC
 
     private fun getClipboard(): Map<String, Any?> {
         val cm = appContext.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val text = cm.primaryClip?.getItemAt(0)?.text?.toString() ?: ""
+        val text =
+            cm.primaryClip
+                ?.getItemAt(0)
+                ?.text
+                ?.toString() ?: ""
         return successResponse(mapOf("text" to text, "hasImage" to false))
     }
 
@@ -152,34 +165,41 @@ class BrowserManagementHandler(private val ctx: HandlerContext, private val appC
         val w = (body["width"] as? Int) ?: 360
         val h = (body["height"] as? Int) ?: 800
         TabletViewportPresetStore.setSelectedPresetId(null)
-        return successResponse(mapOf(
-            "viewport" to mapOf("width" to w, "height" to h),
-            "activePresetId" to null,
-        ))
+        return successResponse(
+            mapOf(
+                "viewport" to mapOf("width" to w, "height" to h),
+                "activePresetId" to null,
+            ),
+        )
     }
 
     private fun resetViewport(): Map<String, Any?> {
         TabletViewportPresetStore.setSelectedPresetId(null)
-        return successResponse(mapOf(
-            "viewport" to mapOf("width" to 360, "height" to 800),
-            "activePresetId" to null,
-        ))
+        return successResponse(
+            mapOf(
+                "viewport" to mapOf("width" to 360, "height" to 800),
+                "activePresetId" to null,
+            ),
+        )
     }
 
     private fun setViewportPreset(body: Map<String, Any?>): Map<String, Any?> {
-        val presetId = body["presetId"] as? String
-            ?: return errorResponse("MISSING_PARAM", "presetId is required")
-        val preset = tabletViewportPreset(presetId)
-            ?: return errorResponse("INVALID_PARAM", "Unknown viewport preset id: $presetId")
+        val presetId =
+            body["presetId"] as? String
+                ?: return errorResponse("MISSING_PARAM", "presetId is required")
+        val preset =
+            tabletViewportPreset(presetId)
+                ?: return errorResponse("INVALID_PARAM", "Unknown viewport preset id: $presetId")
         val availablePresetIds = TabletViewportPresetStore.availablePresetIds.value
         if (preset.id !in availablePresetIds) {
             return mapOf(
                 "success" to false,
-                "error" to mapOf(
-                    "code" to "INVALID_PARAM",
-                    "message" to "Viewport preset $presetId is not available for the current device geometry",
-                    "reason" to "unavailable",
-                ),
+                "error" to
+                    mapOf(
+                        "code" to "INVALID_PARAM",
+                        "message" to "Viewport preset $presetId is not available for the current device geometry",
+                        "reason" to "unavailable",
+                    ),
             )
         }
 
@@ -189,32 +209,41 @@ class BrowserManagementHandler(private val ctx: HandlerContext, private val appC
         }
 
         TabletViewportPresetStore.setSelectedPresetId(preset.id)
-        val viewportSize = tabletMobileStageSize(
-            preset = preset,
-            maxWidth = stageMetrics.widthDp.dp,
-            maxHeight = stageMetrics.heightDp.dp,
-        )
+        val viewportSize =
+            tabletMobileStageSize(
+                preset = preset,
+                maxWidth = stageMetrics.widthDp.dp,
+                maxHeight = stageMetrics.heightDp.dp,
+            )
         val density = appContext.resources.displayMetrics.density
 
-        return successResponse(mapOf(
-            "activePresetId" to preset.id,
-            "preset" to mapOf(
-                "id" to preset.id,
-                "name" to preset.name,
-                "inches" to preset.displaySizeLabel,
-                "pixels" to preset.pixelResolutionLabel,
+        return successResponse(
+            mapOf(
+                "activePresetId" to preset.id,
+                "preset" to
+                    mapOf(
+                        "id" to preset.id,
+                        "name" to preset.name,
+                        "inches" to preset.displaySizeLabel,
+                        "pixels" to preset.pixelResolutionLabel,
+                    ),
+                "viewport" to
+                    mapOf(
+                        "width" to (viewportSize.first.value * density).toInt(),
+                        "height" to (viewportSize.second.value * density).toInt(),
+                    ),
             ),
-            "viewport" to mapOf(
-                "width" to (viewportSize.first.value * density).toInt(),
-                "height" to (viewportSize.second.value * density).toInt(),
-            ),
-        ))
+        )
     }
 
     private suspend fun isElementObscured(body: Map<String, Any?>): Map<String, Any?> {
         val selector = body["selector"] as? String ?: return errorResponse("MISSING_PARAM", "selector is required")
         val safe = selector.replace("'", "\\'")
-        val js = "(function(){var el=document.querySelector('$safe');if(!el)return null;var r=el.getBoundingClientRect();return{element:{selector:'$safe',rect:{x:r.x,y:r.y,width:r.width,height:r.height}},obscured:false,reason:null};})()"
+        val js =
+            "(function(){var el=document.querySelector('$safe');if(!el)return null;" +
+                "var r=el.getBoundingClientRect();" +
+                "return{element:{selector:'$safe',rect:{x:r.x,y:r.y,width:r.width,height:r.height}}," +
+                "obscured:false,reason:null};})()"
         return try {
             val result = ctx.evaluateJSReturningJSON(js)
             if (result.isEmpty()) errorResponse("ELEMENT_NOT_FOUND", "Element not found") else successResponse(result)
@@ -224,7 +253,12 @@ class BrowserManagementHandler(private val ctx: HandlerContext, private val appC
     }
 
     private suspend fun getIframes(): Map<String, Any?> {
-        val js = "(function(){var frames=document.querySelectorAll('iframe');return{iframes:Array.from(frames).map(function(f,i){var r=f.getBoundingClientRect();return{id:i,src:f.src||'',name:f.name||'',selector:'iframe:nth-of-type('+(i+1)+')',rect:{x:r.x,y:r.y,width:r.width,height:r.height},visible:r.width>0&&r.height>0,crossOrigin:false};}),count:frames.length};})()"
+        val js =
+            "(function(){var frames=document.querySelectorAll('iframe');" +
+                "return{iframes:Array.from(frames).map(function(f,i){var r=f.getBoundingClientRect();" +
+                "return{id:i,src:f.src||'',name:f.name||'',selector:'iframe:nth-of-type('+(i+1)+')'," +
+                "rect:{x:r.x,y:r.y,width:r.width,height:r.height}," +
+                "visible:r.width>0&&r.height>0,crossOrigin:false};}),count:frames.length};})()"
         return try {
             successResponse(ctx.evaluateJSReturningJSON(js))
         } catch (e: Exception) {

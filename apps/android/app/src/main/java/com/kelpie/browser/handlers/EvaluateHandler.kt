@@ -5,7 +5,9 @@ import com.kelpie.browser.network.errorResponse
 import com.kelpie.browser.network.successResponse
 import kotlinx.coroutines.delay
 
-class EvaluateHandler(private val ctx: HandlerContext) {
+class EvaluateHandler(
+    private val ctx: HandlerContext,
+) {
     fun register(router: Router) {
         router.register("evaluate") { evaluate(it) }
         router.register("wait-for-element") { waitForElement(it) }
@@ -30,20 +32,27 @@ class EvaluateHandler(private val ctx: HandlerContext) {
         val start = System.currentTimeMillis()
 
         while (System.currentTimeMillis() - start < timeout) {
-            val js = "(function(){var el=document.querySelector('$safe');if(!el)return null;var r=el.getBoundingClientRect();return{tag:el.tagName.toLowerCase(),classes:Array.from(el.classList),visible:r.width>0&&r.height>0};})()"
+            val js =
+                "(function(){var el=document.querySelector('$safe');" +
+                    "if(!el)return null;var r=el.getBoundingClientRect();" +
+                    "return{tag:el.tagName.toLowerCase()," +
+                    "classes:Array.from(el.classList),visible:r.width>0&&r.height>0};})()"
             try {
                 val result = ctx.evaluateJSReturningJSON(js)
                 if (result.isNotEmpty()) {
                     val visible = result["visible"] as? Boolean ?: false
                     val matches = state == "attached" || (state == "visible" && visible) || (state == "hidden" && !visible)
                     if (matches) {
-                        return successResponse(mapOf(
-                            "element" to result,
-                            "waitTime" to (System.currentTimeMillis() - start),
-                        ))
+                        return successResponse(
+                            mapOf(
+                                "element" to result,
+                                "waitTime" to (System.currentTimeMillis() - start),
+                            ),
+                        )
                     }
                 }
-            } catch (_: Exception) {}
+            } catch (_: Exception) {
+            }
             delay(100)
         }
         return errorResponse("TIMEOUT", "Element did not reach state '$state' within ${timeout}ms")
@@ -56,11 +65,13 @@ class EvaluateHandler(private val ctx: HandlerContext) {
         while (System.currentTimeMillis() - start < timeout) {
             val result = ctx.evaluateJSReturningJSON("({readyState: document.readyState, url: location.href, title: document.title})")
             if (result["readyState"] == "complete") {
-                return successResponse(mapOf(
-                    "url" to (result["url"] ?: ""),
-                    "title" to (result["title"] ?: ""),
-                    "loadTime" to (System.currentTimeMillis() - start),
-                ))
+                return successResponse(
+                    mapOf(
+                        "url" to (result["url"] ?: ""),
+                        "title" to (result["title"] ?: ""),
+                        "loadTime" to (System.currentTimeMillis() - start),
+                    ),
+                )
             }
             delay(100)
         }

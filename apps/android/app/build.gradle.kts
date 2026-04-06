@@ -2,6 +2,14 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.serialization")
+    id("org.jlleitschuh.gradle.ktlint")
+}
+
+ktlint {
+    version.set("1.5.0")
+    android.set(true)
+    verbose.set(true)
+    outputToConsole.set(true)
 }
 
 android {
@@ -55,13 +63,14 @@ android {
 
     packaging {
         resources {
-            excludes += setOf(
-                "META-INF/INDEX.LIST",
-                "META-INF/io.netty.versions.properties",
-                "META-INF/DEPENDENCIES",
-                "META-INF/LICENSE.md",
-                "META-INF/NOTICE.md",
-            )
+            excludes +=
+                setOf(
+                    "META-INF/INDEX.LIST",
+                    "META-INF/io.netty.versions.properties",
+                    "META-INF/DEPENDENCIES",
+                    "META-INF/LICENSE.md",
+                    "META-INF/NOTICE.md",
+                )
         }
     }
 }

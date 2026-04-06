@@ -724,10 +724,11 @@ object Snapshot3DBridge {
     })();
     """
 
-    fun setModeScript(mode: String): String = """
+    fun setModeScript(mode: String): String =
+        """
     (function() {
         if (!window.__m3d || typeof window.__m3d.setMode !== 'function') return null;
-        return window.__m3d.setMode('${mode}');
+        return window.__m3d.setMode('$mode');
     })();
     """
 
@@ -738,7 +739,8 @@ object Snapshot3DBridge {
     })();
     """
 
-    fun zoomByScript(delta: Double): String = """
+    fun zoomByScript(delta: Double): String =
+        """
     (function() {
         if (!window.__m3d || typeof window.__m3d.zoomBy !== 'function') return null;
         return window.__m3d.zoomBy($delta);

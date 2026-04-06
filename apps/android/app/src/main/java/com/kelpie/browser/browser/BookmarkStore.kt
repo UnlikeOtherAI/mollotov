@@ -37,7 +37,10 @@ object BookmarkStore {
         }
     }
 
-    fun add(title: String, url: String) {
+    fun add(
+        title: String,
+        url: String,
+    ) {
         synchronized(lock) {
             NativeCore.bookmarkStoreAdd(nativeHandle, title, url)
             refreshFromNative(save = true)
@@ -58,9 +61,10 @@ object BookmarkStore {
         }
     }
 
-    fun toJSON(): List<Map<String, Any>> = _bookmarks.value.map { b ->
-        mapOf("id" to b.id, "title" to b.title, "url" to b.url, "createdAt" to b.createdAt)
-    }
+    fun toJSON(): List<Map<String, Any>> =
+        _bookmarks.value.map { b ->
+            mapOf("id" to b.id, "title" to b.title, "url" to b.url, "createdAt" to b.createdAt)
+        }
 
     private fun refreshFromNative(save: Boolean) {
         val json = NativeCore.bookmarkStoreToJson(nativeHandle)
@@ -79,12 +83,14 @@ object BookmarkStore {
         val list = mutableListOf<Bookmark>()
         for (i in 0 until arr.length()) {
             val obj = arr.getJSONObject(i)
-            list.add(Bookmark(
-                id = obj.getString("id"),
-                title = obj.getString("title"),
-                url = obj.getString("url"),
-                createdAt = obj.optString("created_at", obj.optString("createdAt", "")),
-            ))
+            list.add(
+                Bookmark(
+                    id = obj.getString("id"),
+                    title = obj.getString("title"),
+                    url = obj.getString("url"),
+                    createdAt = obj.optString("created_at", obj.optString("createdAt", "")),
+                ),
+            )
         }
         return list
     }

@@ -2,10 +2,11 @@ package com.kelpie.browser.devtools
 
 import com.kelpie.browser.handlers.HandlerContext
 import com.kelpie.browser.network.Router
-import com.kelpie.browser.network.errorResponse
 import com.kelpie.browser.network.successResponse
 
-class ConsoleHandler(private val ctx: HandlerContext) {
+class ConsoleHandler(
+    private val ctx: HandlerContext,
+) {
     private val consoleMessages = mutableListOf<Map<String, Any?>>()
 
     fun register(router: Router) {
@@ -29,10 +30,12 @@ class ConsoleHandler(private val ctx: HandlerContext) {
 
     private fun getJSErrors(): Map<String, Any?> {
         val errors = consoleMessages.filter { it["level"] == "error" }
-        return successResponse(mapOf(
-            "errors" to errors.map { it + ("type" to "console-error") },
-            "count" to errors.size,
-        ))
+        return successResponse(
+            mapOf(
+                "errors" to errors.map { it + ("type" to "console-error") },
+                "count" to errors.size,
+            ),
+        )
     }
 
     private fun clearConsole(): Map<String, Any?> {

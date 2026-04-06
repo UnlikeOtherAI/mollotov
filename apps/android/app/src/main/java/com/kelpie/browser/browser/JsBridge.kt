@@ -23,13 +23,15 @@ class JsBridge(
             }
             val map = mutableMapOf<String, Any?>()
             for (key in obj.keys()) {
-                map[key] = when {
-                    obj.isNull(key) -> null
-                    else -> obj.get(key)
-                }
+                map[key] =
+                    when {
+                        obj.isNull(key) -> null
+                        else -> obj.get(key)
+                    }
             }
             consoleHandler?.addMessage(map)
-        } catch (_: Exception) {}
+        } catch (_: Exception) {
+        }
     }
 
     @JavascriptInterface
@@ -39,7 +41,8 @@ class JsBridge(
             if (obj.optString("action") == "exit") {
                 handlerContext?.mark3DInspectorInactive()
             }
-        } catch (_: Exception) {}
+        } catch (_: Exception) {
+        }
     }
 
     @JavascriptInterface
@@ -54,21 +57,23 @@ class JsBridge(
             obj.optJSONObject("responseHeaders")?.let { h ->
                 for (k in h.keys()) respHeaders[k] = h.optString(k, "")
             }
-            val entry = TrafficEntry(
-                method = obj.optString("method", "GET").uppercase(),
-                url = obj.optString("url", ""),
-                statusCode = obj.optInt("statusCode", 0),
-                contentType = obj.optString("contentType", ""),
-                requestHeaders = reqHeaders,
-                responseHeaders = respHeaders,
-                requestBody = obj.opt("requestBody")?.toString(),
-                responseBody = obj.opt("responseBody")?.toString(),
-                duration = obj.optInt("duration", 0),
-                size = obj.optInt("size", 0),
-                initiator = "js",
-            )
+            val entry =
+                TrafficEntry(
+                    method = obj.optString("method", "GET").uppercase(),
+                    url = obj.optString("url", ""),
+                    statusCode = obj.optInt("statusCode", 0),
+                    contentType = obj.optString("contentType", ""),
+                    requestHeaders = reqHeaders,
+                    responseHeaders = respHeaders,
+                    requestBody = obj.opt("requestBody")?.toString(),
+                    responseBody = obj.opt("responseBody")?.toString(),
+                    duration = obj.optInt("duration", 0),
+                    size = obj.optInt("size", 0),
+                    initiator = "js",
+                )
             NetworkTrafficStore.append(entry)
-        } catch (_: Exception) {}
+        } catch (_: Exception) {
+        }
     }
 
     companion object {

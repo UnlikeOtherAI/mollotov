@@ -57,10 +57,13 @@ fun BookmarksSheet(
             LazyColumn {
                 items(bookmarks, key = { it.id }) { bookmark ->
                     Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onNavigate(bookmark.url); onDismiss() }
-                            .padding(vertical = 8.dp),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    onNavigate(bookmark.url)
+                                    onDismiss()
+                                }.padding(vertical = 8.dp),
                     ) {
                         Text(bookmark.title, style = MaterialTheme.typography.bodyMedium)
                         Text(bookmark.url, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)

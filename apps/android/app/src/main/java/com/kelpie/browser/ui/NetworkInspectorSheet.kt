@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -65,11 +64,14 @@ fun NetworkInspectorSheet(onDismiss: () -> Unit) {
             )
             Spacer(Modifier.height(8.dp))
 
-            val filtered = entries.withIndex().filter { (_, e) ->
-                (methodFilter == null || e.method == methodFilter) &&
-                    (categoryFilter == null || e.category == categoryFilter) &&
-                    (initiatorFilter == null || e.initiator == initiatorFilter)
-            }.toList()
+            val filtered =
+                entries
+                    .withIndex()
+                    .filter { (_, e) ->
+                        (methodFilter == null || e.method == methodFilter) &&
+                            (categoryFilter == null || e.category == categoryFilter) &&
+                            (initiatorFilter == null || e.initiator == initiatorFilter)
+                    }.toList()
 
             if (filtered.isEmpty()) {
                 Text("No requests captured yet, including the page document.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -78,13 +80,13 @@ fun NetworkInspectorSheet(onDismiss: () -> Unit) {
                     items(filtered.size) { i ->
                         val (idx, entry) = filtered[i]
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    selectedEntry = idx to entry
-                                    NetworkTrafficStore.select(idx)
-                                }
-                                .padding(vertical = 6.dp),
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        selectedEntry = idx to entry
+                                        NetworkTrafficStore.select(idx)
+                                    }.padding(vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
@@ -146,7 +148,10 @@ private fun FilterRow(
                 methodOptions.forEach { option ->
                     DropdownMenuItem(
                         text = { Text(option ?: "All Methods") },
-                        onClick = { onMethodFilterChange(option); methodExpanded = false },
+                        onClick = {
+                            onMethodFilterChange(option)
+                            methodExpanded = false
+                        },
                     )
                 }
             }
@@ -159,7 +164,10 @@ private fun FilterRow(
                 categoryOptions.forEach { option ->
                     DropdownMenuItem(
                         text = { Text(option ?: "All Types") },
-                        onClick = { onCategoryFilterChange(option); categoryExpanded = false },
+                        onClick = {
+                            onCategoryFilterChange(option)
+                            categoryExpanded = false
+                        },
                     )
                 }
             }
@@ -172,7 +180,10 @@ private fun FilterRow(
                 initiatorOptions.forEach { (value, label) ->
                     DropdownMenuItem(
                         text = { Text(label) },
-                        onClick = { onInitiatorFilterChange(value); initiatorExpanded = false },
+                        onClick = {
+                            onInitiatorFilterChange(value)
+                            initiatorExpanded = false
+                        },
                     )
                 }
             }
@@ -181,7 +192,11 @@ private fun FilterRow(
 }
 
 @Composable
-private fun NetworkDetailContent(entry: TrafficEntry, index: Int, onBack: () -> Unit) {
+private fun NetworkDetailContent(
+    entry: TrafficEntry,
+    index: Int,
+    onBack: () -> Unit,
+) {
     Column {
         TextButton(onClick = onBack) { Text("< Back") }
         Text("Request #$index", style = MaterialTheme.typography.titleSmall)
@@ -211,40 +226,47 @@ private fun NetworkDetailContent(entry: TrafficEntry, index: Int, onBack: () -> 
 }
 
 @Composable
-private fun DetailRow(label: String, value: String) {
+private fun DetailRow(
+    label: String,
+    value: String,
+) {
     Column(modifier = Modifier.padding(vertical = 2.dp)) {
         Text(label, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(value, fontSize = 12.sp)
     }
 }
 
-private fun methodColor(method: String): Color = when (method) {
-    "GET" -> Color(0xFF2196F3)
-    "POST" -> Color(0xFF4CAF50)
-    "PUT" -> Color(0xFFFF9800)
-    "DELETE" -> Color(0xFFF44336)
-    "OPTIONS" -> Color(0xFF9C27B0)
-    else -> Color.Gray
-}
+private fun methodColor(method: String): Color =
+    when (method) {
+        "GET" -> Color(0xFF2196F3)
+        "POST" -> Color(0xFF4CAF50)
+        "PUT" -> Color(0xFFFF9800)
+        "DELETE" -> Color(0xFFF44336)
+        "OPTIONS" -> Color(0xFF9C27B0)
+        else -> Color.Gray
+    }
 
-private fun statusColor(code: Int): Color = when (code) {
-    in 200..299 -> Color(0xFF4CAF50)
-    in 300..399 -> Color(0xFFFF9800)
-    in 400..599 -> Color(0xFFF44336)
-    else -> Color.Gray
-}
+private fun statusColor(code: Int): Color =
+    when (code) {
+        in 200..299 -> Color(0xFF4CAF50)
+        in 300..399 -> Color(0xFFFF9800)
+        in 400..599 -> Color(0xFFF44336)
+        else -> Color.Gray
+    }
 
-private fun shortenUrl(url: String): String {
-    return try {
+private fun shortenUrl(url: String): String =
+    try {
         val u = java.net.URL(url)
         val path = u.path.ifEmpty { "/" }
         val query = u.query?.let { "?$it" } ?: ""
         path + query
-    } catch (_: Exception) { url }
-}
+    } catch (_: Exception) {
+        url
+    }
 
-private fun formatBytes(bytes: Int): String = when {
-    bytes < 1024 -> "${bytes}B"
-    bytes < 1024 * 1024 -> "${bytes / 1024}KB"
-    else -> String.format("%.1fMB", bytes / 1024.0 / 1024.0)
-}
+private fun formatBytes(bytes: Int): String =
+    when {
+        bytes < 1024 -> "${bytes}B"
+        bytes < 1024 * 1024 -> "${bytes / 1024}KB"
+        else -> String.format("%.1fMB", bytes / 1024.0 / 1024.0)
+    }

@@ -13,7 +13,9 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.concurrent.thread
 
-class AudioRecorder(private val context: Context) {
+class AudioRecorder(
+    private val context: Context,
+) {
     companion object {
         private const val SAMPLE_RATE = 16_000
         private const val CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO
@@ -21,7 +23,10 @@ class AudioRecorder(private val context: Context) {
         private const val MAX_DURATION_MS = 30_000L
     }
 
-    data class Result(val audio: ByteArray, val durationMs: Int)
+    data class Result(
+        val audio: ByteArray,
+        val durationMs: Int,
+    )
 
     @Volatile
     var isRecording: Boolean = false
@@ -32,6 +37,7 @@ class AudioRecorder(private val context: Context) {
     private var recordThread: Thread? = null
     private var pcmBuffer = ByteArrayOutputStream()
     private var lastDurationMs: Int = 0
+
     @Volatile
     private var completedResult: Result? = null
 
@@ -52,17 +58,20 @@ class AudioRecorder(private val context: Context) {
             throw SecurityException("MIC_PERMISSION_DENIED")
         }
 
-        val bufferSize = AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT)
-            .coerceAtLeast(4096)
+        val bufferSize =
+            AudioRecord
+                .getMinBufferSize(SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT)
+                .coerceAtLeast(4096)
 
         @Suppress("MissingPermission")
-        val recorder = AudioRecord(
-            MediaRecorder.AudioSource.MIC,
-            SAMPLE_RATE,
-            CHANNEL_CONFIG,
-            AUDIO_FORMAT,
-            bufferSize,
-        )
+        val recorder =
+            AudioRecord(
+                MediaRecorder.AudioSource.MIC,
+                SAMPLE_RATE,
+                CHANNEL_CONFIG,
+                AUDIO_FORMAT,
+                bufferSize,
+            )
 
         if (recorder.state != AudioRecord.STATE_INITIALIZED) {
             recorder.release()
@@ -78,24 +87,25 @@ class AudioRecorder(private val context: Context) {
 
         recorder.startRecording()
 
-        recordThread = thread(name = "kelpie-audio-record") {
-            val buffer = ByteArray(bufferSize)
-            while (isRecording) {
-                if (SystemClock.elapsedRealtime() - startedAtMs >= MAX_DURATION_MS) {
-                    break
-                }
-                val read = recorder.read(buffer, 0, buffer.size)
-                if (read > 0) {
-                    synchronized(pcmBuffer) {
-                        pcmBuffer.write(buffer, 0, read)
+        recordThread =
+            thread(name = "kelpie-audio-record") {
+                val buffer = ByteArray(bufferSize)
+                while (isRecording) {
+                    if (SystemClock.elapsedRealtime() - startedAtMs >= MAX_DURATION_MS) {
+                        break
+                    }
+                    val read = recorder.read(buffer, 0, buffer.size)
+                    if (read > 0) {
+                        synchronized(pcmBuffer) {
+                            pcmBuffer.write(buffer, 0, read)
+                        }
                     }
                 }
+                // Auto-stop if we hit max duration
+                if (isRecording) {
+                    finalize()
+                }
             }
-            // Auto-stop if we hit max duration
-            if (isRecording) {
-                finalize()
-            }
-        }
     }
 
     fun stop(): Result {
@@ -135,27 +145,28 @@ class AudioRecorder(private val context: Context) {
 
     private fun makeWav(pcm: ByteArray): ByteArray {
         val dataSize = pcm.size
-        val byteRate = SAMPLE_RATE * 1 * 16 / 8  // sampleRate * channels * bitsPerSample / 8
-        val blockAlign = 1 * 16 / 8               // channels * bitsPerSample / 8
+        val byteRate = SAMPLE_RATE * 1 * 16 / 8 // sampleRate * channels * bitsPerSample / 8
+        val blockAlign = 1 * 16 / 8 // channels * bitsPerSample / 8
 
-        val header = ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN).apply {
-            // RIFF header
-            put("RIFF".toByteArray(Charsets.US_ASCII))
-            putInt(36 + dataSize)
-            put("WAVE".toByteArray(Charsets.US_ASCII))
-            // fmt sub-chunk
-            put("fmt ".toByteArray(Charsets.US_ASCII))
-            putInt(16)             // sub-chunk size
-            putShort(1)            // PCM format
-            putShort(1)            // mono
-            putInt(SAMPLE_RATE)    // sample rate
-            putInt(byteRate)       // byte rate
-            putShort(blockAlign.toShort()) // block align
-            putShort(16)           // bits per sample
-            // data sub-chunk
-            put("data".toByteArray(Charsets.US_ASCII))
-            putInt(dataSize)
-        }
+        val header =
+            ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN).apply {
+                // RIFF header
+                put("RIFF".toByteArray(Charsets.US_ASCII))
+                putInt(36 + dataSize)
+                put("WAVE".toByteArray(Charsets.US_ASCII))
+                // fmt sub-chunk
+                put("fmt ".toByteArray(Charsets.US_ASCII))
+                putInt(16) // sub-chunk size
+                putShort(1) // PCM format
+                putShort(1) // mono
+                putInt(SAMPLE_RATE) // sample rate
+                putInt(byteRate) // byte rate
+                putShort(blockAlign.toShort()) // block align
+                putShort(16) // bits per sample
+                // data sub-chunk
+                put("data".toByteArray(Charsets.US_ASCII))
+                putInt(dataSize)
+            }
 
         return header.array() + pcm
     }

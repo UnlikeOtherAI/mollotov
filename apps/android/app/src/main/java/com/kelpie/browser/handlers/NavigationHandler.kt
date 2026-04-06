@@ -9,7 +9,9 @@ import kotlinx.coroutines.delay
 
 private val mainHandler = Handler(Looper.getMainLooper())
 
-class NavigationHandler(private val ctx: HandlerContext) {
+class NavigationHandler(
+    private val ctx: HandlerContext,
+) {
     fun register(router: Router) {
         router.register("navigate") { navigate(it) }
         router.register("back") { back() }
@@ -31,11 +33,13 @@ class NavigationHandler(private val ctx: HandlerContext) {
         while (System.currentTimeMillis() - start < timeout) {
             val result = ctx.evaluateJSReturningJSON("({url: location.href, title: document.title, readyState: document.readyState})")
             if (result["readyState"] == "complete") {
-                return successResponse(mapOf(
-                    "url" to (result["url"] ?: url),
-                    "title" to (result["title"] ?: ""),
-                    "loadTime" to (System.currentTimeMillis() - start),
-                ))
+                return successResponse(
+                    mapOf(
+                        "url" to (result["url"] ?: url),
+                        "title" to (result["title"] ?: ""),
+                        "loadTime" to (System.currentTimeMillis() - start),
+                    ),
+                )
             }
             delay(100)
         }
@@ -73,11 +77,10 @@ class NavigationHandler(private val ctx: HandlerContext) {
     private fun setHome(body: Map<String, Any?>): Map<String, Any?> {
         val url = body["url"] as? String
         if (url.isNullOrEmpty()) return errorResponse("MISSING_PARAM", "url is required")
-        com.kelpie.browser.browser.HomeStore.setUrl(url)
+        com.kelpie.browser.browser.HomeStore
+            .setUrl(url)
         return successResponse(mapOf("url" to url))
     }
 
-    private fun getHome(): Map<String, Any?> {
-        return successResponse(mapOf("url" to com.kelpie.browser.browser.HomeStore.url))
-    }
+    private fun getHome(): Map<String, Any?> = successResponse(mapOf("url" to com.kelpie.browser.browser.HomeStore.url))
 }

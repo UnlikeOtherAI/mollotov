@@ -1,0 +1,7 @@
+[*.{kt,kts}]
+indent_size = 4
+indent_style = space
+max_line_length = 200
+insert_final_newline = true
+ktlint_code_style = ktlint_official
+ktlint_standard_function-naming = disabled

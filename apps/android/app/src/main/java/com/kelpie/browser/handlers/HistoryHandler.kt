@@ -4,7 +4,9 @@ import com.kelpie.browser.browser.HistoryStore
 import com.kelpie.browser.network.Router
 import com.kelpie.browser.network.successResponse
 
-class HistoryHandler(private val ctx: HandlerContext) {
+class HistoryHandler(
+    private val ctx: HandlerContext,
+) {
     fun register(router: Router) {
         router.register("history-list") { list(it) }
         router.register("history-clear") { clear() }

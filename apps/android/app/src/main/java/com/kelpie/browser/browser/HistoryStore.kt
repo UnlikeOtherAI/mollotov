@@ -38,7 +38,10 @@ object HistoryStore {
         }
     }
 
-    fun record(url: String, title: String) {
+    fun record(
+        url: String,
+        title: String,
+    ) {
         synchronized(lock) {
             NativeCore.historyStoreRecord(nativeHandle, url, title)
             refreshFromNative(save = true)
@@ -52,16 +55,20 @@ object HistoryStore {
         }
     }
 
-    fun updateLatestTitle(url: String, title: String) {
+    fun updateLatestTitle(
+        url: String,
+        title: String,
+    ) {
         synchronized(lock) {
             NativeCore.historyStoreUpdateLatestTitle(nativeHandle, url, title)
             refreshFromNative(save = true)
         }
     }
 
-    fun toJSON(): List<Map<String, Any>> = _entries.value.asReversed().map { e ->
-        mapOf("id" to e.id, "url" to e.url, "title" to e.title, "timestamp" to e.timestamp)
-    }
+    fun toJSON(): List<Map<String, Any>> =
+        _entries.value.asReversed().map { e ->
+            mapOf("id" to e.id, "url" to e.url, "title" to e.title, "timestamp" to e.timestamp)
+        }
 
     private fun refreshFromNative(save: Boolean) {
         val newestFirst = parseHistoryEntries(NativeCore.historyStoreToJson(nativeHandle))
@@ -74,9 +81,14 @@ object HistoryStore {
     private fun saveHistoryJson(entries: List<HistoryEntry>) {
         val arr = JSONArray()
         entries.forEach { e ->
-            arr.put(JSONObject().apply {
-                put("id", e.id); put("url", e.url); put("title", e.title); put("timestamp", e.timestamp)
-            })
+            arr.put(
+                JSONObject().apply {
+                    put("id", e.id)
+                    put("url", e.url)
+                    put("title", e.title)
+                    put("timestamp", e.timestamp)
+                },
+            )
         }
         prefs.edit().putString(DATA_KEY, arr.toString()).apply()
     }
@@ -90,12 +102,14 @@ object HistoryStore {
         val list = mutableListOf<HistoryEntry>()
         for (i in 0 until arr.length()) {
             val obj = arr.getJSONObject(i)
-            list.add(HistoryEntry(
-                id = obj.getString("id"),
-                url = obj.getString("url"),
-                title = obj.getString("title"),
-                timestamp = obj.optString("timestamp", ""),
-            ))
+            list.add(
+                HistoryEntry(
+                    id = obj.getString("id"),
+                    url = obj.getString("url"),
+                    title = obj.getString("title"),
+                    timestamp = obj.optString("timestamp", ""),
+                ),
+            )
         }
         return list
     }

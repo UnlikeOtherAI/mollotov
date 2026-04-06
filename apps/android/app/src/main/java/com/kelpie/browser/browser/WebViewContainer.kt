@@ -34,60 +34,77 @@ fun WebViewContainer(
                 // Add JS bridge for console + network capture
                 addJavascriptInterface(JsBridge(handlerContext, consoleHandler), "KelpieBridge")
 
-                webViewClient = object : WebViewClient() {
-                    private var documentNavigationUrl: String? = null
-                    private var didCaptureDocumentForNavigation = false
+                webViewClient =
+                    object : WebViewClient() {
+                        private var documentNavigationUrl: String? = null
+                        private var didCaptureDocumentForNavigation = false
 
-                    override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
-                        browserState.updateUrl(url)
-                        browserState.updateLoading(true)
-                        handlerContext?.mark3DInspectorInactive()
-                        documentNavigationUrl = url
-                        didCaptureDocumentForNavigation = false
-                    }
+                        override fun onPageStarted(
+                            view: WebView,
+                            url: String,
+                            favicon: Bitmap?,
+                        ) {
+                            browserState.updateUrl(url)
+                            browserState.updateLoading(true)
+                            handlerContext?.mark3DInspectorInactive()
+                            documentNavigationUrl = url
+                            didCaptureDocumentForNavigation = false
+                        }
 
-                    override fun onPageFinished(view: WebView, url: String) {
-                        browserState.updateUrl(url)
-                        browserState.updateLoading(false)
-                        browserState.updateCanGoBack(view.canGoBack())
-                        browserState.updateCanGoForward(view.canGoForward())
+                        override fun onPageFinished(
+                            view: WebView,
+                            url: String,
+                        ) {
+                            browserState.updateUrl(url)
+                            browserState.updateLoading(false)
+                            browserState.updateCanGoBack(view.canGoBack())
+                            browserState.updateCanGoForward(view.canGoForward())
 
-                        // Inject bridge scripts after page load
-                        view.evaluateJavascript(ConsoleHandler.BRIDGE_SCRIPT, null)
-                        view.evaluateJavascript(JsBridge.NETWORK_BRIDGE_SCRIPT, null)
+                            // Inject bridge scripts after page load
+                            view.evaluateJavascript(ConsoleHandler.BRIDGE_SCRIPT, null)
+                            view.evaluateJavascript(JsBridge.NETWORK_BRIDGE_SCRIPT, null)
 
-                        if (!didCaptureDocumentForNavigation && documentNavigationUrl == url) {
-                            didCaptureDocumentForNavigation = true
-                            view.evaluateJavascript("(document.contentType || 'text/html')") { value ->
-                                val contentType = value
-                                    ?.trim()
-                                    ?.removePrefix("\"")
-                                    ?.removeSuffix("\"")
-                                    ?.takeIf { it.isNotEmpty() && it != "null" }
-                                    ?: "text/html"
-                                NetworkTrafficStore.appendDocumentNavigation(
-                                    url = url,
-                                    statusCode = 0,
-                                    contentType = contentType,
-                                )
+                            if (!didCaptureDocumentForNavigation && documentNavigationUrl == url) {
+                                didCaptureDocumentForNavigation = true
+                                view.evaluateJavascript("(document.contentType || 'text/html')") { value ->
+                                    val contentType =
+                                        value
+                                            ?.trim()
+                                            ?.removePrefix("\"")
+                                            ?.removeSuffix("\"")
+                                            ?.takeIf { it.isNotEmpty() && it != "null" }
+                                            ?: "text/html"
+                                    NetworkTrafficStore.appendDocumentNavigation(
+                                        url = url,
+                                        statusCode = 0,
+                                        contentType = contentType,
+                                    )
+                                }
                             }
                         }
+
+                        override fun shouldOverrideUrlLoading(
+                            view: WebView,
+                            request: WebResourceRequest,
+                        ): Boolean = false
                     }
 
-                    override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                        return false
-                    }
-                }
+                webChromeClient =
+                    object : WebChromeClient() {
+                        override fun onReceivedTitle(
+                            view: WebView,
+                            title: String?,
+                        ) {
+                            browserState.updateTitle(title ?: "")
+                        }
 
-                webChromeClient = object : WebChromeClient() {
-                    override fun onReceivedTitle(view: WebView, title: String?) {
-                        browserState.updateTitle(title ?: "")
+                        override fun onProgressChanged(
+                            view: WebView,
+                            newProgress: Int,
+                        ) {
+                            browserState.updateProgress(newProgress)
+                        }
                     }
-
-                    override fun onProgressChanged(view: WebView, newProgress: Int) {
-                        browserState.updateProgress(newProgress)
-                    }
-                }
 
                 browserState.webView = this
                 onWebViewCreated(this)

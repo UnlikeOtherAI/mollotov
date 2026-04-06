@@ -5,7 +5,9 @@ import com.kelpie.browser.network.Router
 import com.kelpie.browser.network.errorResponse
 import com.kelpie.browser.network.successResponse
 
-class MutationHandler(private val ctx: HandlerContext) {
+class MutationHandler(
+    private val ctx: HandlerContext,
+) {
     fun register(router: Router) {
         router.register("watch-mutations") { watchMutations(it) }
         router.register("get-mutations") { getMutations(it) }
@@ -20,7 +22,8 @@ class MutationHandler(private val ctx: HandlerContext) {
         val characterData = body["characterData"] as? Boolean ?: false
         val safe = selector.replace("'", "\\'")
 
-        val js = """
+        val js =
+            """
 (function(){
     if(!window.__kelpieMutations)window.__kelpieMutations={};
     var id='mut_'+Date.now();
@@ -66,7 +69,10 @@ class MutationHandler(private val ctx: HandlerContext) {
     private suspend fun stopWatching(body: Map<String, Any?>): Map<String, Any?> {
         val watchId = body["watchId"] as? String ?: return errorResponse("MISSING_PARAM", "watchId is required")
         val safe = watchId.replace("'", "\\'")
-        val js = "(function(){var w=(window.__kelpieMutations||{})['$safe'];if(!w)return null;w.observer.disconnect();var t=w.buffer.length;delete window.__kelpieMutations['$safe'];return{totalMutations:t};})()"
+        val js =
+            "(function(){var w=(window.__kelpieMutations||{})['$safe'];" +
+                "if(!w)return null;w.observer.disconnect();var t=w.buffer.length;" +
+                "delete window.__kelpieMutations['$safe'];return{totalMutations:t};})()"
         return try {
             val result = ctx.evaluateJSReturningJSON(js)
             if (result.isEmpty()) errorResponse("WATCH_NOT_FOUND", "Watch $watchId not found") else successResponse(result)

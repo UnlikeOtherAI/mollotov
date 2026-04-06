@@ -88,8 +88,9 @@ class MainActivity : ComponentActivity() {
         NetworkInspectorHandler(handlerContext).register(router)
 
         router.register("show-panel") { body ->
-            val panel = body["panel"] as? String
-                ?: return@register errorResponse("MISSING_PARAM", "panel is required")
+            val panel =
+                body["panel"] as? String
+                    ?: return@register errorResponse("MISSING_PARAM", "panel is required")
             val valid = listOf("history", "bookmarks", "network-inspector", "settings", "ai")
             if (panel !in valid) {
                 return@register errorResponse("INVALID_PARAM", "panel must be one of: ${valid.joinToString()}")
@@ -123,10 +124,11 @@ class MainActivity : ComponentActivity() {
     private fun startServer(deviceInfo: DeviceInfo) {
         httpServer = HTTPServer(port = deviceInfo.port, router = router).also { it.start() }
 
-        mdnsAdvertiser = MDNSAdvertiser(
-            context = this,
-            deviceInfo = deviceInfo,
-        ).also { it.register() }
+        mdnsAdvertiser =
+            MDNSAdvertiser(
+                context = this,
+                deviceInfo = deviceInfo,
+            ).also { it.register() }
     }
 
     override fun onResume() {

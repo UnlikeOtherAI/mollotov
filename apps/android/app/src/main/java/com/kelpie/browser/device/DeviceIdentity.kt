@@ -1,7 +1,6 @@
 package com.kelpie.browser.device
 
 import android.content.Context
-import android.provider.Settings
 import java.util.UUID
 
 object DeviceIdentity {

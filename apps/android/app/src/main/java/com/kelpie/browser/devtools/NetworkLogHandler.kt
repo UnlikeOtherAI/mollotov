@@ -5,7 +5,9 @@ import com.kelpie.browser.network.Router
 import com.kelpie.browser.network.errorResponse
 import com.kelpie.browser.network.successResponse
 
-class NetworkLogHandler(private val ctx: HandlerContext) {
+class NetworkLogHandler(
+    private val ctx: HandlerContext,
+) {
     fun register(router: Router) {
         router.register("get-network-log") { getNetworkLog(it) }
         router.register("get-resource-timeline") { getResourceTimeline() }

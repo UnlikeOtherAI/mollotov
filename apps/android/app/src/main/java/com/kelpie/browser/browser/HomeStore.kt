@@ -9,8 +9,12 @@ object HomeStore {
     private lateinit var prefs: SharedPreferences
 
     val url: String
-        get() = if (::prefs.isInitialized) prefs.getString("homeURL", DEFAULT_HOME_URL) ?: DEFAULT_HOME_URL
-                else DEFAULT_HOME_URL
+        get() =
+            if (::prefs.isInitialized) {
+                prefs.getString("homeURL", DEFAULT_HOME_URL) ?: DEFAULT_HOME_URL
+            } else {
+                DEFAULT_HOME_URL
+            }
 
     fun init(context: Context) {
         prefs = context.getSharedPreferences("kelpie_prefs", Context.MODE_PRIVATE)

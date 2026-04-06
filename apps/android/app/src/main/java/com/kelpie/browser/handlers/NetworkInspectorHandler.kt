@@ -5,7 +5,9 @@ import com.kelpie.browser.network.Router
 import com.kelpie.browser.network.errorResponse
 import com.kelpie.browser.network.successResponse
 
-class NetworkInspectorHandler(private val ctx: HandlerContext) {
+class NetworkInspectorHandler(
+    private val ctx: HandlerContext,
+) {
     fun register(router: Router) {
         router.register("network-list") { list(it) }
         router.register("network-detail") { detail(it) }
@@ -15,18 +17,20 @@ class NetworkInspectorHandler(private val ctx: HandlerContext) {
     }
 
     private suspend fun list(body: Map<String, Any?>): Map<String, Any?> {
-        val entries = NetworkTrafficStore.toSummaryList(
-            method = body["method"] as? String,
-            category = body["category"] as? String,
-            statusRange = body["statusRange"] as? String,
-            urlPattern = body["urlPattern"] as? String,
-        )
+        val entries =
+            NetworkTrafficStore.toSummaryList(
+                method = body["method"] as? String,
+                category = body["category"] as? String,
+                statusRange = body["statusRange"] as? String,
+                urlPattern = body["urlPattern"] as? String,
+            )
         return successResponse(mapOf("entries" to entries, "total" to NetworkTrafficStore.entries.value.size))
     }
 
     private suspend fun detail(body: Map<String, Any?>): Map<String, Any?> {
-        val index = (body["index"] as? Number)?.toInt()
-            ?: return errorResponse("INVALID_INDEX", "index is required and must be valid")
+        val index =
+            (body["index"] as? Number)?.toInt()
+                ?: return errorResponse("INVALID_INDEX", "index is required and must be valid")
         val list = NetworkTrafficStore.entries.value
         if (index !in list.indices) return errorResponse("INVALID_INDEX", "index out of range")
         return successResponse(NetworkTrafficStore.entryToMap(list[index]))
@@ -52,8 +56,9 @@ class NetworkInspectorHandler(private val ctx: HandlerContext) {
     }
 
     private suspend fun current(): Map<String, Any?> {
-        val entry = NetworkTrafficStore.selectedEntry
-            ?: return errorResponse("NONE_SELECTED", "No request currently selected")
+        val entry =
+            NetworkTrafficStore.selectedEntry
+                ?: return errorResponse("NONE_SELECTED", "No request currently selected")
         return successResponse(NetworkTrafficStore.entryToMap(entry))
     }
 

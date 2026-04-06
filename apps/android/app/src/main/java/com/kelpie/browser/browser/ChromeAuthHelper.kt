@@ -11,12 +11,17 @@ import androidx.browser.customtabs.CustomTabsIntent
  * then syncs cookies back into the WebView when the user returns.
  */
 class ChromeAuthHelper {
-
-    fun authenticate(url: String, webView: WebView, activity: Activity) {
+    fun authenticate(
+        url: String,
+        webView: WebView,
+        activity: Activity,
+    ) {
         // Open in Chrome Custom Tabs — shares Chrome's cookies and saved passwords
-        val intent = CustomTabsIntent.Builder()
-            .setShowTitle(true)
-            .build()
+        val intent =
+            CustomTabsIntent
+                .Builder()
+                .setShowTitle(true)
+                .build()
         intent.launchUrl(activity, Uri.parse(url))
 
         // When the user returns to our app (via back), sync cookies and reload.

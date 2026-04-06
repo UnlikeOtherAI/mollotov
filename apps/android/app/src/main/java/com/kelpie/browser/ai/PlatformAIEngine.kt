@@ -5,7 +5,9 @@ import android.os.Build
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-class PlatformAIEngine(private val context: Context) {
+class PlatformAIEngine(
+    private val context: Context,
+) {
     companion object {
         @Suppress("UNUSED_PARAMETER")
         fun isAvailable(context: Context): Boolean {
@@ -23,19 +25,20 @@ class PlatformAIEngine(private val context: Context) {
         }
     }
 
-    suspend fun infer(prompt: String): String = withContext(Dispatchers.IO) {
-        if (!isAvailable(context)) {
-            throw IllegalStateException("Platform AI is unavailable on this device")
+    suspend fun infer(prompt: String): String =
+        withContext(Dispatchers.IO) {
+            if (!isAvailable(context)) {
+                throw IllegalStateException("Platform AI is unavailable on this device")
+            }
+            if (prompt.isBlank()) {
+                throw IllegalArgumentException("Prompt must not be blank")
+            }
+            try {
+                inferViaAICore(prompt)
+            } catch (e: ClassNotFoundException) {
+                throw UnsupportedOperationException("AI Edge SDK not available at runtime: ${e.message}")
+            }
         }
-        if (prompt.isBlank()) {
-            throw IllegalArgumentException("Prompt must not be blank")
-        }
-        try {
-            inferViaAICore(prompt)
-        } catch (e: ClassNotFoundException) {
-            throw UnsupportedOperationException("AI Edge SDK not available at runtime: ${e.message}")
-        }
-    }
 
     private suspend fun inferViaAICore(prompt: String): String {
         // The AI Edge SDK's generateContent() is a Kotlin suspend function.
@@ -48,16 +51,18 @@ class PlatformAIEngine(private val context: Context) {
         val modelClass = Class.forName("com.google.ai.edge.aicore.GenerativeModel")
 
         // Try to find a blocking/Java-friendly API first (some SDK versions expose one)
-        val generateMethod = try {
-            modelClass.getMethod("generateContentBlocking", Class.forName("com.google.ai.edge.aicore.Content"))
-        } catch (_: NoSuchMethodException) {
-            throw UnsupportedOperationException(
-                "AI Edge SDK is present but does not expose a blocking API. " +
-                    "Enable the compile dependency in build.gradle.kts for proper suspend function support."
-            )
-        }
+        val generateMethod =
+            try {
+                modelClass.getMethod("generateContentBlocking", Class.forName("com.google.ai.edge.aicore.Content"))
+            } catch (_: NoSuchMethodException) {
+                throw UnsupportedOperationException(
+                    "AI Edge SDK is present but does not expose a blocking API. " +
+                        "Enable the compile dependency in build.gradle.kts for proper suspend function support.",
+                )
+            }
 
         val contentBuilderClass = Class.forName("com.google.ai.edge.aicore.Content\$Builder")
+
         @Suppress("DEPRECATION")
         val builder = contentBuilderClass.newInstance()
         val addTextMethod = contentBuilderClass.getMethod("addText", String::class.java)
@@ -66,6 +71,7 @@ class PlatformAIEngine(private val context: Context) {
         val content = buildMethod.invoke(builder)
 
         val constructor = modelClass.getConstructor(String::class.java)
+
         @Suppress("DEPRECATION")
         val model = constructor.newInstance("gemini-nano")
 

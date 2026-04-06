@@ -5,9 +5,6 @@ import android.os.SystemClock
 import com.kelpie.browser.network.Router
 import com.kelpie.browser.network.errorResponse
 import com.kelpie.browser.network.successResponse
-import java.io.IOException
-import java.net.HttpURLConnection
-import java.net.URL
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -23,10 +20,19 @@ import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
+import java.io.IOException
+import java.net.HttpURLConnection
+import java.net.URL
 
-private val aiJson = Json { ignoreUnknownKeys = true; isLenient = true }
+private val aiJson =
+    Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+    }
 
-class AIHandler(private val appContext: Context) {
+class AIHandler(
+    private val appContext: Context,
+) {
     private val platformEngine by lazy { PlatformAIEngine(appContext) }
     private val recorder by lazy { AudioRecorder(appContext) }
 
@@ -41,11 +47,12 @@ class AIHandler(private val appContext: Context) {
     private fun aiStatus(): Map<String, Any?> {
         val backend = currentBackend()
         val model = currentModel()
-        val data = linkedMapOf<String, Any?>(
-            "loaded" to (model != null),
-            "backend" to backend,
-            "capabilities" to capabilitiesFor(backend, model),
-        )
+        val data =
+            linkedMapOf<String, Any?>(
+                "loaded" to (model != null),
+                "backend" to backend,
+                "capabilities" to capabilitiesFor(backend, model),
+            )
         if (model != null) {
             data["model"] = model
         }
@@ -86,20 +93,22 @@ class AIHandler(private val appContext: Context) {
             )
         }
 
-        val endpoint = normalizeEndpoint(
-            (body["ollamaEndpoint"] as? String)?.trim().takeUnless { it.isNullOrEmpty() }
-                ?: AIState.ollamaEndpoint
-                ?: AIState.DEFAULT_OLLAMA_ENDPOINT,
-        )
+        val endpoint =
+            normalizeEndpoint(
+                (body["ollamaEndpoint"] as? String)?.trim().takeUnless { it.isNullOrEmpty() }
+                    ?: AIState.ollamaEndpoint
+                    ?: AIState.DEFAULT_OLLAMA_ENDPOINT,
+            )
         val ollamaModel = requestedModel.removePrefix("ollama:")
 
-        val installedModels = try {
-            fetchOllamaModels(endpoint)
-        } catch (_: IOException) {
-            return errorResponse("OLLAMA_NOT_AVAILABLE", "Ollama is not running at $endpoint")
-        } catch (e: Exception) {
-            return errorResponse("AI_INFERENCE_FAILED", e.message ?: "Failed to probe Ollama")
-        }
+        val installedModels =
+            try {
+                fetchOllamaModels(endpoint)
+            } catch (_: IOException) {
+                return errorResponse("OLLAMA_NOT_AVAILABLE", "Ollama is not running at $endpoint")
+            } catch (e: Exception) {
+                return errorResponse("AI_INFERENCE_FAILED", e.message ?: "Failed to probe Ollama")
+            }
 
         if (ollamaModel !in installedModels) {
             return errorResponse(
@@ -133,13 +142,12 @@ class AIHandler(private val appContext: Context) {
         )
     }
 
-    private suspend fun aiInfer(body: Map<String, Any?>): Map<String, Any?> {
-        return when (currentBackend()) {
+    private suspend fun aiInfer(body: Map<String, Any?>): Map<String, Any?> =
+        when (currentBackend()) {
             AIState.OLLAMA_BACKEND -> inferWithOllama(body)
             AIState.PLATFORM_BACKEND -> inferWithPlatform(body)
             else -> errorResponse("NO_MODEL_LOADED", "Load a model first with ai-load")
         }
-    }
 
     private fun aiRecord(body: Map<String, Any?>): Map<String, Any?> {
         val action = (body["action"] as? String)?.trim().orEmpty().ifEmpty { "status" }
@@ -172,11 +180,12 @@ class AIHandler(private val appContext: Context) {
         } catch (e: SecurityException) {
             errorResponse("MIC_PERMISSION_DENIED", "Microphone permission not granted")
         } catch (e: IllegalStateException) {
-            val code = when {
-                e.message?.contains("ALREADY_ACTIVE") == true -> "RECORDING_ALREADY_ACTIVE"
-                e.message?.contains("NO_RECORDING") == true -> "NO_RECORDING_ACTIVE"
-                else -> "RECORDING_FAILED"
-            }
+            val code =
+                when {
+                    e.message?.contains("ALREADY_ACTIVE") == true -> "RECORDING_ALREADY_ACTIVE"
+                    e.message?.contains("NO_RECORDING") == true -> "NO_RECORDING_ACTIVE"
+                    else -> "RECORDING_FAILED"
+                }
             errorResponse(code, e.message ?: "Recording failed")
         }
     }
@@ -198,8 +207,9 @@ class AIHandler(private val appContext: Context) {
             )
         }
 
-        val prompt = buildPrompt(body)
-            ?: return errorResponse("MISSING_PARAM", "prompt is required")
+        val prompt =
+            buildPrompt(body)
+                ?: return errorResponse("MISSING_PARAM", "prompt is required")
         val start = SystemClock.elapsedRealtime()
 
         return try {
@@ -219,10 +229,12 @@ class AIHandler(private val appContext: Context) {
     }
 
     private suspend fun inferWithOllama(body: Map<String, Any?>): Map<String, Any?> {
-        val endpoint = AIState.ollamaEndpoint
-            ?: return errorResponse("OLLAMA_NOT_AVAILABLE", "Ollama endpoint is not configured")
-        val model = AIState.activeModel
-            ?: return errorResponse("NO_MODEL_LOADED", "Load a model first with ai-load")
+        val endpoint =
+            AIState.ollamaEndpoint
+                ?: return errorResponse("OLLAMA_NOT_AVAILABLE", "Ollama endpoint is not configured")
+        val model =
+            AIState.activeModel
+                ?: return errorResponse("NO_MODEL_LOADED", "Load a model first with ai-load")
 
         if (body["audio"] != null) {
             return errorResponse(
@@ -231,32 +243,35 @@ class AIHandler(private val appContext: Context) {
             )
         }
 
-        val prompt = buildPrompt(body)
-            ?: return errorResponse("MISSING_PARAM", "prompt is required")
+        val prompt =
+            buildPrompt(body)
+                ?: return errorResponse("MISSING_PARAM", "prompt is required")
         val messages = parseMessages(body["messages"])
         val images = extractImages(body)
         val start = SystemClock.elapsedRealtime()
 
         return try {
             val isChat = messages.isNotEmpty()
-            val response = if (isChat) {
-                postJson(
-                    url = "$endpoint/api/chat",
-                    payload = buildChatRequest(model, messages, prompt, body),
-                )
-            } else {
-                postJson(
-                    url = "$endpoint/api/generate",
-                    payload = buildGenerateRequest(model, prompt, images, body),
-                )
-            }
+            val response =
+                if (isChat) {
+                    postJson(
+                        url = "$endpoint/api/chat",
+                        payload = buildChatRequest(model, messages, prompt, body),
+                    )
+                } else {
+                    postJson(
+                        url = "$endpoint/api/generate",
+                        payload = buildGenerateRequest(model, prompt, images, body),
+                    )
+                }
 
-            val responseText = if (isChat) {
-                val message = response["message"] as? Map<*, *>
-                message?.get("content") as? String
-            } else {
-                response["response"] as? String
-            }?.trim().orEmpty()
+            val responseText =
+                if (isChat) {
+                    val message = response["message"] as? Map<*, *>
+                    message?.get("content") as? String
+                } else {
+                    response["response"] as? String
+                }?.trim().orEmpty()
 
             val tokensUsed = (response["eval_count"] as? Number)?.toInt() ?: estimateTokens(responseText)
             successResponse(
@@ -273,25 +288,24 @@ class AIHandler(private val appContext: Context) {
         }
     }
 
-    private fun currentBackend(): String {
-        return AIState.backend
-    }
+    private fun currentBackend(): String = AIState.backend
 
-    private fun currentModel(): String? {
-        return when (currentBackend()) {
+    private fun currentModel(): String? =
+        when (currentBackend()) {
             AIState.OLLAMA_BACKEND -> AIState.activeModel
             AIState.PLATFORM_BACKEND -> if (AIState.isAvailable) AIState.PLATFORM_MODEL_ID else null
             else -> null
         }
-    }
 
-    private fun capabilitiesFor(backend: String, model: String?): List<String> {
-        return when (backend) {
+    private fun capabilitiesFor(
+        backend: String,
+        model: String?,
+    ): List<String> =
+        when (backend) {
             AIState.OLLAMA_BACKEND -> if (looksVisionCapable(model)) listOf("text", "vision") else listOf("text")
             AIState.PLATFORM_BACKEND -> if (AIState.isAvailable) listOf("text") else emptyList()
             else -> emptyList()
         }
-    }
 
     private fun looksVisionCapable(model: String?): Boolean {
         if (model == null) return false
@@ -310,10 +324,11 @@ class AIHandler(private val appContext: Context) {
     }
 
     private fun extractImages(body: Map<String, Any?>): List<String> {
-        val explicitImages = (body["images"] as? List<*>)
-            ?.mapNotNull { it as? String }
-            ?.filter { it.isNotBlank() }
-            .orEmpty()
+        val explicitImages =
+            (body["images"] as? List<*>)
+                ?.mapNotNull { it as? String }
+                ?.filter { it.isNotBlank() }
+                .orEmpty()
         if (explicitImages.isNotEmpty()) {
             return explicitImages
         }
@@ -338,11 +353,12 @@ class AIHandler(private val appContext: Context) {
         images: List<String>,
         body: Map<String, Any?>,
     ): Map<String, Any?> {
-        val request = linkedMapOf<String, Any?>(
-            "model" to model,
-            "prompt" to prompt,
-            "stream" to false,
-        )
+        val request =
+            linkedMapOf<String, Any?>(
+                "model" to model,
+                "prompt" to prompt,
+                "stream" to false,
+            )
         if (images.isNotEmpty()) {
             request["images"] = images
         }
@@ -359,11 +375,12 @@ class AIHandler(private val appContext: Context) {
         val requestMessages = messages.toMutableList()
         requestMessages.add(mapOf("role" to "user", "content" to prompt))
 
-        val request = linkedMapOf<String, Any?>(
-            "model" to model,
-            "messages" to requestMessages,
-            "stream" to false,
-        )
+        val request =
+            linkedMapOf<String, Any?>(
+                "model" to model,
+                "messages" to requestMessages,
+                "stream" to false,
+            )
         buildOllamaOptions(body)?.let { request["options"] = it }
         return request
     }
@@ -393,36 +410,42 @@ class AIHandler(private val appContext: Context) {
         }
     }
 
-    private suspend fun getJson(url: String): Map<String, Any?> = withContext(Dispatchers.IO) {
-        val connection = (URL(url).openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            connectTimeout = 3_000
-            readTimeout = 10_000
-            doInput = true
-        }
-
-        try {
-            val body = readConnectionBody(connection)
-            if (connection.responseCode !in 200..299) {
-                throw IOException("HTTP ${connection.responseCode}: $body")
-            }
-            parseJsonObject(body)
-        } finally {
-            connection.disconnect()
-        }
-    }
-
-    private suspend fun postJson(url: String, payload: Map<String, Any?>): Map<String, Any?> =
+    private suspend fun getJson(url: String): Map<String, Any?> =
         withContext(Dispatchers.IO) {
-            val connection = (URL(url).openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                connectTimeout = 3_000
-                readTimeout = 30_000
-                doInput = true
-                doOutput = true
-                setRequestProperty("Content-Type", "application/json")
-                setRequestProperty("Accept", "application/json")
+            val connection =
+                (URL(url).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 3_000
+                    readTimeout = 10_000
+                    doInput = true
+                }
+
+            try {
+                val body = readConnectionBody(connection)
+                if (connection.responseCode !in 200..299) {
+                    throw IOException("HTTP ${connection.responseCode}: $body")
+                }
+                parseJsonObject(body)
+            } finally {
+                connection.disconnect()
             }
+        }
+
+    private suspend fun postJson(
+        url: String,
+        payload: Map<String, Any?>,
+    ): Map<String, Any?> =
+        withContext(Dispatchers.IO) {
+            val connection =
+                (URL(url).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 3_000
+                    readTimeout = 30_000
+                    doInput = true
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("Accept", "application/json")
+                }
 
             try {
                 connection.outputStream.bufferedWriter().use { writer ->
@@ -440,36 +463,34 @@ class AIHandler(private val appContext: Context) {
         }
 
     private fun readConnectionBody(connection: HttpURLConnection): String {
-        val stream = if (connection.responseCode in 200..299) {
-            connection.inputStream
-        } else {
-            connection.errorStream
-        } ?: return ""
+        val stream =
+            if (connection.responseCode in 200..299) {
+                connection.inputStream
+            } else {
+                connection.errorStream
+            } ?: return ""
 
         return stream.bufferedReader().use { it.readText() }
     }
 
-    private fun mapToJsonString(map: Map<String, Any?>): String {
-        return aiJson.encodeToString(JsonElement.serializer(), mapToJsonObject(map))
-    }
+    private fun mapToJsonString(map: Map<String, Any?>): String = aiJson.encodeToString(JsonElement.serializer(), mapToJsonObject(map))
 
-    private fun mapToJsonObject(map: Map<String, Any?>): JsonObject {
-        return JsonObject(map.entries.associate { (key, value) -> key to anyToJsonElement(value) })
-    }
+    private fun mapToJsonObject(map: Map<String, Any?>): JsonObject = JsonObject(map.entries.associate { (key, value) -> key to anyToJsonElement(value) })
 
     @Suppress("UNCHECKED_CAST")
-    private fun anyToJsonElement(value: Any?): JsonElement = when (value) {
-        null -> JsonNull
-        is Boolean -> JsonPrimitive(value)
-        is Int -> JsonPrimitive(value)
-        is Long -> JsonPrimitive(value)
-        is Double -> JsonPrimitive(value)
-        is Float -> JsonPrimitive(value)
-        is String -> JsonPrimitive(value)
-        is Map<*, *> -> mapToJsonObject(value as Map<String, Any?>)
-        is List<*> -> JsonArray(value.map { anyToJsonElement(it) })
-        else -> JsonPrimitive(value.toString())
-    }
+    private fun anyToJsonElement(value: Any?): JsonElement =
+        when (value) {
+            null -> JsonNull
+            is Boolean -> JsonPrimitive(value)
+            is Int -> JsonPrimitive(value)
+            is Long -> JsonPrimitive(value)
+            is Double -> JsonPrimitive(value)
+            is Float -> JsonPrimitive(value)
+            is String -> JsonPrimitive(value)
+            is Map<*, *> -> mapToJsonObject(value as Map<String, Any?>)
+            is List<*> -> JsonArray(value.map { anyToJsonElement(it) })
+            else -> JsonPrimitive(value.toString())
+        }
 
     private fun parseJsonObject(text: String): Map<String, Any?> {
         if (text.isBlank()) return emptyMap()
@@ -477,28 +498,24 @@ class AIHandler(private val appContext: Context) {
         return jsonObjectToMap(element.jsonObject)
     }
 
-    private fun jsonObjectToMap(obj: JsonObject): Map<String, Any?> {
-        return obj.entries.associate { (key, value) -> key to jsonElementToAny(value) }
-    }
+    private fun jsonObjectToMap(obj: JsonObject): Map<String, Any?> = obj.entries.associate { (key, value) -> key to jsonElementToAny(value) }
 
-    private fun jsonElementToAny(element: JsonElement): Any? = when (element) {
-        is JsonNull -> null
-        is JsonPrimitive -> when {
-            element.isString -> element.content
-            element.booleanOrNull != null -> element.boolean
-            element.intOrNull != null -> element.int
-            element.doubleOrNull != null -> element.double
-            else -> element.content
+    private fun jsonElementToAny(element: JsonElement): Any? =
+        when (element) {
+            is JsonNull -> null
+            is JsonPrimitive ->
+                when {
+                    element.isString -> element.content
+                    element.booleanOrNull != null -> element.boolean
+                    element.intOrNull != null -> element.int
+                    element.doubleOrNull != null -> element.double
+                    else -> element.content
+                }
+            is JsonObject -> jsonObjectToMap(element)
+            is JsonArray -> element.map { jsonElementToAny(it) }
         }
-        is JsonObject -> jsonObjectToMap(element)
-        is JsonArray -> element.map { jsonElementToAny(it) }
-    }
 
-    private fun estimateTokens(text: String): Int {
-        return (text.length / 4.0).toInt().coerceAtLeast(1)
-    }
+    private fun estimateTokens(text: String): Int = (text.length / 4.0).toInt().coerceAtLeast(1)
 
-    private fun normalizeEndpoint(endpoint: String): String {
-        return endpoint.trim().trimEnd('/')
-    }
+    private fun normalizeEndpoint(endpoint: String): String = endpoint.trim().trimEnd('/')
 }

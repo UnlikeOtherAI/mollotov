@@ -42,9 +42,10 @@ fun URLBar(
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 4.dp),
     ) {
         IconButton(onClick = onBack, enabled = canGoBack, modifier = Modifier.size(navigationButtonSize)) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -60,17 +61,20 @@ fun URLBar(
             placeholder = { Text("Enter URL") },
             shape = CircleShape,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
-            keyboardActions = KeyboardActions(onGo = {
-                val url = if (urlText.startsWith("http://") || urlText.startsWith("https://")) {
-                    urlText
-                } else {
-                    "https://$urlText"
-                }
-                onNavigate(url)
-            }),
-            modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = 4.dp),
+            keyboardActions =
+                KeyboardActions(onGo = {
+                    val url =
+                        if (urlText.startsWith("http://") || urlText.startsWith("https://")) {
+                            urlText
+                        } else {
+                            "https://$urlText"
+                        }
+                    onNavigate(url)
+                }),
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .padding(horizontal = 4.dp),
         )
 
         if (showAI) {

@@ -22,7 +22,10 @@ import androidx.compose.ui.unit.dp
 import com.kelpie.browser.browser.HistoryStore
 
 @Composable
-fun HistorySheet(onNavigate: (String) -> Unit, onDismiss: () -> Unit) {
+fun HistorySheet(
+    onNavigate: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
     val entries by HistoryStore.entries.collectAsState()
 
     Column(modifier = Modifier.padding(16.dp)) {
@@ -39,10 +42,13 @@ fun HistorySheet(onNavigate: (String) -> Unit, onDismiss: () -> Unit) {
             LazyColumn {
                 items(entries.reversed(), key = { it.id }) { entry ->
                     Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onNavigate(entry.url); onDismiss() }
-                            .padding(vertical = 8.dp),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    onNavigate(entry.url)
+                                    onDismiss()
+                                }.padding(vertical = 8.dp),
                     ) {
                         Text(
                             entry.title.ifEmpty { entry.url },

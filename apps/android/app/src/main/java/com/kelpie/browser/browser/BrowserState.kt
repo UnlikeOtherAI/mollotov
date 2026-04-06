@@ -26,10 +26,27 @@ class BrowserState {
 
     var webView: WebView? = null
 
-    fun updateUrl(url: String) { _currentUrl.value = url }
-    fun updateTitle(title: String) { _pageTitle.value = title }
-    fun updateLoading(loading: Boolean) { _isLoading.value = loading }
-    fun updateCanGoBack(can: Boolean) { _canGoBack.value = can }
-    fun updateCanGoForward(can: Boolean) { _canGoForward.value = can }
-    fun updateProgress(p: Int) { _progress.value = p }
+    fun updateUrl(url: String) {
+        _currentUrl.value = url
+    }
+
+    fun updateTitle(title: String) {
+        _pageTitle.value = title
+    }
+
+    fun updateLoading(loading: Boolean) {
+        _isLoading.value = loading
+    }
+
+    fun updateCanGoBack(can: Boolean) {
+        _canGoBack.value = can
+    }
+
+    fun updateCanGoForward(can: Boolean) {
+        _canGoForward.value = can
+    }
+
+    fun updateProgress(p: Int) {
+        _progress.value = p
+    }
 }

@@ -51,10 +51,10 @@ private val KelpieOrange = Color(0xFFF4B078)
 private const val PREFS_NAME = "kelpie_prefs"
 private const val KEY_HIDE_WELCOME = "hide_welcome_card"
 
-fun shouldShowWelcome(context: Context): Boolean {
-    return !context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+fun shouldShowWelcome(context: Context): Boolean =
+    !context
+        .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         .getBoolean(KEY_HIDE_WELCOME, false)
-}
 
 @Composable
 fun WelcomeCard(onDismiss: () -> Unit) {
@@ -63,30 +63,36 @@ fun WelcomeCard(onDismiss: () -> Unit) {
 
     fun dismiss() {
         if (dontShowAgain) {
-            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                .edit().putBoolean(KEY_HIDE_WELCOME, true).apply()
+            context
+                .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(KEY_HIDE_WELCOME, true)
+                .apply()
         }
         onDismiss()
     }
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.4f))
-            .clickable(
-                indication = null,
-                interactionSource = remember { MutableInteractionSource() },
-            ) { dismiss() },
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.4f))
+                .clickable(
+                    indication = null,
+                    interactionSource = remember { MutableInteractionSource() },
+                ) { dismiss() },
         contentAlignment = Alignment.Center,
     ) {
         Card(
-            modifier = Modifier
-                .padding(horizontal = 32.dp)
-                .shadow(20.dp, RoundedCornerShape(24.dp)),
+            modifier =
+                Modifier
+                    .padding(horizontal = 32.dp)
+                    .shadow(20.dp, RoundedCornerShape(24.dp)),
             shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface,
-            ),
+            colors =
+                CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                ),
         ) {
             Column(
                 modifier = Modifier.padding(28.dp),
@@ -95,9 +101,10 @@ fun WelcomeCard(onDismiss: () -> Unit) {
                 Image(
                     painter = painterResource(R.drawable.ic_welcome_icon),
                     contentDescription = "Kelpie",
-                    modifier = Modifier
-                        .size(80.dp)
-                        .clip(RoundedCornerShape(18.dp)),
+                    modifier =
+                        Modifier
+                            .size(80.dp)
+                            .clip(RoundedCornerShape(18.dp)),
                 )
 
                 Spacer(modifier = Modifier.height(20.dp))
@@ -161,9 +168,10 @@ fun WelcomeCard(onDismiss: () -> Unit) {
                     Switch(
                         checked = dontShowAgain,
                         onCheckedChange = { dontShowAgain = it },
-                        colors = SwitchDefaults.colors(
-                            checkedTrackColor = KelpieOrange,
-                        ),
+                        colors =
+                            SwitchDefaults.colors(
+                                checkedTrackColor = KelpieOrange,
+                            ),
                     )
                 }
 
@@ -173,10 +181,11 @@ fun WelcomeCard(onDismiss: () -> Unit) {
                     onClick = { dismiss() },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = KelpieOrange,
-                        contentColor = Color.White,
-                    ),
+                    colors =
+                        ButtonDefaults.buttonColors(
+                            containerColor = KelpieOrange,
+                            contentColor = Color.White,
+                        ),
                 ) {
                     Text(
                         text = "Get Started",

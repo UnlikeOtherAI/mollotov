@@ -1,7 +1,6 @@
 package com.kelpie.browser.device
 
 import android.content.Context
-import android.net.wifi.WifiManager
 import android.os.Build
 import android.util.DisplayMetrics
 import android.view.WindowManager
@@ -20,7 +19,10 @@ data class DeviceInfo(
     val version: String,
 ) {
     companion object {
-        fun collect(context: Context, port: Int = 8420): DeviceInfo {
+        fun collect(
+            context: Context,
+            port: Int = 8420,
+        ): DeviceInfo {
             val id = DeviceIdentity.getOrCreate(context)
             val name = "${Build.MANUFACTURER} ${Build.MODEL}".trim()
             val model = Build.MODEL
@@ -53,7 +55,8 @@ data class DeviceInfo(
                         }
                     }
                 }
-            } catch (_: Exception) {}
+            } catch (_: Exception) {
+            }
             return "0.0.0.0"
         }
     }

@@ -5,7 +5,9 @@ import com.kelpie.browser.network.Router
 import com.kelpie.browser.network.errorResponse
 import com.kelpie.browser.network.successResponse
 
-class BookmarkHandler(private val ctx: HandlerContext) {
+class BookmarkHandler(
+    private val ctx: HandlerContext,
+) {
     fun register(router: Router) {
         router.register("bookmarks-list") { list() }
         router.register("bookmarks-add") { add(it) }
@@ -13,8 +15,7 @@ class BookmarkHandler(private val ctx: HandlerContext) {
         router.register("bookmarks-clear") { clear() }
     }
 
-    private suspend fun list(): Map<String, Any?> =
-        successResponse(mapOf("bookmarks" to BookmarkStore.toJSON()))
+    private suspend fun list(): Map<String, Any?> = successResponse(mapOf("bookmarks" to BookmarkStore.toJSON()))
 
     private suspend fun add(body: Map<String, Any?>): Map<String, Any?> {
         val url = body["url"] as? String ?: return errorResponse("MISSING_PARAM", "url is required")

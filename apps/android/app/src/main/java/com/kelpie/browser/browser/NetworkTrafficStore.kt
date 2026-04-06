@@ -27,19 +27,20 @@ data class TrafficEntry(
     val startTime: String = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(Date()),
     val duration: Int = 0,
     val size: Int = 0,
-    val initiator: String = "browser",  // "browser" or "js"
+    val initiator: String = "browser", // "browser" or "js"
 ) {
     val category: String
-        get() = when {
-            contentType.contains("json") -> "JSON"
-            contentType.contains("html") -> "HTML"
-            contentType.contains("css") -> "CSS"
-            contentType.contains("javascript") || contentType.contains("ecmascript") -> "JS"
-            contentType.contains("image") -> "Image"
-            contentType.contains("font") -> "Font"
-            contentType.contains("xml") -> "XML"
-            else -> "Other"
-        }
+        get() =
+            when {
+                contentType.contains("json") -> "JSON"
+                contentType.contains("html") -> "HTML"
+                contentType.contains("css") -> "CSS"
+                contentType.contains("javascript") || contentType.contains("ecmascript") -> "JS"
+                contentType.contains("image") -> "Image"
+                contentType.contains("font") -> "Font"
+                contentType.contains("xml") -> "XML"
+                else -> "Other"
+            }
 }
 
 object NetworkTrafficStore {
@@ -117,40 +118,42 @@ object NetworkTrafficStore {
         }
     }
 
-    fun entryToMap(entry: TrafficEntry): Map<String, Any?> = mapOf(
-        "id" to entry.id,
-        "method" to entry.method,
-        "url" to entry.url,
-        "statusCode" to entry.statusCode,
-        "contentType" to entry.contentType,
-        "category" to entry.category,
-        "initiator" to entry.initiator,
-        "requestHeaders" to entry.requestHeaders,
-        "responseHeaders" to entry.responseHeaders,
-        "requestBody" to (entry.requestBody ?: ""),
-        "responseBody" to (entry.responseBody ?: ""),
-        "startTime" to entry.startTime,
-        "duration" to entry.duration,
-        "size" to entry.size,
-    )
+    fun entryToMap(entry: TrafficEntry): Map<String, Any?> =
+        mapOf(
+            "id" to entry.id,
+            "method" to entry.method,
+            "url" to entry.url,
+            "statusCode" to entry.statusCode,
+            "contentType" to entry.contentType,
+            "category" to entry.category,
+            "initiator" to entry.initiator,
+            "requestHeaders" to entry.requestHeaders,
+            "responseHeaders" to entry.responseHeaders,
+            "requestBody" to (entry.requestBody ?: ""),
+            "responseBody" to (entry.responseBody ?: ""),
+            "startTime" to entry.startTime,
+            "duration" to entry.duration,
+            "size" to entry.size,
+        )
 
     fun toSummaryList(
         method: String? = null,
         category: String? = null,
         statusRange: String? = null,
         urlPattern: String? = null,
-    ): List<Map<String, Any?>> = synchronized(lock) {
-        ensureInitialized()
-        parseSummaryList(
-            NativeCore.networkTrafficStoreToSummaryJson(
-                handle = nativeHandle,
-                method = method,
-                category = category,
-                statusRange = statusRange,
-                urlPattern = urlPattern,
-            ),
-        )
-    }
+    ): List<Map<String, Any?>> =
+        synchronized(lock) {
+            ensureInitialized()
+            parseSummaryList(
+                NativeCore.networkTrafficStoreToSummaryJson(
+                    handle = nativeHandle,
+                    method = method,
+                    category = category,
+                    statusRange = statusRange,
+                    urlPattern = urlPattern,
+                ),
+            )
+        }
 
     private fun ensureInitialized() {
         if (!::prefs.isInitialized) {
@@ -189,22 +192,23 @@ object NetworkTrafficStore {
         val list = ArrayList<Map<String, Any?>>(arr.length())
         for (i in 0 until arr.length()) {
             val obj = arr.getJSONObject(i)
-            list += mapOf(
-                "index" to obj.optInt("index"),
-                "method" to obj.optString("method"),
-                "url" to obj.optString("url"),
-                "statusCode" to optInt(obj, "status_code", "statusCode"),
-                "contentType" to optString(obj, "content_type", "contentType"),
-                "category" to obj.optString("category"),
-                "duration" to obj.optInt("duration"),
-                "size" to obj.optInt("size"),
-            )
+            list +=
+                mapOf(
+                    "index" to obj.optInt("index"),
+                    "method" to obj.optString("method"),
+                    "url" to obj.optString("url"),
+                    "statusCode" to optInt(obj, "status_code", "statusCode"),
+                    "contentType" to optString(obj, "content_type", "contentType"),
+                    "category" to obj.optString("category"),
+                    "duration" to obj.optInt("duration"),
+                    "size" to obj.optInt("size"),
+                )
         }
         return list
     }
 
-    private fun JSONObject.toTrafficEntry(): TrafficEntry {
-        return TrafficEntry(
+    private fun JSONObject.toTrafficEntry(): TrafficEntry =
+        TrafficEntry(
             id = getString("id"),
             method = optString("method", "GET"),
             url = optString("url", ""),
@@ -219,39 +223,47 @@ object NetworkTrafficStore {
             size = optInt("size"),
             initiator = optString("initiator", "browser"),
         )
-    }
 
-    private fun trafficEntryToJson(entry: TrafficEntry): String {
-        return JSONObject().apply {
-            put("id", entry.id)
-            put("method", entry.method)
-            put("url", entry.url)
-            put("statusCode", entry.statusCode)
-            put("contentType", entry.contentType)
-            put("initiator", entry.initiator)
-            put("requestHeaders", JSONObject(entry.requestHeaders))
-            put("responseHeaders", JSONObject(entry.responseHeaders))
-            put("requestBody", entry.requestBody ?: "")
-            put("responseBody", entry.responseBody ?: "")
-            put("startTime", entry.startTime)
-            put("duration", entry.duration)
-            put("size", entry.size)
-        }.toString()
-    }
+    private fun trafficEntryToJson(entry: TrafficEntry): String =
+        JSONObject()
+            .apply {
+                put("id", entry.id)
+                put("method", entry.method)
+                put("url", entry.url)
+                put("statusCode", entry.statusCode)
+                put("contentType", entry.contentType)
+                put("initiator", entry.initiator)
+                put("requestHeaders", JSONObject(entry.requestHeaders))
+                put("responseHeaders", JSONObject(entry.responseHeaders))
+                put("requestBody", entry.requestBody ?: "")
+                put("responseBody", entry.responseBody ?: "")
+                put("startTime", entry.startTime)
+                put("duration", entry.duration)
+                put("size", entry.size)
+            }.toString()
 
-    private fun optInt(obj: JSONObject, snakeCase: String, camelCase: String): Int {
-        return if (obj.has(snakeCase)) obj.optInt(snakeCase) else obj.optInt(camelCase)
-    }
+    private fun optInt(
+        obj: JSONObject,
+        snakeCase: String,
+        camelCase: String,
+    ): Int = if (obj.has(snakeCase)) obj.optInt(snakeCase) else obj.optInt(camelCase)
 
-    private fun optString(obj: JSONObject, key: String, fallback: String): String {
-        return if (obj.has(key)) obj.optString(key, fallback) else fallback
-    }
+    private fun optString(
+        obj: JSONObject,
+        key: String,
+        fallback: String,
+    ): String = if (obj.has(key)) obj.optString(key, fallback) else fallback
 
-    private fun optStringMap(obj: JSONObject, snakeCase: String, camelCase: String): Map<String, String> {
-        val source = when {
-            obj.has(snakeCase) -> obj.optJSONObject(snakeCase)
-            else -> obj.optJSONObject(camelCase)
-        } ?: return emptyMap()
+    private fun optStringMap(
+        obj: JSONObject,
+        snakeCase: String,
+        camelCase: String,
+    ): Map<String, String> {
+        val source =
+            when {
+                obj.has(snakeCase) -> obj.optJSONObject(snakeCase)
+                else -> obj.optJSONObject(camelCase)
+            } ?: return emptyMap()
 
         val values = LinkedHashMap<String, String>(source.length())
         for (key in source.keys()) {
@@ -260,12 +272,17 @@ object NetworkTrafficStore {
         return values
     }
 
-    private fun optNullableString(obj: JSONObject, snakeCase: String, camelCase: String): String? {
-        val key = when {
-            obj.has(snakeCase) -> snakeCase
-            obj.has(camelCase) -> camelCase
-            else -> return null
-        }
+    private fun optNullableString(
+        obj: JSONObject,
+        snakeCase: String,
+        camelCase: String,
+    ): String? {
+        val key =
+            when {
+                obj.has(snakeCase) -> snakeCase
+                obj.has(camelCase) -> camelCase
+                else -> return null
+            }
         return obj.optString(key).takeIf { it.isNotEmpty() }
     }
 }

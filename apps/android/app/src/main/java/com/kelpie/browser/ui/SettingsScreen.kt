@@ -2,23 +2,23 @@ package com.kelpie.browser.ui
 
 import android.content.Intent
 import android.net.Uri
-import androidx.compose.material3.Switch
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -36,9 +36,10 @@ fun SettingsScreen(
     var enable3DInspector by remember { mutableStateOf(FeatureFlags.is3DInspectorEnabled(context)) }
 
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 16.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 16.dp),
     ) {
         Text("Kelpie", style = MaterialTheme.typography.headlineMedium)
         Spacer(Modifier.height(16.dp))
@@ -110,7 +111,10 @@ private fun SectionHeader(title: String) {
 }
 
 @Composable
-private fun InfoRow(label: String, value: String) {
+private fun InfoRow(
+    label: String,
+    value: String,
+) {
     Text(
         text = "$label: $value",
         style = MaterialTheme.typography.bodyMedium,
@@ -134,9 +138,13 @@ private fun HelpActionRow(
     }
 }
 
-private fun openHelpURL(context: android.content.Context, value: String) {
-    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(value)).apply {
-        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    }
+private fun openHelpURL(
+    context: android.content.Context,
+    value: String,
+) {
+    val intent =
+        Intent(Intent.ACTION_VIEW, Uri.parse(value)).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
     context.startActivity(intent)
 }
