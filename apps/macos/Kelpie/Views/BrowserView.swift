@@ -248,7 +248,7 @@ struct BrowserView: View {
             .frame(width: 0, height: 0)
         )
         .sheet(isPresented: $showSettings) {
-            SettingsView(serverState: serverState, rendererState: rendererState)
+            SettingsView(serverState: serverState, rendererState: rendererState, onNavigate: navigate)
         }
         .sheet(isPresented: $showBookmarks) {
             BookmarksView(

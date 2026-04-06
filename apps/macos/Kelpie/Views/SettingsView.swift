@@ -5,8 +5,12 @@ import AppKit
 struct SettingsView: View {
     @ObservedObject var serverState: ServerState
     @ObservedObject var rendererState: RendererState
+    var onNavigate: ((String) -> Void)?
     @ObservedObject private var aiState = AIState.shared
+    @AppStorage("huggingFaceToken") private var huggingFaceToken: String = ""
     @Environment(\.dismiss) private var dismiss
+    @State private var showHFTokenField = false
+    @State private var hfTokenDraft = ""
 
     var body: some View {
         VStack {
@@ -71,6 +75,65 @@ struct SettingsView: View {
                     }
                 }
 
+                Section("HuggingFace") {
+                    HStack {
+                        Image(systemName: "key.fill")
+                            .foregroundColor(huggingFaceToken.isEmpty ? .orange : .green)
+                        Text("API Token")
+                        Spacer()
+                        Text(huggingFaceToken.isEmpty ? "Not set" : "Configured")
+                            .foregroundColor(.secondary)
+                    }
+
+                    if showHFTokenField {
+                        SecureField("hf_...", text: $hfTokenDraft)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(.body, design: .monospaced))
+                            .accessibilityIdentifier("settings.hf-token.input")
+
+                        HStack {
+                            if !huggingFaceToken.isEmpty {
+                                Button("Clear") {
+                                    huggingFaceToken = ""
+                                    hfTokenDraft = ""
+                                    showHFTokenField = false
+                                }
+                                .controlSize(.small)
+                            }
+                            Spacer()
+                            Button("Cancel") {
+                                hfTokenDraft = ""
+                                showHFTokenField = false
+                            }
+                            .controlSize(.small)
+                            Button("Save") {
+                                huggingFaceToken = hfTokenDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+                                hfTokenDraft = ""
+                                showHFTokenField = false
+                            }
+                            .controlSize(.small)
+                            .disabled(hfTokenDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            .accessibilityIdentifier("settings.hf-token.save")
+                        }
+                    } else {
+                        Button("Set API Key") {
+                            hfTokenDraft = huggingFaceToken
+                            showHFTokenField = true
+                        }
+                        .controlSize(.small)
+                        .accessibilityIdentifier("settings.hf-token.toggle")
+                    }
+
+                    Button("Open HuggingFace Tokens Page") {
+                        dismiss()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            onNavigate?("https://huggingface.co/settings/tokens")
+                        }
+                    }
+                    .controlSize(.small)
+                    .accessibilityIdentifier("settings.hf-token.open-page")
+                }
+
                 Section("Network") {
                     row("IP Address", serverState.ipAddress)
                     row("Port", String(serverState.deviceInfo.port))
@@ -114,7 +177,7 @@ struct SettingsView: View {
             }
             .padding()
         }
-        .frame(width: 400, height: 500)
+        .frame(width: 400, height: 600)
     }
 
     private var activeModelSelection: Binding<String> {
