@@ -32,6 +32,10 @@ On Windows, the first desktop shell now exists under `apps/windows/`: Win32 main
 
 One-tap login using the device's saved passwords. On iOS, opens an ASWebAuthenticationSession (Safari's login sheet) that shares Safari's saved passwords and cookies. On Android, uses Chrome Custom Tabs. After login, cookies are synced back into the browser automatically.
 
+### Persistent Home Page
+
+Every platform keeps a persisted home page URL. Fresh launches load that URL instead of a hard-coded blank tab, and automation can change it remotely with `set-home` / `get-home` or the matching CLI commands `kelpie home set` / `kelpie home get`.
+
 ## Renderer Switching (macOS)
 
 Switch between Safari (WebKit), Chrome (Chromium/CEF), and Firefox (Gecko) rendering engines at runtime. Available via the UI segmented control and the `set-renderer` / `get-renderer` HTTP endpoints. Cookies are migrated automatically when switching to preserve login sessions.
@@ -58,7 +62,7 @@ Full read access to the page DOM. Query elements by CSS selector, get their text
 
 Click elements by selector or tap at specific coordinates. Fill form inputs, type text character-by-character (simulating human typing with per-character delays), select dropdown options, check/uncheck checkboxes. Every interaction shows a blue touch indicator animation on the device so you can see what happened.
 
-Swipe gestures are first-class too: give Kelpie start and end viewport coordinates and it renders a visible swipe trail while driving the matching page movement.
+Swipe gestures are first-class too: give Kelpie start and end viewport coordinates and it renders a visible swipe trail while dispatching synthetic pointer events to JS-driven touch listeners. For native scrolling, use the scroll endpoints instead.
 
 ## Scripted Video Recording
 
@@ -265,11 +269,15 @@ Published GitHub releases also build Android release artifacts and publish the C
 
 ## Settings Panel
 
-Slides in from the floating menu. Shows device info (name, model, platform, OS, resolution), connection status (IP, port, mDNS advertising, HTTP server running), and copyable connection URLs. Port and device name are editable.
+Slides in from the floating menu. The current settings surfaces are primarily status and control panels, not device-identity editors: they show device info, network status, and version/build information, plus platform-specific help and experimental controls.
 
-On iOS and Android, the settings sheet also includes a `Help` section with the same support actions exposed on macOS: `Show Welcome Screen`, `Open Kelpie Website`, `Open GitHub Repository`, and `Open UnlikeOtherAI`. `Show Welcome Screen` is an explicit help action and still opens the welcome card even if the user previously chose not to show it automatically on launch.
+On iOS, the settings sheet shows device and network details, a copyable connection URL, a `Debug Overlay` toggle for external-display diagnostics, an `Experimental` toggle for the 3D DOM inspector, the shared help actions (`Show Welcome Screen`, `Open Kelpie Website`, `Open GitHub Repository`, and `Open UnlikeOtherAI`), and app version/build details.
 
-On iPad, those same actions are also exposed directly from the app menu, immediately under the app `Settings` item, so keyboard-and-menu users do not need to open the settings sheet first. The iPad app also adds a `View` menu that lists the currently available staged phone, tablet, and laptop viewport presets plus `Full Width`, and those menu items are sourced from the same native preset catalog used by the floating menu and MCP APIs.
+On Android, the settings sheet mirrors the same core device and network status, the shared help actions, and an `Experimental` 3D DOM inspector toggle.
+
+On macOS, the settings sheet adds renderer status plus a native AI section: active model picker, Ollama endpoint field, reachability test, and local-model status summary, alongside the same network/app information and the `Experimental` 3D DOM inspector toggle.
+
+On iPad, the same help actions are also exposed directly from the app menu, immediately under the app `Settings` item, so keyboard-and-menu users do not need to open the settings sheet first. The iPad app also adds a `View` menu that lists the currently available staged phone, tablet, and laptop viewport presets plus `Full Width`, and those menu items are sourced from the same native preset catalog used by the floating menu and MCP APIs.
 
 ## Dialogs
 

@@ -168,6 +168,21 @@ struct ScriptHandler {
     ) -> [String: Any] {
         var body = action
         body.removeValue(forKey: "action")
+
+        // Normalize script-facing field names to endpoint field names
+        switch actionName {
+        case "evaluate":
+            if body["expression"] == nil, let script = body.removeValue(forKey: "script") {
+                body["expression"] = script
+            }
+        case "handle-dialog":
+            if body["promptText"] == nil, let text = body.removeValue(forKey: "text") {
+                body["promptText"] = text
+            }
+        default:
+            break
+        }
+
         let colorActions: Set<String> = [
             "click", "tap", "fill", "type", "select-option", "check", "uncheck", "swipe"
         ]
@@ -209,6 +224,11 @@ struct ScriptHandler {
                         "waitTime": Int(Date().timeIntervalSince(start) * 1000)
                     ])
                 }
+            } else if state == "hidden" {
+                return successResponse([
+                    "detached": true,
+                    "waitTime": Int(Date().timeIntervalSince(start) * 1000)
+                ])
             }
             if !(await sleepWithAbortCheck(milliseconds: 100)) {
                 return abortResponse()

@@ -29,7 +29,17 @@ final class Router: @unchecked Sendable {
         }
         let result = await handler(body)
         let success = result["success"] as? Bool ?? false
-        let status = success ? 200 : (result["error"] != nil ? 400 : 200)
+        let errorCode = (result["error"] as? [String: Any])?["code"] as? String
+        let status: Int
+        if success {
+            status = 200
+        } else if errorCode == "SCRIPT_PARTIAL_FAILURE" || errorCode == "SCRIPT_ABORTED" {
+            status = 200
+        } else if result["error"] != nil {
+            status = 400
+        } else {
+            status = 200
+        }
 
         // Auto-show toast if the request includes a "message" param
         if let message = body["message"] as? String, !message.isEmpty, let ctx = handlerContext {

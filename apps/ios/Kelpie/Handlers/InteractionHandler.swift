@@ -136,6 +136,7 @@ struct InteractionHandler {
         }
         let delay = body["delay"] as? Int ?? 50
         for char in text {
+            if context.scriptPlaybackState?.isAbortRequested() == true { break }
             let escapedChar = JSEscape.string(String(char))
             let charJS = """
             (function() {

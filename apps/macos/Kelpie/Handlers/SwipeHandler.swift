@@ -38,6 +38,7 @@ struct SwipeHandler {
 
         let stepDelay = max(durationMs / steps, 1)
         for step in 0...steps {
+            if context.scriptPlaybackState?.isAbortRequested() == true { break }
             let progress = Double(step) / Double(steps)
             let currentX = fx + (tx - fx) * progress
             let currentY = fy + (ty - fy) * progress

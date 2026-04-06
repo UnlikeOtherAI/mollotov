@@ -8,6 +8,7 @@ final class HandlerContext {
     var renderer: (any RendererEngine)?
     var consoleMessages: [[String: Any]] = []
     var isIn3DInspector = false
+    var scriptPlaybackState: ScriptPlaybackState?
 
     /// Populated by BrowserView so tab handlers can drive the full tab lifecycle.
     var tabStore: TabStore?

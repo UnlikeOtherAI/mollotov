@@ -8,6 +8,7 @@ final class HandlerContext: NSObject, WKScriptMessageHandler {
     weak var webView: WKWebView?
     var consoleMessages: [[String: Any]] = []
     var isIn3DInspector = false
+    var scriptPlaybackState: ScriptPlaybackState?
     let safariAuth = SafariAuthHelper()
 
     override nonisolated init() { super.init() }

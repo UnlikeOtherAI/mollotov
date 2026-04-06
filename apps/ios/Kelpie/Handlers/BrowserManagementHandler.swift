@@ -31,7 +31,7 @@ struct BrowserManagementHandler {
         router.register("is-element-obscured") { body in await isElementObscured(body) }
 
         // Unsupported
-        for method in ["set-geolocation", "clear-geolocation", "set-request-interception", "get-intercepted-requests", "clear-request-interception"] {
+        for method in ["set-geolocation", "clear-geolocation", "set-request-interception", "get-intercepted-requests", "clear-request-interception", "set-fullscreen", "get-fullscreen"] {
             router.register(method) { _ in
                 errorResponse(code: "PLATFORM_NOT_SUPPORTED", message: "\(method) is not supported on iOS")
             }
