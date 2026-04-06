@@ -535,6 +535,7 @@
       border-radius: 4px;
     }
     .ai-model-tag.local { background: rgba(34, 197, 94, 0.15); color: var(--green); border: 1px solid rgba(34,197,94,0.25); }
+    .ai-model-tag.local.new { background: rgba(0, 229, 176, 0.15); color: var(--teal); border: 1px solid rgba(0,229,176,0.35); }
     .ai-model-tag.remote { background: rgba(61, 142, 255, 0.15); color: var(--blue); border: 1px solid rgba(61,142,255,0.25); }
     .ai-card-note { font-size: 0.78rem; color: var(--muted); margin-top: 16px; font-weight: 300; }
 
@@ -993,6 +994,10 @@
           <div class="ai-card-title">Inference backends</div>
           <div class="ai-model-list">
             <div class="ai-model">
+              <span class="ai-model-name">Gemma 4 (GGUF)</span>
+              <span class="ai-model-tag local new">local · new</span>
+            </div>
+            <div class="ai-model">
               <span class="ai-model-name">Llama 3.2 3B (GGUF)</span>
               <span class="ai-model-tag local">local</span>
             </div>
@@ -1009,7 +1014,7 @@
               <span class="ai-model-tag remote">remote</span>
             </div>
             <div class="ai-model">
-              <span class="ai-model-name">OpenAI-compat API</span>
+              <span class="ai-model-name">Hugging Face</span>
               <span class="ai-model-tag remote">remote</span>
             </div>
           </div>
