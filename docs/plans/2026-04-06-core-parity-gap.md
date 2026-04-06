@@ -1,7 +1,9 @@
 # Core Parity Gap: macOS → C++ Native
 
 **Date:** 2026-04-06
-**Status:** Draft
+**Status:** Draft — **Extended with adversarial review findings from 9 simultaneous agents**
+
+> **Summary of 9-agent review:** 107 total issues found across all components. 8 critical security/correctness bugs. The document's core direction (move logic to core) is correct but several items are understated or missing. The C++ implementations are significantly less complete than the document implies.
 
 This document catalogues everything in the macOS Swift app that should live in the core C++ project (`native/`), either because it is already implemented in `native/` and the macOS app isn't using it, or because it is platform-agnostic and belongs in `native/` even if it isn't there yet.
 
@@ -282,3 +284,275 @@ Per AGENTS.md § Platform Parity, every feature on one platform must be on all p
 - Favicon extraction logic in core (iOS and Android must implement the same algorithm)
 
 When implementing any Phase 1–4 item, update `docs/functionality.md` and the relevant API docs in `docs/api/` to reflect the new cross-platform behavior.
+
+---
+
+## 6. Adversarial Review Findings (9 Simultaneous Agents)
+
+**Total issues found: 107. Critical (confidence 88+): 21. Important (confidence 80-87): 35.**
+
+> Cross-platform parity agent ran out of tokens before completing — additional parity gaps likely exist.
+
+### CRITICAL Issues (must fix before any phase ships)
+
+---
+
+#### C1 — HTTP Server: Missing Content-Length enables request smuggling/desync
+
+**Source:** Critical Edge Cases agent
+**File:** `apps/macos/Kelpie/Network/HTTPServer.swift`, lines 89–124
+
+`parseContentLength` returns `0` when the header is absent or malformed. A POST request with no `Content-Length` is immediately dispatched with a truncated body. Leftover bytes become the start of the next pipelined request — textbook HTTP desync. Connection has no read timeout.
+
+```
+if bodyReceived >= contentLength {   // contentLength = 0 when absent
+    Task { await self.processRequest(connection: connection, data: accumulated) }
+}
+```
+
+---
+
+#### C2 — HTTP Server + NavigationHandler: No URL scheme validation — javascript: and data: URIs reach the renderer
+
+**Source:** Critical Edge Cases agent
+**Files:** `apps/macos/Kelpie/Network/HTTPServer.swift:136`, `apps/macos/Kelpie/Handlers/NavigationHandler.swift:18`
+
+Path passed to router without scheme filtering. navigate checks URL(string:) only — javascript:alert(document.cookie) parses fine. WKWebView executes it. Any CLI user on the LAN can XSS the browser origin via the HTTP API.
+
+---
+
+#### C3 — HTTPServer: @unchecked Sendable on class with multiple mutable shared fields
+
+**Source:** Critical Edge Cases + Architecture agents
+**File:** `apps/macos/Kelpie/Network/HTTPServer.swift`, line 6
+
+```swift
+final class HTTPServer: @unchecked Sendable {
+    private var listener: NWListener?
+    private var bonjourService: NWListener.Service?
+```
+
+Marked suppressive but has multiple mutable fields accessed from NWListener internal threads and Task closures concurrently. No lock. Future concurrent access introduces races silently.
+
+---
+
+#### C4 — CEFRenderer has zero bridge script injection — NetworkBridge and ConsoleBridge do not work on CEF
+
+**Source:** Bridge Scripts agent
+**File:** `apps/macos/Kelpie/Renderer/CEFRenderer.swift`
+
+WKWebViewRenderer injects both bridge scripts via addUserScript. CEFRenderer has no equivalent mechanism — does not call addUserScript. Network interception (XMLHttpRequest/fetch) is entirely absent on CEF. The document Phase 1 plan does not address that the CEF injection pipeline does not exist.
+
+---
+
+#### C5 — NetworkBridge has no fallback chain — hardcodes WebKit messageHandler
+
+**Source:** Bridge Scripts agent
+**File:** `apps/macos/Kelpie/Handlers/NetworkBridge.swift`, lines 9–11
+
+```javascript
+var _post = window.webkit.messageHandlers.kelpieNetwork.postMessage.bind(
+    window.webkit.messageHandlers.kelpieNetwork
+);
+```
+
+No if (window.webkit...) guard. On CEF or Android WebView this throws TypeError at load time before any network event is captured. The document action item says add a fallback chain — this is already broken, not a future improvement.
+
+---
+
+#### C6 — MutationHandler: MutationObserver buffers and observers accumulate across every page navigation — never cleaned up
+
+**Source:** Critical Edge Cases + Bridge Scripts agents
+**File:** `apps/macos/Kelpie/Handlers/MutationHandler.swift`, lines 23–67
+
+WKWebView reuses the same JS context for same-origin navigations. window.__kelpieMutations persists across navigations. No stopWatching call on navigation — observers accumulate indefinitely. On heavy-DOM pages (live data, infinite scroll), each observer fills to 1000 entries. 10 calls without stop-watching = up to 10000 orphaned mutation entries accumulating in memory. Also: watchId uses Date.now() — two calls within the same millisecond produce duplicate IDs, orphaning the first observer.
+
+---
+
+#### C7 — Snapshot3DBridge: document.write/document.open called after injection silently orphans the inspector
+
+**Source:** Critical Edge Cases agent
+**File:** `apps/macos/Kelpie/Handlers/Snapshot3DBridge.swift`
+
+document.write during parse or document.open post-load erases the DOM including __m3d_overlay, __m3d_suppress, iframe labels, and all modified element inline styles. The JS window.__m3d survives. Overlay is gone — user sees nothing and cannot interact. On re-entry after document.open, the stale cleanup at the top of enterScript runs against the new document with nil or dead-element WeakMap references.
+
+---
+
+#### C8 — InteractionHandler: selector parameter escapes only single-quote — full CSS selector injection possible
+
+**Source:** Critical Edge Cases + Handler Wire-Through agents
+**File:** `apps/macos/Kelpie/Handlers/InteractionHandler.swift`, lines 24, 70, 97, 128, 152
+
+document.querySelector('selector.replacingOccurrences(of: "'", with: "\\'")') — crafted selectors like [onfocus=alert(1)//], div[class*=secret], input[type=password], or button[class*=admin] enumerate page structure and detect specific elements. Not direct XSS (native setters bypass re-parsing) but exploitable information disclosure by any CLI user.
+
+---
+
+#### C9 — WKWebViewRenderer: Inverted deduplication guard — non-consecutive duplicate URLs all re-logged
+
+**Source:** Critical Edge Cases + Platform-Specific agents
+**File:** `apps/macos/Kelpie/Renderer/WKWebViewRenderer.swift`, line 220
+
+capturedDocumentResponseURL != url else { return } then set at end. Trace A -> B -> A: Call 3 checks B != A -> true -> logs A again. Guard only prevents consecutive duplicates. In CLI automation sessions revisiting pages (form -> submit -> back to form), NetworkTrafficStore silently records duplicate entries.
+
+---
+
+#### C10 — SharedCookieJar: SameSite attribute silently dropped on every save/load cycle
+
+**Source:** Store Parity agent
+**File:** `apps/macos/Kelpie/Browser/SharedCookieJar.swift`
+
+StoredCookie has no sameSite field. signature() omits SameSite from hash — cookie policy changes undetectable. Additionally: HttpOnly and Secure are set as string "TRUE" instead of Bool true. Both flags silently lost on restore.
+
+---
+
+#### C11 — SharedCookieJar: Cookies silently dropped when switching FROM CEF
+
+**Source:** Platform-Specific agent
+**File:** `apps/macos/Kelpie/Renderer/CookieMigrator.swift`, lines 7–16
+
+guard source.engineName != "chromium" else { return } — when switching from CEF to WebKit, migrate returns immediately. SharedCookieJar never populated with CEF cookies. httpOnly cookies also silently skipped in injectCookiesViaJS due to CEF API limitations.
+
+---
+
+#### C12 — Document error: wait-for-element and wait-for-navigation do not exist in C++
+
+**Source:** Handler Wire-Through agent
+**File:** `native/engine-chromium-desktop/src/handlers/evaluate_handler.cpp`
+
+The document claims both are implemented. Grep across entire native/ tree finds zero references. Only evaluate is implemented. Phase 3 wire-through for EvaluateHandler is built on false premise.
+
+---
+
+#### C13 — C++ scroll-to-bottom uses document.body.scrollHeight — fails on overflow:hidden body
+
+**Source:** Handler Wire-Through agent
+**File:** `native/engine-chromium-desktop/src/handlers/scroll_handler.cpp`, line 13
+
+C++ uses document.body.scrollHeight. Swift uses document.documentElement.scrollHeight. Pages with body { overflow: hidden } (common in SPAs) report body.scrollHeight === window.innerHeight — zero scrollable distance. C++ version will not scroll to bottom of these pages.
+
+---
+
+#### C14 — C++ type ignores delay parameter — sends all characters synchronously
+
+**Source:** Handler Wire-Through agent
+**File:** `native/engine-chromium-desktop/src/handlers/interaction_handler.cpp`, lines 99–103
+
+Swift typeText loops with Task.sleep per character. C++ uses synchronous for-loop with no sleep. Sites listening for intermediate input events (Google Search, typeaheads, form validators) receive all characters simultaneously and miss intermediate state.
+
+---
+
+#### C15 — C++ navigate does not wait for page load — reports zero load time
+
+**Source:** Handler Wire-Through agent
+**File:** `native/engine-chromium-desktop/src/handlers/navigation_handler.cpp`, lines 22–33
+
+Swift polls isLoadingPage up to 10 seconds. C++ calls LoadUrl(url), records NowMillis() immediately, returns — loadTime always negligible. C++ navigation methods also do not call cookie persistence. Sessions not migrated on navigation.
+
+---
+
+#### C16 — C++ fill uses element.value= — fails on React/Vue/Angular instrumented inputs
+
+**Source:** Handler Wire-Through agent
+**File:** `native/engine-chromium-desktop/src/handlers/interaction_handler.cpp`, line 68
+
+Swift uses Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, value)?.set to bypass framework setters. C++ uses element.value = directly. On React/Angular/Vue apps, this sets the DOM property but may not trigger framework state update.
+
+---
+
+#### C17 — Document error: BrowserState does not contain isIn3DInspector or lastError
+
+**Source:** Store Parity agent
+**File:** `apps/macos/Kelpie/Browser/BrowserState.swift`
+
+The document claims BrowserState tracks these fields. They are not in the file. consoleMessages is present but not wired to the C++ kelpie_console_store C API. Document misstates what needs to move to core.
+
+---
+
+#### C18 — Snapshot3DBridge exit mechanism: fallback chain broken on CEF and Android
+
+**Source:** Bridge Scripts agent
+**File:** `apps/macos/Kelpie/Handlers/Snapshot3DBridge.swift`, lines 447–456
+
+webkit.messageHandlers fallback is WebKit-only. KelpieBridge.on3DSnapshotEvent — no platform sets this object. console.log(__kelpie_3d_exit__) depends on console bridging being wired to HandlerContext — no guarantee this forwarding is set up in all CEF and Android code paths.
+
+---
+
+#### C19 — Port 8420 claimed by two independent servers — no collision detection
+
+**Source:** Architecture agent
+**Files:** `native/engine-chromium-desktop/include/kelpie/desktop_http_server.h:14`, `apps/macos/Kelpie/Network/ServerState.swift:38`
+
+Both DesktopHttpServer (C++) and Swift HTTPServer default to port 8420. Currently only Swift starts. Phase 3 wire-through implies routing through C++ — if both servers run simultaneously they race for the port.
+
+---
+
+#### C20 — Swift HandlerContext has 30+ methods the C++ context does not have
+
+**Source:** Architecture agent
+**File:** `apps/macos/Kelpie/Handlers/HandlerContext.swift` vs `native/core-automation/include/kelpie/handler_context.h`
+
+Swift has: load, goBack, goForward, reloadPage, allCookies, setCookie, deleteCookie, syncSharedCookiesIntoRenderer, showTouchIndicator, showToast, waitForViewportSize, tab lifecycle, 3D inspector management. C++ context has: SetRenderer, EvaluateJs, EvaluateJsReturningJson. Wire-through without adding these to C++ will silently drop functionality.
+
+---
+
+#### C21 — C++ RendererInterface missing SetCookies, DeleteCookie, DeleteAllCookies, AllCookies
+
+**Source:** Architecture agent
+**File:** `native/core-automation/include/kelpie/renderer_interface.h`, lines 14–25
+
+Required by HandlerContext cookie sync methods. Without these, SharedCookieJar cannot be wired through to C++. Phase 3 navigation wire-through cannot complete without cookie infrastructure in core.
+
+---
+
+### IMPORTANT Issues (should fix before phase ships)
+
+#### I1 — HistoryStore.remove(id:) bypasses C API — no single-entry removal in core (C++ header has no remove_by_id function)
+#### I2 — History ISO8601 formatter too strict — non-standard dates silently become Date()
+#### I3 — History 500-entry cap only in C++ — Swift can accumulate unbounded entries before load_json
+#### I4 — HistoryStore remove(id:) has no actor isolation — data race on concurrent access
+#### I5 — FaviconExtractor uses ~= CSS operator — misses rel="shortcut icon" and compound rel values
+#### I6 — FaviconExtractor: data: URI favicons fail silently with no in-memory decode path
+#### I7 — FaviconExtractor: ICO multi-resolution — first image wins regardless of target display size
+#### I8 — C++ and Swift query-selector return incompatible response schemas (found/element vs found/count/elements array)
+#### I9 — C++ query-selector always fetches all attributes — Swift never uses them, significant waste per call
+#### I10 — Swift/C++ text extraction uses textContent vs innerText — different results for hidden elements
+#### I11 — Swift typeText breaks on input containing single-quote or backslash
+#### I12 — Swift fill value escaping misses backslash; select-option misses newline in value too
+#### I13 — wait-for-element selector injection only escapes single-quote, not backslash — same class of bug as I11
+#### I14 — wait-for-element wait-time measured from before first poll, not from element appearance
+#### I15 — MutationHandler 1000-entry buffer cap undocumented — returns hasMore: false when silently dropping
+#### I16 — NetworkBridge has no cap on in-flight fetch/XHR closures — aborted requests leak closures indefinitely
+#### I17 — InferenceHarness JSON parsing uses brace-counting — breaks on literal braces in string values (e.g. {"answer": "f(x) = {x+1}"})
+#### I18 — Swift AIHandler bypasses C API entirely for Ollama — URLSession vs httplib are completely separate HTTP paths
+#### I19 — InferenceHarness not portable — uses NSBitmapImageRep and HandlerContext; document label of portable is wrong
+#### I20 — No context-window check — PageSummary + preloadedContext can exceed 8192 tokens silently
+#### I21 — Hardcoded 4-char/token budget heuristic wrong for URLs (7:1 ratio) and JSON — systematic under-truncation
+#### I22 — Missing tab escape in escapeForJavaScript — JS injection broken on tab characters in tool arguments
+#### I23 — C API silently swallows all Ollama exceptions — Swift gets empty dict with no error signal, indistinguishable from empty response
+#### I24 — Model vision capability lists diverge: gemma missing from Swift, multimodal models missing from both lists
+#### I25 — Snapshot3DBridge CSS blur only uses -webkit-backdrop-filter on toast/info panel — absent on Chromium (needs unprefixed form)
+#### I26 — WKWebViewRenderer.hardReload() does not call reloadFromOrigin() — silently serves cached content on WebKit
+#### I27 — iOS HTTPServer missing onStateChange — isServerRunning always reports true after start() regardless of bind success
+#### I28 — iOS MDNSAdvertiser is byte-for-byte identical to macOS — misclassified as macOS-only in document
+#### I29 — Android mDNS TXT record missing engine field — inconsistent with macOS/iOS
+#### I30 — Android has 3 more snapshot-3d-* methods (set-mode, zoom, reset-view) than iOS and macOS — parity violation
+#### I31 — SharedCookieJar entirely absent on iOS and Android — cookie sync is macOS-only
+#### I32 — CEF injectCookiesViaJS domain normalization misses www.example.com vs example.com subdomain mismatch
+#### I33 — Swift stores + C++ core-state are two independent copies with no sync contract
+#### I34 — startSharedCookieSync() Timer on MainActor without deinit — undefined behavior if context replaced without stopSharedCookieSync()
+#### I35 — Snapshot3DHandler FeatureFlags.is3DInspectorEnabled missing on iOS/Android — feature parity violation
+
+---
+
+### Issues Found by Category
+
+| Category | Critical | Important | Total |
+|----------|----------|-----------|-------|
+| HTTP Server / Network | C1, C2, C3 | I27 | 4 |
+| Bridge Scripts (JS) | C4, C5, C6, C7, C8, C18 | I15, I16, I25 | 11 |
+| Handler Logic (Swift vs C++) | C12, C13, C14, C15, C16, C8 | I8, I9, I10, I11, I12, I13, I14 | 14 |
+| Stores / State | C9, C10, C11, C17 | I1, I2, I3, I4, I5, I6, I7, I33 | 13 |
+| AI | — | I17, I18, I19, I20, I21, I22, I23, I24 | 8 |
+| Platform-Specific / Parity | C19, C20, C21 | I26, I27, I28, I29, I30, I31, I32, I34, I35 | 14 |
+| **Total** | **21** | **35** | **56** |
+
