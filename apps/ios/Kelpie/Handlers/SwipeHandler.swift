@@ -19,7 +19,7 @@ struct SwipeHandler {
         }
 
         let durationMs = max(body["durationMs"] as? Int ?? 400, 1)
-        let steps = max(body["steps"] as? Int ?? 20, 1)
+        let steps = max(body["steps"] as? Int ?? 20, 2)
         let color = body["color"] as? String ?? "#3B82F6"
         do {
             _ = try await context.evaluateJS(
