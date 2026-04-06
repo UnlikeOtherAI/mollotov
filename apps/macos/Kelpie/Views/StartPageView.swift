@@ -4,6 +4,7 @@ import AppKit
 struct StartPageView: View {
     @ObservedObject var bookmarkStore: BookmarkStore
     @ObservedObject var historyStore: HistoryStore
+    @ObservedObject private var faviconCache = FaviconCache.shared
     let onNavigate: (String) -> Void
 
     private var iconBackgroundColor: Color {
@@ -117,9 +118,14 @@ private struct BookmarkTileView: View {
     let bookmark: BookmarkStore.Bookmark
     let onTap: () -> Void
 
+    @ObservedObject private var faviconCache = FaviconCache.shared
+
+    private var host: String {
+        URL(string: bookmark.url)?.host ?? bookmark.url
+    }
+
     private var domainLetter: String {
-        let host = URL(string: bookmark.url)?.host ?? bookmark.url
-        return host.first.map { String($0).uppercased() } ?? "?"
+        host.first.map { String($0).uppercased() } ?? "?"
     }
 
     private var tileColor: Color {
@@ -131,7 +137,6 @@ private struct BookmarkTileView: View {
             Color(red: 0.85, green: 0.75, blue: 0.35),
             Color(red: 0.50, green: 0.75, blue: 0.80)
         ]
-        let host = URL(string: bookmark.url)?.host ?? bookmark.url
         let hash = host.unicodeScalars.reduce(0) { $0 &+ Int($1.value) }
         return palette[abs(hash) % palette.count]
     }
@@ -143,11 +148,18 @@ private struct BookmarkTileView: View {
                     RoundedRectangle(cornerRadius: 14)
                         .fill(tileColor)
                         .frame(width: 56, height: 56)
-                    Text(domainLetter)
-                        .font(.system(size: 22, weight: .bold))
-                        .foregroundStyle(.white)
+                    if let favicon = faviconCache.cachedImage(forHost: host) {
+                        Image(nsImage: favicon)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 28, height: 28)
+                    } else {
+                        Text(domainLetter)
+                            .font(.system(size: 22, weight: .bold))
+                            .foregroundStyle(.white)
+                    }
                 }
-                Text(bookmark.title.isEmpty ? (URL(string: bookmark.url)?.host ?? bookmark.url) : bookmark.title)
+                Text(bookmark.title.isEmpty ? host : bookmark.title)
                     .font(.system(size: 11))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
@@ -155,6 +167,7 @@ private struct BookmarkTileView: View {
             }
         }
         .buttonStyle(.plain)
+        .onAppear { faviconCache.image(forHost: host) }
     }
 }
 
@@ -165,11 +178,15 @@ private struct HistoryRowView: View {
     let onTap: () -> Void
     let onRemove: () -> Void
 
+    @ObservedObject private var faviconCache = FaviconCache.shared
     @State private var isHovered = false
 
+    private var host: String {
+        URL(string: entry.url)?.host ?? entry.url
+    }
+
     private var domainLetter: String {
-        let host = URL(string: entry.url)?.host ?? entry.url
-        return host.first.map { String($0).uppercased() } ?? "?"
+        host.first.map { String($0).uppercased() } ?? "?"
     }
 
     private var letterColor: Color {
@@ -181,7 +198,6 @@ private struct HistoryRowView: View {
             Color(red: 0.85, green: 0.75, blue: 0.35),
             Color(red: 0.50, green: 0.75, blue: 0.80)
         ]
-        let host = URL(string: entry.url)?.host ?? entry.url
         let hash = host.unicodeScalars.reduce(0) { $0 &+ Int($1.value) }
         return palette[abs(hash) % palette.count]
     }
@@ -205,9 +221,16 @@ private struct HistoryRowView: View {
                         RoundedRectangle(cornerRadius: 6)
                             .fill(letterColor)
                             .frame(width: 28, height: 28)
-                        Text(domainLetter)
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(.white)
+                        if let favicon = faviconCache.cachedImage(forHost: host) {
+                            Image(nsImage: favicon)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 20, height: 20)
+                        } else {
+                            Text(domainLetter)
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(.white)
+                        }
                     }
                     .transition(.opacity.combined(with: .scale(scale: 0.8)))
                 }
@@ -235,5 +258,6 @@ private struct HistoryRowView: View {
         .onTapGesture { onTap() }
         .background(isHovered ? Color.primary.opacity(0.04) : .clear)
         .animation(.easeOut(duration: 0.1), value: isHovered)
+        .onAppear { faviconCache.image(forHost: host) }
     }
 }
