@@ -110,10 +110,10 @@ Only commit permanent, hand-authored files. If it can be regenerated, do not com
 
 ## Verification
 
-- CLI: `pnpm build && pnpm test` must pass before committing
-- iOS: Xcode build succeeds, no warnings
-- Android: `./gradlew build` succeeds
-- macOS: After every change, rebuild and launch the app to verify. Kill any stale instance first, then keep the new one running until the next build replaces it.
+- CLI: `pnpm lint && pnpm build && pnpm test` must pass before committing
+- iOS: `make lint-swift` must pass, then Xcode build succeeds, no warnings
+- Android: `cd apps/android && ./gradlew build` succeeds (includes ktlint)
+- macOS: `make lint-swift` must pass, then rebuild and launch the app to verify. Kill any stale instance first, then keep the new one running until the next build replaces it.
 
 ## Versioning
 
