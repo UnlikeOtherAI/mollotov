@@ -138,7 +138,7 @@ inline std::optional<T> OptionalValue(const json& object, const char* key) {
 // Normalizes a URL for equality comparison used in dedup.
 //
 // Applies only safe, lossless transformations:
-// - strips a trailing slash from the path (unless the path is "/" alone)
+// - strips trailing slashes from the path (unless the path is "/" alone)
 // - removes an empty query string (? with no parameters)
 // - removes an empty fragment (# with no value)
 //
@@ -149,72 +149,49 @@ inline std::string NormalizeUrl(std::string_view url) {
     return std::string();
   }
 
-  // Find the first '?' or '#' to split base from query/fragment.
-  std::size_t sep = std::string_view::npos;
-  std::size_t query_pos = url.find('?');
-  std::size_t fragment_pos = url.find('#');
-  if (query_pos != std::string_view::npos && fragment_pos != std::string_view::npos) {
-    sep = std::min(query_pos, fragment_pos);
-  } else if (query_pos != std::string_view::npos) {
-    sep = query_pos;
-  } else {
-    sep = fragment_pos;
+  std::string_view base = url;
+  std::string_view query;
+  std::string_view fragment;
+
+  size_t fragment_pos = base.find('#');
+  if (fragment_pos != std::string_view::npos) {
+    fragment = base.substr(fragment_pos);
+    base = base.substr(0, fragment_pos);
+  }
+
+  size_t query_pos = base.find('?');
+  if (query_pos != std::string_view::npos) {
+    query = base.substr(query_pos);
+    base = base.substr(0, query_pos);
+  }
+
+  // Strip trailing slashes from the base.
+  // Stop at the "://" boundary so that "file:///" stays as-is.
+  // If only slashes remain after stripping, the final "/" is preserved.
+  while (base.length() > 1 && base.back() == '/') {
+    if (base.length() >= 4 && base[base.length() - 4] == ':' &&
+        base[base.length() - 3] == '/' && base[base.length() - 2] == '/') {
+      break;  // ends with "://" — stop
+    }
+    base.remove_suffix(1);
+  }
+  // If only slashes remain (e.g. "//" or "///"), preserve a single "/".
+  if (base.length() == 1 && url.length() > 1 && url[0] == '/') {
+    base = "/";
   }
 
   std::string result;
-  if (sep == std::string_view::npos) {
-    // No query or fragment — normalize in-place.
-    result.assign(url);
-  } else {
-    result.assign(url.substr(0, sep));
+  result.reserve(base.length() + (query.length() > 1 ? query.length() : 0) +
+                 (fragment.length() > 1 ? fragment.length() : 0));
+  result.append(base);
+
+  if (query.length() > 1) {  // Not just '?'
+    result.append(query);
+  }
+  if (fragment.length() > 1) {  // Not just '#'
+    result.append(fragment);
   }
 
-  // Strip trailing slash only if there is content before it.
-  // This keeps "https://host/" as "https://host" but leaves "/" as "/".
-  if (result.size() >= 2 && result.back() == '/') {
-    bool has_content_before = false;
-    for (std::size_t i = 0; i < result.size() - 1; ++i) {
-      if (result[i] != '/') {
-        has_content_before = true;
-        break;
-      }
-    }
-    if (has_content_before) {
-      result.pop_back();
-    }
-  }
-
-  if (sep == std::string_view::npos) {
-    return result;
-  }
-
-  // Walk the query/fragment portion, building non-empty components.
-  std::string query_part;
-  std::string fragment_part;
-  std::size_t i = 0;
-
-  while (i < url.size()) {
-    if (url[i] == '?') {
-      std::size_t end = url.find('#', i + 1);
-      if (end == std::string_view::npos) {
-        end = url.size();
-      }
-      if (end > i + 1) {
-        query_part.assign(url.data() + i, end - i);
-      }
-      i = end;
-    } else if (url[i] == '#') {
-      if (url.size() > i + 1) {
-        fragment_part.assign(url.data() + i, url.size() - i);
-      }
-      break;
-    } else {
-      ++i;
-    }
-  }
-
-  result.append(query_part);
-  result.append(fragment_part);
   return result;
 }
 
