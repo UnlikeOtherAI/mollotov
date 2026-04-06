@@ -62,6 +62,10 @@
 		A100000064 /* HighlightHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000064 /* HighlightHandler.swift */; };
 		A100000065 /* SwipeHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000065 /* SwipeHandler.swift */; };
 		A100000066 /* ScriptHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000066 /* ScriptHandler.swift */; };
+		A100000070 /* Tab.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000070 /* Tab.swift */; };
+		A100000071 /* TabStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000071 /* TabStore.swift */; };
+		A100000072 /* TabWebViewContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000072 /* TabWebViewContainer.swift */; };
+		A100000073 /* BottomBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000073 /* BottomBarView.swift */; };
 		A100000051 /* AIState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000051 /* AIState.swift */; };
 		A100000052 /* PlatformAIEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000052 /* PlatformAIEngine.swift */; };
 		A100000053 /* AIHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000053 /* AIHandler.swift */; };
@@ -131,6 +135,10 @@
 		B100000064 /* HighlightHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HighlightHandler.swift; sourceTree = "<group>"; };
 		B100000065 /* SwipeHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeHandler.swift; sourceTree = "<group>"; };
 		B100000066 /* ScriptHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScriptHandler.swift; sourceTree = "<group>"; };
+		B100000070 /* Tab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tab.swift; sourceTree = "<group>"; };
+		B100000071 /* TabStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabStore.swift; sourceTree = "<group>"; };
+		B100000072 /* TabWebViewContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabWebViewContainer.swift; sourceTree = "<group>"; };
+		B100000073 /* BottomBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BottomBarView.swift; sourceTree = "<group>"; };
 		B100000051 /* AIState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIState.swift; sourceTree = "<group>"; };
 		B100000052 /* PlatformAIEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformAIEngine.swift; sourceTree = "<group>"; };
 		B100000053 /* AIHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIHandler.swift; sourceTree = "<group>"; };
@@ -195,6 +203,7 @@
 				B100000045 /* TouchpadOverlayView.swift */,
 				B100000058 /* Inspector3DControlsView.swift */,
 				B100000061 /* RecordingStopButton.swift */,
+				B100000073 /* BottomBarView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -212,6 +221,9 @@
 				2FF936A1AD0C457183D75A46 /* HistoryStore.swift */,
 				7E8CCB2224B44E128F3A4D13 /* NetworkTrafficStore.swift */,
 				B100000043 /* ExternalDisplayManager.swift */,
+				B100000070 /* Tab.swift */,
+				B100000071 /* TabStore.swift */,
+				B100000072 /* TabWebViewContainer.swift */,
 			);
 			path = Browser;
 			sourceTree = "<group>";
@@ -432,6 +444,10 @@
 				A100000064 /* HighlightHandler.swift in Sources */,
 				A100000065 /* SwipeHandler.swift in Sources */,
 				A100000066 /* ScriptHandler.swift in Sources */,
+				A100000070 /* Tab.swift in Sources */,
+				A100000071 /* TabStore.swift in Sources */,
+				A100000072 /* TabWebViewContainer.swift in Sources */,
+				A100000073 /* BottomBarView.swift in Sources */,
 				DFDB1F217CF14213A9FB5CCE /* BookmarkStore.swift in Sources */,
 				557BEEFEC864450EB89DE351 /* HistoryStore.swift in Sources */,
 				D2474B135EE9443A9A60289B /* NetworkTrafficStore.swift in Sources */,

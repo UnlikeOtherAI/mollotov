@@ -2,10 +2,10 @@
 import SwiftUI
 import AppKit
 
-/// App icon background color — warm peach/orange.
-private let kelpieOrange = NSColor(calibratedRed: 244 / 255, green: 176 / 255, blue: 120 / 255, alpha: 1)
-/// Richer menu item color — more red/saturated for contrast against the FAB.
-private let menuItemOrange = NSColor(calibratedRed: 240 / 255, green: 148 / 255, blue: 90 / 255, alpha: 1)
+/// App icon background color — blue tint.
+private let kelpieBlue = NSColor(calibratedRed: 120 / 255, green: 176 / 255, blue: 244 / 255, alpha: 1)
+/// Richer menu item color — more saturated blue for contrast against the FAB.
+private let menuItemBlue = NSColor(calibratedRed: 90 / 255, green: 148 / 255, blue: 240 / 255, alpha: 1)
 private enum FloatingMenuLayout {
     static let fabSize: CGFloat = 52
     static let menuItemSize: CGFloat = 52
@@ -168,7 +168,7 @@ private struct AppKitFloatingMenuOverlay: NSViewRepresentable {
             let toggleButton = FloatingMenuActionButton(
                 symbolName: "flame.fill",
                 diameter: FloatingMenuLayout.fabSize,
-                backgroundColor: kelpieOrange
+                backgroundColor: kelpieBlue
             )
             toggleButton.toolTip = nil
             toggleButton.hoverText = "Open Menu"
@@ -250,7 +250,7 @@ private struct AppKitFloatingMenuOverlay: NSViewRepresentable {
                     itemID: item.id,
                     symbolName: item.icon,
                     diameter: FloatingMenuLayout.menuItemSize,
-                    backgroundColor: menuItemOrange
+                    backgroundColor: menuItemBlue
                 )
                 button.setAccessibilityIdentifier(item.accessibilityID)
                 button.isHidden = true

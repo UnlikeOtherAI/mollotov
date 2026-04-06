@@ -51,7 +51,7 @@ import com.kelpie.browser.FeatureFlags
 import com.kelpie.browser.browser.BrowserState
 import com.kelpie.browser.browser.HistoryStore
 import com.kelpie.browser.browser.KeyboardObserver
-import com.kelpie.browser.browser.WebViewContainer
+import com.kelpie.browser.browser.TabStore
 import com.kelpie.browser.device.DeviceInfo
 import com.kelpie.browser.handlers.HandlerContext
 import com.kelpie.browser.handlers.ScriptPlaybackState
@@ -71,6 +71,10 @@ fun BrowserScreen(
     isMDNSAdvertising: Boolean,
 ) {
     val browserState = remember { BrowserState() }
+    val context = LocalContext.current
+    val tabStore = remember { TabStore(context, handlerContext) }
+    val tabs by tabStore.tabs.collectAsState()
+    val activeTabId by tabStore.activeTabId.collectAsState()
     val currentUrl by browserState.currentUrl.collectAsState()
     val isLoading by browserState.isLoading.collectAsState()
     val canGoBack by browserState.canGoBack.collectAsState()
@@ -82,7 +86,6 @@ fun BrowserScreen(
     var showHistory by remember { mutableStateOf(false) }
     var showNetworkInspector by remember { mutableStateOf(false) }
     var showAI by remember { mutableStateOf(false) }
-    val context = LocalContext.current
     val composeView = LocalView.current
     val isTablet = remember(context) { context.isTabletDevice() }
     val coroutineScope = rememberCoroutineScope()
@@ -97,6 +100,7 @@ fun BrowserScreen(
     val isScriptRecording by scriptPlaybackState.isRecording.collectAsState()
     var inspectorMode by remember { mutableStateOf("rotate") }
     val keyboardObserver = remember(composeView.rootView) { KeyboardObserver(composeView.rootView) }
+    var bottomBarCollapsed by remember { mutableStateOf(false) }
 
     DisposableEffect(keyboardObserver) {
         handlerContext.keyboardObserver = keyboardObserver
@@ -160,22 +164,6 @@ fun BrowserScreen(
                 )
             }
 
-            if (!isScriptRecording) {
-                URLBar(
-                    currentUrl = currentUrl,
-                    canGoBack = canGoBack,
-                    canGoForward = canGoForward,
-                    onNavigate = { url -> webView?.loadUrl(url) },
-                    onBack = { webView?.goBack() },
-                    onForward = { webView?.goForward() },
-                    showAI = com.kelpie.browser.ai.AIState.isAvailable,
-                    onAI = { showAI = true },
-                    onSnapshot3D = {
-                        coroutineScope.launch { toggle3DInspector() }
-                    },
-                )
-            }
-
             BoxWithConstraints(
                 modifier =
                     Modifier
@@ -212,38 +200,56 @@ fun BrowserScreen(
                             ),
                     contentAlignment = Alignment.Center,
                 ) {
+                    val tabWebView: @Composable (Modifier) -> Unit = { mod ->
+                        TabWebViewContent(
+                            tabStore = tabStore,
+                            browserState = browserState,
+                            handlerContext = handlerContext,
+                            onScrollDirectionChange = { dir ->
+                                bottomBarCollapsed = dir == ScrollDirection.DOWN
+                            },
+                            onWebViewReady = { wv ->
+                                webView = wv
+                                router.webView = wv
+                                handlerContext.webView = wv
+                            },
+                            modifier = mod,
+                        )
+                    }
+
                     if (mobileStageActive && stageSize != null) {
                         TabletViewportStage(
                             preset = selectedPreset,
                             stageSize = stageSize,
                             onClose = { TabletViewportPresetStore.setSelectedPresetId(null) },
                         ) {
-                            WebViewContainer(
-                                browserState = browserState,
-                                dialogState = handlerContext.dialogState,
-                                handlerContext = handlerContext,
-                                modifier = Modifier.fillMaxSize(),
-                                onWebViewCreated = { wv ->
-                                    webView = wv
-                                    router.webView = wv
-                                    handlerContext.webView = wv
-                                },
-                            )
+                            tabWebView(Modifier.fillMaxSize())
                         }
                     } else {
-                        WebViewContainer(
-                            browserState = browserState,
-                            dialogState = handlerContext.dialogState,
-                            handlerContext = handlerContext,
-                            modifier = Modifier.fillMaxSize(),
-                            onWebViewCreated = { wv ->
-                                webView = wv
-                                router.webView = wv
-                                handlerContext.webView = wv
-                            },
-                        )
+                        tabWebView(Modifier.fillMaxSize())
                     }
                 }
+            }
+
+            if (!isScriptRecording) {
+                BottomBar(
+                    tabs = tabs,
+                    activeTabId = activeTabId,
+                    currentUrl = currentUrl,
+                    canGoBack = canGoBack,
+                    canGoForward = canGoForward,
+                    isCollapsed = bottomBarCollapsed,
+                    onNavigate = { url ->
+                        tabStore.activeTab?.isStartPage = false
+                        webView?.loadUrl(url)
+                    },
+                    onBack = { webView?.goBack() },
+                    onForward = { webView?.goForward() },
+                    onAddTab = { tabStore.addTab() },
+                    onCloseTab = { id -> tabStore.closeTab(id) },
+                    onSelectTab = { id -> tabStore.selectTab(id) },
+                    onExpand = { bottomBarCollapsed = false },
+                )
             }
         }
 

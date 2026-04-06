@@ -106,10 +106,11 @@ func tabletViewportSize(for preset: TabletViewportPreset, availableSize: CGSize)
     )
 }
 
-/// Main browser screen: URL bar + WKWebView + floating action menu.
+/// Main browser screen: WebView + floating action menu + bottom bar with tabs.
 struct BrowserView: View {
     @ObservedObject var browserState: BrowserState
     @ObservedObject var serverState: ServerState
+    @ObservedObject var tabStore: TabStore
     @ObservedObject private var externalDisplayManager = ExternalDisplayManager.shared
     @AppStorage("ipadMobileStageEnabled") private var legacyIPadMobileStageEnabled = false
     @AppStorage(ipadMobileStagePresetDefaultsKey) private var iPadMobileStagePresetID = ""
@@ -126,6 +127,7 @@ struct BrowserView: View {
     @State private var debugText = ""
     @State private var isIn3DInspector = false
     @State private var inspectorMode = "rotate"
+    @State private var bottomBarCollapsed = false
     private let safariAuth = SafariAuthHelper()
     private let debugTimer = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
 
@@ -158,29 +160,28 @@ struct BrowserView: View {
                         .progressViewStyle(.linear)
                 }
 
+                browserViewport
+
                 if !serverState.isScriptRecording {
-                    URLBarView(
+                    BottomBarView(
+                        tabStore: tabStore,
                         browserState: browserState,
                         onNavigate: navigate,
                         onBack: goBack,
                         onForward: goForward,
-                        showAI: AIState.shared.isAvailable,
-                        onAI: { showAI = true },
-                        onSnapshot3D: {
-                            Task { @MainActor in
-                                await toggle3DInspector()
-                            }
-                        }
+                        isCollapsed: $bottomBarCollapsed
                     )
                 }
-
-                browserViewport
             }
 
             if showWelcome && shouldShowWelcomeCard {
                 WelcomeCardView {
                     showWelcome = false
                     welcomePresentationSource = .automatic
+                    if let tab = tabStore.activeBrowserTab, tab.isStartPage {
+                        tab.isStartPage = false
+                        navigate(browserState.currentURL)
+                    }
                 }
                     .transition(.opacity)
                     .zIndex(10)
@@ -431,12 +432,22 @@ struct BrowserView: View {
     }
 
     private var webViewContainer: some View {
-        WebViewContainer(browserState: browserState, handlerContext: serverState.handlerContext) { wv in
-            browserState.webView = wv
-            serverState.webView = wv
-            serverState.handlerContext.webView = wv
-            externalDisplayManager.setPhoneWebView(wv)
-        }
+        TabWebViewContainer(
+            tabStore: tabStore,
+            browserState: browserState,
+            handlerContext: serverState.handlerContext,
+            onScrollDirectionChange: { direction in
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    bottomBarCollapsed = direction == .down
+                }
+            },
+            onWebViewReady: { wv in
+                browserState.webView = wv
+                serverState.webView = wv
+                serverState.handlerContext.webView = wv
+                externalDisplayManager.setPhoneWebView(wv)
+            }
+        )
     }
 
     @ViewBuilder
@@ -540,6 +551,7 @@ struct BrowserView: View {
     }
 
     private func navigate(_ urlString: String) {
+        tabStore.activeBrowserTab?.isStartPage = false
         guard let webView = browserState.webView, let url = URL(string: urlString) else { return }
         webView.load(URLRequest(url: url))
     }

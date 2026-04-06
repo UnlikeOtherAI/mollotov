@@ -1,7 +1,7 @@
 import SwiftUI
 import AppKit
 
-private let kelpieOrange = Color(red: 244 / 255, green: 176 / 255, blue: 120 / 255)
+private let kelpieBlue = Color(red: 120 / 255, green: 176 / 255, blue: 244 / 255)
 
 struct WelcomeCardView: View {
     let onDismiss: () -> Void
@@ -79,7 +79,7 @@ struct WelcomeCardView: View {
         } else {
             Image(systemName: "flame.fill")
                 .font(.system(size: 40))
-                .foregroundStyle(kelpieOrange)
+                .foregroundStyle(kelpieBlue)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color.white)
         }
@@ -135,9 +135,9 @@ private struct AppKitPrimaryButton: NSViewRepresentable {
         button.wantsLayer = true
         button.layer?.cornerRadius = 12
         button.layer?.backgroundColor = NSColor(
-            red: 244 / 255,
+            red: 120 / 255,
             green: 176 / 255,
-            blue: 120 / 255,
+            blue: 244 / 255,
             alpha: 1
         ).cgColor
         button.contentTintColor = .white

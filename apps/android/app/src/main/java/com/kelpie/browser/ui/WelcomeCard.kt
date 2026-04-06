@@ -46,7 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kelpie.browser.R
 
-private val KelpieOrange = Color(0xFFF4B078)
+private val KelpieBlue = Color(0xFF78B0F4)
 
 private const val PREFS_NAME = "kelpie_prefs"
 private const val KEY_HIDE_WELCOME = "hide_welcome_card"
@@ -170,7 +170,7 @@ fun WelcomeCard(onDismiss: () -> Unit) {
                         onCheckedChange = { dontShowAgain = it },
                         colors =
                             SwitchDefaults.colors(
-                                checkedTrackColor = KelpieOrange,
+                                checkedTrackColor = KelpieBlue,
                             ),
                     )
                 }
@@ -183,7 +183,7 @@ fun WelcomeCard(onDismiss: () -> Unit) {
                     shape = RoundedCornerShape(12.dp),
                     colors =
                         ButtonDefaults.buttonColors(
-                            containerColor = KelpieOrange,
+                            containerColor = KelpieBlue,
                             contentColor = Color.White,
                         ),
                 ) {

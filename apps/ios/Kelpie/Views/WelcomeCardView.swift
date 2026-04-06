@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-private let kelpieOrange = Color(red: 244 / 255, green: 176 / 255, blue: 120 / 255)
+private let kelpieBlue = Color(red: 120 / 255, green: 176 / 255, blue: 244 / 255)
 
 struct WelcomeCardView: View {
     let onDismiss: () -> Void
@@ -43,14 +43,14 @@ struct WelcomeCardView: View {
 
                 Toggle("Don't show this again", isOn: $dontShowAgain)
                     .font(.subheadline)
-                    .tint(kelpieOrange)
+                    .tint(kelpieBlue)
 
                 Button(action: dismiss) {
                     Text("Get Started")
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .background(kelpieOrange)
+                        .background(kelpieBlue)
                         .foregroundStyle(.white)
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
@@ -78,7 +78,7 @@ struct WelcomeCardView: View {
         } else {
             Image(systemName: "flame.fill")
                 .font(.system(size: 40))
-                .foregroundStyle(kelpieOrange)
+                .foregroundStyle(kelpieBlue)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color.white)
         }

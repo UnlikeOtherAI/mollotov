@@ -51,11 +51,11 @@ import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
-/** App icon background color — warm peach/orange */
-private val KelpieOrange = Color(244f / 255f, 176f / 255f, 120f / 255f)
+/** App icon background color — blue tint */
+private val KelpieBlue = Color(120f / 255f, 176f / 255f, 244f / 255f)
 
-/** Richer menu item color — more red/saturated for contrast against the FAB */
-private val MenuItemOrange = Color(240f / 255f, 148f / 255f, 90f / 255f)
+/** Richer menu item color — more saturated blue for contrast against the FAB */
+private val MenuItemBlue = Color(90f / 255f, 148f / 255f, 240f / 255f)
 
 /**
  * Floating action button that expands into a fan menu.
@@ -108,7 +108,7 @@ fun FloatingMenu(
         val action: () -> Unit,
         val iconName: String,
         val tint: Color = Color.White,
-        val background: Color = MenuItemOrange,
+        val background: Color = MenuItemBlue,
         val border: Color = Color.Transparent,
         val closesMenu: Boolean = true,
     )
@@ -205,7 +205,7 @@ fun FloatingMenu(
                             },
                             iconName = "mobile",
                             tint = Color.White,
-                            background = if (selectedMobileViewportPresetId != null || isMobileViewportPickerOpen) KelpieOrange else MenuItemOrange,
+                            background = if (selectedMobileViewportPresetId != null || isMobileViewportPickerOpen) KelpieBlue else MenuItemBlue,
                             border = if (selectedMobileViewportPresetId != null || isMobileViewportPickerOpen) Color.White.copy(alpha = 0.9f) else Color.Transparent,
                             closesMenu = false,
                         ),
@@ -343,7 +343,7 @@ fun FloatingMenu(
                                 .alpha(alpha)
                                 .shadow(6.dp, RoundedCornerShape(18.dp))
                                 .clip(RoundedCornerShape(18.dp))
-                                .background(if (isSelected) KelpieOrange else MenuItemOrange)
+                                .background(if (isSelected) KelpieBlue else MenuItemBlue)
                                 .border(
                                     width = if (isSelected) 1.5.dp else 1.dp,
                                     color = Color.White.copy(alpha = if (isSelected) 0.9f else 0.35f),
@@ -375,7 +375,7 @@ fun FloatingMenu(
                     .shadow(4.dp, CircleShape)
                     .alpha(if (isOpen) 0.8f else 1f)
                     .clip(CircleShape)
-                    .background(KelpieOrange)
+                    .background(KelpieBlue)
                     .pointerInput(Unit) {
                         awaitEachGesture {
                             // Wait for the initial down event

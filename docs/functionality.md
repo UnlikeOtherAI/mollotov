@@ -66,7 +66,7 @@ Swipe gestures are first-class too: give Kelpie start and end viewport coordinat
 
 ## Scripted Video Recording
 
-Kelpie can run a whole walkthrough as one timed script instead of one command at a time. A script enters recording mode, hides the browser chrome, locks the normal controls, and leaves only a stop button visible while it plays. Actions can mix navigation, taps, typing, swipes, waits, screenshots, viewport changes, commentary pills, and element highlights.
+Kelpie can run a whole walkthrough as one timed script instead of one command at a time. A script enters recording mode, hides the browser chrome, locks the normal controls, and leaves only a stop button visible while it plays. Actions can mix navigation, taps, typing, swipes, waits, screenshots, viewport changes, commentary pills, and element highlights. This scripted-recording surface is now aligned across Android and iOS, with the same HTTP, CLI, and MCP entry points.
 
 The main use case is support and presentation work: record a few clean steps that show a customer exactly where to click, how to reach a setting, or how to complete a workflow, then hand over the resulting walkthrough video instead of writing a long email.
 
@@ -196,7 +196,9 @@ Query elements inside shadow roots, even nested ones. List all shadow DOM hosts 
 
 ## Tabs
 
-List open tabs, create new ones, switch between them, close them. Each tab tracks its URL, title, and active state.
+List open tabs, create new ones, switch between them, close them. Each tab tracks its URL, title, and active state. Each tab owns its own WebView instance so page state, scroll position, and history are preserved across tab switches.
+
+On iOS and Android, the URL bar and tab strip are positioned at the bottom of the screen in a Safari-style bottom bar. The bar collapses to a compact domain pill when the user scrolls down, freeing screen space for the page content, and expands back to the full URL field and navigation controls when the user scrolls up or taps the pill. When more than one tab is open, a horizontally scrollable tab strip appears above the URL field showing tab pills with titles and close buttons.
 
 ## Iframes
 

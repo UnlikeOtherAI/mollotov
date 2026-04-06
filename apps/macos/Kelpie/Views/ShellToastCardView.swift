@@ -7,7 +7,7 @@ struct ShellToastCardView: View {
         HStack(spacing: 10) {
             Image(systemName: "bubble.left.and.text.bubble.right.fill")
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Color(red: 244 / 255, green: 176 / 255, blue: 120 / 255))
+                .foregroundStyle(Color(red: 120 / 255, green: 176 / 255, blue: 244 / 255))
 
             Text(message)
                 .font(.system(size: 13, weight: .medium))

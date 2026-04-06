@@ -24,14 +24,24 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 @main
 struct KelpieApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    @StateObject private var browserState = BrowserState()
-    @StateObject private var serverState = ServerState()
+    @StateObject private var browserState: BrowserState
+    @StateObject private var serverState: ServerState
+    @StateObject private var tabStore: TabStore
     @AppStorage(ipadMobileStagePresetDefaultsKey) private var iPadMobileStagePresetID = ""
     private let environment = ProcessInfo.processInfo.environment
 
+    init() {
+        let bs = BrowserState()
+        let ss = ServerState()
+        let ts = TabStore(handlerContext: ss.handlerContext)
+        _browserState = StateObject(wrappedValue: bs)
+        _serverState = StateObject(wrappedValue: ss)
+        _tabStore = StateObject(wrappedValue: ts)
+    }
+
     var body: some Scene {
         WindowGroup {
-            BrowserView(browserState: browserState, serverState: serverState)
+            BrowserView(browserState: browserState, serverState: serverState, tabStore: tabStore)
                 .onAppear { startServices() }
         }
         .commands {

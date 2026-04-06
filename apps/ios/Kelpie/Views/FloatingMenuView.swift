@@ -1,10 +1,10 @@
 import SwiftUI
 import UIKit
 
-/// App icon background color — warm peach/orange.
-private let kelpieOrange = Color(red: 244 / 255, green: 176 / 255, blue: 120 / 255)
-/// Richer menu item color — more red/saturated for contrast against the FAB.
-private let menuItemOrange = Color(red: 240 / 255, green: 148 / 255, blue: 90 / 255)
+/// App icon background color — blue tint.
+private let kelpieBlue = Color(red: 120 / 255, green: 176 / 255, blue: 244 / 255)
+/// Richer menu item color — more saturated blue for contrast against the FAB.
+private let menuItemBlue = Color(red: 90 / 255, green: 148 / 255, blue: 240 / 255)
 
 /// UIKit blur that works over WKWebView content (SwiftUI materials cannot blur UIKit views).
 private struct NativeBlur: UIViewRepresentable {
@@ -113,7 +113,7 @@ struct FloatingMenuView: View {
                     .font(.system(size: 20, weight: .semibold))
                     .foregroundColor(.white)
                     .frame(width: fabSize, height: fabSize)
-                    .background(kelpieOrange)
+                    .background(kelpieBlue)
                     .clipShape(Circle())
                     .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
                     .opacity(isOpen ? 0.8 : 1.0)
@@ -187,7 +187,7 @@ struct FloatingMenuView: View {
                     icon: "iphone",
                     elementId: "browser.viewport.mobile-toggle",
                     tint: .white,
-                    background: (selectedMobileViewportPresetID != nil || isMobileViewportPickerOpen) ? kelpieOrange : menuItemOrange,
+                    background: (selectedMobileViewportPresetID != nil || isMobileViewportPickerOpen) ? kelpieBlue : menuItemBlue,
                     border: (selectedMobileViewportPresetID != nil || isMobileViewportPickerOpen) ? Color.white.opacity(0.9) : .clear,
                     borderWidth: (selectedMobileViewportPresetID != nil || isMobileViewportPickerOpen) ? 1.5 : 0,
                     closesMenu: false,
@@ -347,7 +347,7 @@ struct FloatingMenuView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
                     .frame(width: viewportPillWidth, height: viewportPillHeight)
-                    .background(isSelected ? kelpieOrange : menuItemOrange)
+                    .background(isSelected ? kelpieBlue : menuItemBlue)
                     .clipShape(Capsule())
                     .overlay {
                         Capsule()
@@ -384,7 +384,7 @@ struct FloatingMenuView: View {
             icon: String,
             elementId: String,
             tint: Color,
-            background: Color = menuItemOrange,
+            background: Color = menuItemBlue,
             border: Color = .clear,
             borderWidth: CGFloat = 0,
             closesMenu: Bool,
