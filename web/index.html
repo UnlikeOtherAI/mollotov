@@ -520,12 +520,14 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
+      gap: 8px;
       background: rgba(255,255,255,0.03);
       border: 1px solid var(--border);
       border-radius: 8px;
       padding: 10px 14px;
     }
-    .ai-model-name { font-family: var(--mono); font-size: 0.8rem; color: var(--text); }
+    .ai-model-name { font-family: var(--mono); font-size: 0.8rem; color: var(--text); flex: 1; }
+    .ai-model-sub { font-size: 0.68rem; color: var(--muted); font-weight: 300; white-space: nowrap; }
     .ai-model-tag {
       font-size: 0.65rem;
       font-weight: 600;
@@ -536,7 +538,9 @@
     }
     .ai-model-tag.local { background: rgba(34, 197, 94, 0.15); color: var(--green); border: 1px solid rgba(34,197,94,0.25); }
     .ai-model-tag.local.new { background: rgba(0, 229, 176, 0.15); color: var(--teal); border: 1px solid rgba(0,229,176,0.35); }
+    .ai-model-tag.native { background: rgba(245, 158, 11, 0.12); color: var(--amber); border: 1px solid rgba(245,158,11,0.28); }
     .ai-model-tag.remote { background: rgba(61, 142, 255, 0.15); color: var(--blue); border: 1px solid rgba(61,142,255,0.25); }
+    .ai-model-sub { font-size: 0.7rem; color: var(--muted); font-weight: 300; }
     .ai-card-note { font-size: 0.78rem; color: var(--muted); margin-top: 16px; font-weight: 300; }
 
     /* ── Features ── */
@@ -986,7 +990,7 @@
             </div>
             <div class="ai-point">
               <div class="ai-point-dot"></div>
-              <p><strong>macOS uses native GGUF models or Ollama.</strong> iOS and Android default to platform AI frameworks (Core ML / NNAPI) on supported hardware, with optional remote Ollama fallback.</p>
+              <p><strong>Every platform has a native AI path.</strong> macOS runs GGUF models locally or routes through Ollama. iOS uses Core ML and Android uses NNAPI — hardware-accelerated, zero-dependency, no model download required. Gemma 4 adds multimodal support: pass a screenshot directly to the model to describe, extract, or classify what's visible.</p>
             </div>
           </div>
         </div>
@@ -996,6 +1000,15 @@
             <div class="ai-model">
               <span class="ai-model-name">Gemma 4 (GGUF)</span>
               <span class="ai-model-tag local new">local · new</span>
+              <span class="ai-model-sub">text · images · multimodal</span>
+            </div>
+            <div class="ai-model">
+              <span class="ai-model-name">iOS Core ML</span>
+              <span class="ai-model-tag native">native · iOS</span>
+            </div>
+            <div class="ai-model">
+              <span class="ai-model-name">Android NNAPI</span>
+              <span class="ai-model-tag native">native · Android</span>
             </div>
             <div class="ai-model">
               <span class="ai-model-name">Llama 3.2 3B (GGUF)</span>
