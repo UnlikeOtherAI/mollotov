@@ -132,11 +132,11 @@ struct InferenceHarness {
             payload = (try? await context.evaluateJSReturningJSON(
                 """
                 (function() {
-                    var el = document.querySelector('\(escapeForJavaScript(selector))');
+                    var el = document.querySelector('\(JSEscape.string(selector))');
                     if (!el) return { found: false };
                     return {
                         found: true,
-                        selector: '\(escapeForJavaScript(selector))',
+                        selector: '\(JSEscape.string(selector))',
                         html: el.outerHTML,
                         nodeCount: el.querySelectorAll('*').length + 1
                     };
@@ -149,7 +149,7 @@ struct InferenceHarness {
             payload = (try? await context.evaluateJSReturningJSON(
                 """
                 (function() {
-                    var el = document.querySelector('\(escapeForJavaScript(selector))');
+                    var el = document.querySelector('\(JSEscape.string(selector))');
                     if (!el) return { found: false };
                     var attrs = {};
                     for (var i = 0; i < el.attributes.length; i++) {
@@ -157,7 +157,7 @@ struct InferenceHarness {
                     }
                     return {
                         found: true,
-                        selector: '\(escapeForJavaScript(selector))',
+                        selector: '\(JSEscape.string(selector))',
                         text: (el.textContent || '').trim(),
                         attributes: attrs
                     };
@@ -170,7 +170,7 @@ struct InferenceHarness {
             payload = (try? await context.evaluateJSReturningJSON(
                 """
                 (function() {
-                    var wanted = '\(escapeForJavaScript(text))'.toLowerCase();
+                    var wanted = '\(JSEscape.string(text))'.toLowerCase();
                     var all = document.querySelectorAll('*');
                     for (var el of all) {
                         var content = (el.textContent || '').trim();
@@ -473,10 +473,6 @@ struct InferenceHarness {
             return string
         }
         return String(describing: value)
-    }
-
-    private func escapeForJavaScript(_ value: String) -> String {
-        JSEscape.string(value)
     }
 
     private func elapsedMs(since startedAt: DispatchTime) -> Int {

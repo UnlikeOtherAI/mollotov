@@ -150,7 +150,7 @@ final class HTTPServer: @unchecked Sendable {
     private func parseContentLength(_ headers: String) -> Int? {
         for line in headers.components(separatedBy: "\r\n") where line.lowercased().hasPrefix("content-length:") {
             let value = line.dropFirst("content-length:".count).trimmingCharacters(in: .whitespaces)
-            return Int(value) ?? 0
+            return Int(value)
         }
         return nil
     }
