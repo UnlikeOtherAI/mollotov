@@ -1,6 +1,8 @@
 #include "hf_cloud_client.h"
 
-#define CPPHTTPLIB_OPENSSL_SUPPORT
+#ifdef CPPHTTPLIB_OPENSSL_SUPPORT
+#  undef CPPHTTPLIB_OPENSSL_SUPPORT
+#endif
 #include <httplib.h>
 
 #include <chrono>
@@ -12,6 +14,14 @@ nlohmann::json HfCloudClient::infer(const std::string& model_id,
                                      const nlohmann::json& request) const {
   using json = nlohmann::json;
 
+#ifndef CPPHTTPLIB_OPENSSL_SUPPORT
+  (void)model_id;
+  (void)hf_token;
+  (void)request;
+  return json{{"error", "unsupported"},
+              {"message", "HF cloud inference requires HTTPS (OpenSSL not available in this build)"}};
+}
+#else
   if (hf_token.empty()) {
     return json{{"error", "auth_required"},
                 {"message", "HF cloud inference requires a token."}};
@@ -132,5 +142,6 @@ nlohmann::json HfCloudClient::infer(const std::string& model_id,
               {"backend", "hf_cloud"},
               {"model_id", model_id}};
 }
+#endif  // CPPHTTPLIB_OPENSSL_SUPPORT
 
 }  // namespace kelpie

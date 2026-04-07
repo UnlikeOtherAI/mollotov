@@ -70,12 +70,6 @@ std::string ModelStore::download(const std::string& model_id,
   const std::string download_path = dir + "/model.gguf.download";
   const std::string final_path = dir + "/model.gguf";
 
-  // Create HTTPS client
-  httplib::SSLClient client(host);
-  client.set_follow_location(true);
-  client.set_connection_timeout(30);
-  client.set_read_timeout(600);  // 10 min for large downloads
-
   httplib::Headers headers;
   if (!hf_token.empty()) {
     headers.emplace("Authorization", "Bearer " + hf_token);
@@ -89,6 +83,18 @@ std::string ModelStore::download(const std::string& model_id,
   }
 
   int64_t downloaded = 0;
+
+#ifndef CPPHTTPLIB_OPENSSL_SUPPORT
+  ofs.close();
+  fs::remove(download_path, ec);
+  return json{{"error", "unsupported"},
+              {"message", "Model download requires HTTPS (OpenSSL not available in this build)"}}.dump();
+#else
+  // Create HTTPS client
+  httplib::SSLClient client(host);
+  client.set_follow_location(true);
+  client.set_connection_timeout(30);
+  client.set_read_timeout(600);  // 10 min for large downloads
 
   auto res = client.Get(
       path, headers,
@@ -160,6 +166,7 @@ std::string ModelStore::download(const std::string& model_id,
     return json{{"error", "filesystem"},
                 {"message", "Failed to finalize download"}}.dump();
   }
+#endif  // CPPHTTPLIB_OPENSSL_SUPPORT
 
   // Write metadata.json
   json metadata = model->to_json();

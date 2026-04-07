@@ -37,7 +37,7 @@ struct WebViewContainer: UIViewRepresentable {
         context.coordinator.observe(webView)
         onWebView(webView)
 
-        if let url = URL(string: browserState.currentURL) {
+        if !browserState.isStartPage, let url = URL(string: browserState.currentURL) {
             webView.load(URLRequest(url: url))
         }
         return webView
@@ -163,7 +163,13 @@ struct WebViewContainer: UIViewRepresentable {
             dialogState.enqueue(dialog)
         }
 
-        func webView(_ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String, defaultText: String?, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (String?) -> Void) {
+        func webView(
+            _ webView: WKWebView,
+            runJavaScriptTextInputPanelWithPrompt prompt: String,
+            defaultText: String?,
+            initiatedByFrame frame: WKFrameInfo,
+            completionHandler: @escaping (String?) -> Void
+        ) {
             guard let dialogState = handlerContext?.dialogState else {
                 completionHandler(nil)
                 return

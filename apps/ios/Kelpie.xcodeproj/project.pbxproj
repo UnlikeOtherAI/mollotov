@@ -541,11 +541,11 @@
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
-					"$(PROJECT_DIR)/../../native/.build-ios/core-state",
-					"$(PROJECT_DIR)/../../native/.build-ios/core-protocol",
-					"$(PROJECT_DIR)/../../native/.build-ios/core-automation",
-					"$(PROJECT_DIR)/../../native/.build-ios/core-mcp",
-					"$(PROJECT_DIR)/../../native/.build-ios/core-ai",
+					"$(PROJECT_DIR)/../../native/.build$(EFFECTIVE_PLATFORM_NAME)/core-state",
+					"$(PROJECT_DIR)/../../native/.build$(EFFECTIVE_PLATFORM_NAME)/core-protocol",
+					"$(PROJECT_DIR)/../../native/.build$(EFFECTIVE_PLATFORM_NAME)/core-automation",
+					"$(PROJECT_DIR)/../../native/.build$(EFFECTIVE_PLATFORM_NAME)/core-mcp",
+					"$(PROJECT_DIR)/../../native/.build$(EFFECTIVE_PLATFORM_NAME)/core-ai",
 				);
 				MARKETING_VERSION = 0.1.0;
 				OTHER_LDFLAGS = (
@@ -598,11 +598,11 @@
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
-					"$(PROJECT_DIR)/../../native/.build-ios/core-state",
-					"$(PROJECT_DIR)/../../native/.build-ios/core-protocol",
-					"$(PROJECT_DIR)/../../native/.build-ios/core-automation",
-					"$(PROJECT_DIR)/../../native/.build-ios/core-mcp",
-					"$(PROJECT_DIR)/../../native/.build-ios/core-ai",
+					"$(PROJECT_DIR)/../../native/.build$(EFFECTIVE_PLATFORM_NAME)/core-state",
+					"$(PROJECT_DIR)/../../native/.build$(EFFECTIVE_PLATFORM_NAME)/core-protocol",
+					"$(PROJECT_DIR)/../../native/.build$(EFFECTIVE_PLATFORM_NAME)/core-automation",
+					"$(PROJECT_DIR)/../../native/.build$(EFFECTIVE_PLATFORM_NAME)/core-mcp",
+					"$(PROJECT_DIR)/../../native/.build$(EFFECTIVE_PLATFORM_NAME)/core-ai",
 				);
 				MARKETING_VERSION = 0.1.0;
 				OTHER_LDFLAGS = (
