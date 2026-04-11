@@ -15,6 +15,10 @@ ANDROID_SDK   := $(HOME)/Library/Android/sdk
 IOS_SCHEME    := Kelpie
 IOS_PROJECT   := apps/ios/Kelpie.xcodeproj
 
+# Xcode may be configured with a custom build products path (Preferences → Locations → Custom).
+# Read it so ios-run can find the built .app regardless of where Xcode put it.
+XCODE_CUSTOM_PRODUCTS := $(shell defaults read com.apple.dt.Xcode IDECustomBuildProductsPath 2>/dev/null)
+
 MACOS_SCHEME  := Kelpie
 MACOS_PROJECT := apps/macos/Kelpie.xcodeproj
 
@@ -125,7 +129,7 @@ ios-build: lint-swift
 
 ios-run:
 	@if [ "$(IOS_TYPE)" = "device" ]; then \
-		APP_PATH=$$(find apps/ios/.build -name "Kelpie.app" -not -path "*simulator*" 2>/dev/null | head -1); \
+		APP_PATH=$$(find apps/ios/.build $(XCODE_CUSTOM_PRODUCTS) -name "Kelpie.app" -not -path "*simulator*" 2>/dev/null | head -1); \
 		echo "→ Installing on device $(IOS_TARGET) ..."; \
 		xcrun devicectl device install app --device $(IOS_TARGET) "$$APP_PATH"; \
 		echo "→ Launching..."; \
@@ -134,7 +138,7 @@ ios-run:
 		echo "→ Booting simulator $(IOS_TARGET)..."; \
 		xcrun simctl boot $(IOS_TARGET) 2>/dev/null || true; \
 		open -a Simulator; \
-		APP_PATH=$$(find apps/ios/.build -name "Kelpie.app" -not -path "*iphonesimulator.xcarchive*" 2>/dev/null | head -1); \
+		APP_PATH=$$(find apps/ios/.build $(XCODE_CUSTOM_PRODUCTS) -name "Kelpie.app" -not -path "*iphonesimulator.xcarchive*" 2>/dev/null | head -1); \
 		echo "→ Installing $$APP_PATH ..."; \
 		xcrun simctl install $(IOS_TARGET) "$$APP_PATH"; \
 		echo "→ Launching..."; \

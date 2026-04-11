@@ -13,9 +13,7 @@ final class MDNSAdvertiser: @unchecked Sendable {
 
     func start() {
         do {
-            let params = NWParameters()
-            params.includePeerToPeer = true
-            listener = try NWListener(using: params)
+            listener = try NWListener(using: .tcp)
         } catch {
             print("[mDNS] Failed to create listener: \(error)")
             return
