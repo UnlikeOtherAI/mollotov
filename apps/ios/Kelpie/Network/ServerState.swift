@@ -35,7 +35,7 @@ final class ServerState: ObservableObject {
     @MainActor
     func startHTTPServer() {
         registerHandlers()
-        router.registerStubs() // Fill remaining unimplemented methods
+        router.registerFallbacks()
         httpServer = HTTPServer(port: UInt16(deviceInfo.port), router: router)
         httpServer?.start()
         DispatchQueue.main.async { self.isServerRunning = true }
@@ -49,57 +49,25 @@ final class ServerState: ObservableObject {
         router.handlerContext = ctx
         router.scriptPlaybackState = scriptPlaybackState
 
-        // Safari auth — open current URL in Safari-backed auth session
-        router.register("safari-auth") { body in
-            let result: [String: Any] = await MainActor.run {
-                guard let webView = ctx.webView else {
-                    return errorResponse(code: "NO_WEBVIEW", message: "No WebView")
-                }
-                let urlStr = body["url"] as? String
-                guard let url = urlStr.flatMap({ URL(string: $0) }) ?? webView.url else {
-                    return errorResponse(code: "NO_URL", message: "No URL to authenticate")
-                }
-                ctx.safariAuth.authenticate(url: url, webView: webView)
-                return successResponse(["started": true, "url": url.absoluteString])
-            }
-            return result
-        }
-
-        // Toast endpoint — show a message overlay on the device
-        router.register("toast") { body in
-            guard let message = body["message"] as? String else {
-                return errorResponse(code: "MISSING_PARAM", message: "message is required")
-            }
-            await ctx.showToast(message)
-            return successResponse(["message": message])
-        }
-
         let setActivePanel: @MainActor (String) -> Void = { [weak self] panel in
             self?.activePanel = panel
         }
-
-        // Debug: open a UI panel programmatically (history, bookmarks, network-inspector, settings, ai)
-        router.register("show-panel") { body in
-            guard let panel = body["panel"] as? String else {
-                return errorResponse(code: "MISSING_PARAM", message: "panel is required")
-            }
-            let valid = ["history", "bookmarks", "network-inspector", "settings", "ai"]
-            guard valid.contains(panel) else {
-                return errorResponse(code: "INVALID_PARAM", message: "panel must be one of: \(valid.joined(separator: ", "))")
-            }
-            await setActivePanel(panel)
-            return successResponse(["panel": panel])
-        }
+        registerSafariAuthHandler(context: ctx)
+        registerToastHandler(context: ctx)
+        registerReportIssueHandler()
+        registerShowPanelHandler(setActivePanel: setActivePanel)
 
         NavigationHandler(context: ctx).register(on: router)
         ScreenshotHandler(context: ctx).register(on: router)
         DOMHandler(context: ctx).register(on: router)
         InteractionHandler(context: ctx).register(on: router)
+        TapCalibrationHandler().register(on: router)
         ScrollHandler(context: ctx).register(on: router)
         DeviceHandler(context: ctx, deviceInfo: deviceInfo).register(on: router)
         EvaluateHandler(context: ctx).register(on: router)
         ConsoleHandler(context: ctx).register(on: router)
         NetworkHandler(context: ctx).register(on: router)
+        WebSocketHandler(context: ctx).register(on: router)
         MutationHandler(context: ctx).register(on: router)
         ShadowDOMHandler(context: ctx).register(on: router)
         BrowserManagementHandler(context: ctx).register(on: router)
@@ -120,6 +88,77 @@ final class ServerState: ObservableObject {
                 await self?.setScriptRecording(isRecording)
             }
         ).register(on: router)
+    }
+
+    @MainActor
+    private func registerSafariAuthHandler(context: HandlerContext) {
+        router.register("safari-auth") { body in
+            await MainActor.run {
+                guard let webView = context.webView else {
+                    return errorResponse(code: "NO_WEBVIEW", message: "No WebView")
+                }
+                let urlString = body["url"] as? String
+                guard let url = urlString.flatMap({ URL(string: $0) }) ?? webView.url else {
+                    return errorResponse(code: "NO_URL", message: "No URL to authenticate")
+                }
+                context.safariAuth.authenticate(url: url, webView: webView)
+                return successResponse(["started": true, "url": url.absoluteString])
+            }
+        }
+    }
+
+    @MainActor
+    private func registerToastHandler(context: HandlerContext) {
+        router.register("toast") { body in
+            guard let message = body["message"] as? String else {
+                return errorResponse(code: "MISSING_PARAM", message: "message is required")
+            }
+            await context.showToast(message)
+            return successResponse(["message": message])
+        }
+    }
+
+    @MainActor
+    private func registerReportIssueHandler() {
+        router.register("report-issue") { [deviceInfo] body in
+            guard body["category"] is String else {
+                return errorResponse(code: "MISSING_PARAM", message: "category is required")
+            }
+            guard body["command"] is String else {
+                return errorResponse(code: "MISSING_PARAM", message: "command is required")
+            }
+            do {
+                let record = try FeedbackStore.save(
+                    payload: body,
+                    platform: "ios",
+                    deviceID: deviceInfo.id,
+                    deviceName: deviceInfo.name
+                )
+                return successResponse([
+                    "reportId": record.reportID,
+                    "storedAt": record.storedAt,
+                    "platform": "ios",
+                    "deviceId": deviceInfo.id
+                ])
+            } catch {
+                return errorResponse(code: "WEBVIEW_ERROR", message: error.localizedDescription)
+            }
+        }
+    }
+
+    @MainActor
+    private func registerShowPanelHandler(setActivePanel: @escaping @MainActor (String) -> Void) {
+        router.register("show-panel") { body in
+            guard let panel = body["panel"] as? String else {
+                return errorResponse(code: "MISSING_PARAM", message: "panel is required")
+            }
+            let valid = ["history", "bookmarks", "network-inspector", "settings", "ai"]
+            guard valid.contains(panel) else {
+                return errorResponse(code: "INVALID_PARAM", message: "panel must be one of: \(valid.joined(separator: ", "))")
+            }
+            await setActivePanel(panel)
+            return successResponse(["panel": panel])
+        }
     }
 
     @MainActor
@@ -159,14 +198,33 @@ final class ServerState: ObservableObject {
     }
 
     func startMDNS() {
-        mdnsAdvertiser = MDNSAdvertiser(txtRecord: deviceInfo.txtRecord)
-        mdnsAdvertiser?.start()
-        DispatchQueue.main.async { self.isMDNSAdvertising = true }
+        if let mdnsAdvertiser {
+            mdnsAdvertiser.start()
+            return
+        }
+
+        let advertiser = MDNSAdvertiser(txtRecord: deviceInfo.txtRecord)
+        advertiser.onAdvertisingChange = { [weak self] isAdvertising in
+            DispatchQueue.main.async {
+                self?.isMDNSAdvertising = isAdvertising
+            }
+        }
+        mdnsAdvertiser = advertiser
+        advertiser.start()
+    }
+
+    func ensureMDNSAdvertising() {
+        guard !isMDNSAdvertising else { return }
+        startMDNS()
+    }
+
+    func stopMDNS() {
+        mdnsAdvertiser?.stop()
     }
 
     func stop() {
         httpServer?.stop()
-        mdnsAdvertiser?.stop()
+        stopMDNS()
         DispatchQueue.main.async {
             self.isServerRunning = false
             self.isMDNSAdvertising = false

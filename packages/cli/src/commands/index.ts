@@ -9,6 +9,7 @@ import { registerInteraction } from "./interaction.js";
 import { registerScroll } from "./scroll.js";
 import { registerWait } from "./wait.js";
 import { registerDeviceInfo } from "./device-info.js";
+import { registerDebug } from "./debug.js";
 import { registerEval } from "./eval.js";
 import { registerConsole } from "./console.js";
 import { registerNetwork } from "./network.js";
@@ -37,9 +38,12 @@ import { registerBrowser } from "./browser.js";
 import { registerAI } from "./ai.js";
 import { registerScript } from "./script.js";
 import { registerRenderer } from "./renderer.js";
+import { registerSafariAuth } from "./safari-auth.js";
 import { registerFullscreen } from "./fullscreen.js";
+import { registerToast } from "./toast.js";
 import { registerOrientation } from "./orientation.js";
 import { registerViewportPreset } from "./viewport-preset.js";
+import { registerFeedback } from "./feedback.js";
 
 export function registerAllCommands(program: Command): void {
   // Discovery
@@ -47,6 +51,7 @@ export function registerAllCommands(program: Command): void {
   registerDevices(program);
   registerPing(program);
   registerBrowser(program);
+  registerFeedback(program);
 
   // Core: Navigation
   registerNavigate(program);
@@ -60,6 +65,9 @@ export function registerAllCommands(program: Command): void {
   registerScroll(program);
   registerWait(program);
   registerDeviceInfo(program);
+  registerDebug(program);
+  registerToast(program);
+  registerSafariAuth(program);
   registerEval(program);
 
   // DevTools

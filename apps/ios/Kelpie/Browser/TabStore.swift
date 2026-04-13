@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 import WebKit
 
 /// Manages the set of open browser tabs. Creates configured WKWebViews for new tabs.
@@ -6,81 +7,77 @@ import WebKit
 final class TabStore: ObservableObject {
     @Published private(set) var tabs: [BrowserTab] = []
     @Published var activeBrowserTabID: UUID?
-    @Published private(set) var pendingRestorationURLs: [String]?
 
     var activeBrowserTab: BrowserTab? { tabs.first { $0.id == activeBrowserTabID } }
 
-    private var pendingRestorationActiveIndex: Int = 0
     private weak var handlerContext: HandlerContext?
+    private var tabSinks: [UUID: AnyCancellable] = [:]
 
     init(handlerContext: HandlerContext?) {
         self.handlerContext = handlerContext
         let session = SessionStore.load()
+        if let session {
+            let restoredTabs = restoredBrowserTabs(from: session.urls)
+            if !restoredTabs.isEmpty {
+                tabs = restoredTabs
+                activeBrowserTabID = restoredTabs[min(session.activeIndex, restoredTabs.count - 1)].id
+                return
+            }
+        }
         let showStartPage = !UserDefaults.standard.bool(forKey: "hideWelcomeCard")
-        let tab = createBrowserTab(isStartPage: session != nil || showStartPage)
+        let tab = createBrowserTab(isStartPage: showStartPage)
+        bind(tab)
         tabs = [tab]
         activeBrowserTabID = tab.id
-        if session == nil && !showStartPage {
+        if !showStartPage {
             let homeURL = UserDefaults.standard.string(forKey: "homeURL") ?? defaultHomeURL
             if let url = URL(string: homeURL) {
                 tab.webView.load(URLRequest(url: url))
             }
         }
-        if let session {
-            pendingRestorationURLs = session.urls
-            pendingRestorationActiveIndex = session.activeIndex
-        }
-    }
-
-    func restoreSession() {
-        guard let urls = pendingRestorationURLs else { return }
-        let activeIndex = pendingRestorationActiveIndex
-        for tab in tabs { tab.invalidate() }
-        tabs = []
-        var newTabs: [BrowserTab] = []
-        for url in urls {
-            let tab = createBrowserTab(isStartPage: false)
-            if let parsed = URL(string: url) {
-                tab.webView.load(URLRequest(url: parsed))
-            }
-            newTabs.append(tab)
-        }
-        tabs = newTabs
-        activeBrowserTabID = newTabs[min(activeIndex, newTabs.count - 1)].id
-        pendingRestorationURLs = nil
-        SessionStore.clear()
-    }
-
-    func discardPendingSession() {
-        pendingRestorationURLs = nil
-        SessionStore.clear()
     }
 
     @discardableResult
     func addBrowserTab(url: String? = nil) -> BrowserTab {
         let tab = createBrowserTab()
+        bind(tab)
         tabs.append(tab)
         activeBrowserTabID = tab.id
         if let url, let parsed = URL(string: url) {
             tab.isStartPage = false
             tab.webView.load(URLRequest(url: parsed))
         }
+        persistSession()
         return tab
     }
 
     func closeBrowserTab(id: UUID) {
-        guard tabs.count > 1 else { return }
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
+
+        if tabs.count == 1 {
+            let replacement = createBrowserTab()
+            tabs[0].invalidate()
+            unbind(tabs[0])
+            tabs = [replacement]
+            activeBrowserTabID = replacement.id
+            bind(replacement)
+            persistSession()
+            return
+        }
+
         let tab = tabs.remove(at: index)
         tab.invalidate()
+        unbind(tab)
         if activeBrowserTabID == id {
             activeBrowserTabID = tabs[min(index, tabs.count - 1)].id
         }
+        persistSession()
     }
 
     func selectBrowserTab(id: UUID) {
         guard tabs.contains(where: { $0.id == id }) else { return }
         activeBrowserTabID = id
+        persistSession()
     }
 
     private func createBrowserTab(isStartPage: Bool = true) -> BrowserTab {
@@ -92,6 +89,7 @@ final class TabStore: ObservableObject {
             let ucc = config.userContentController
             ucc.addUserScript(NetworkBridge.bridgeScript)
             ucc.add(handlerContext, name: "kelpieNetwork")
+            ucc.addUserScript(WebSocketBridge.bridgeScript)
             ucc.addUserScript(ConsoleHandler.bridgeScript)
             ucc.add(handlerContext, name: "kelpieConsole")
             ucc.add(handlerContext, name: "kelpie3DSnapshot")
@@ -102,5 +100,31 @@ final class TabStore: ObservableObject {
         webView.customUserAgent = WebViewDefaults.sharedUserAgent
 
         return BrowserTab(webView: webView, isStartPage: isStartPage)
+    }
+
+    private func restoredBrowserTabs(from urls: [String]) -> [BrowserTab] {
+        urls.compactMap { value in
+            guard let url = URL(string: value) else { return nil }
+            let tab = createBrowserTab(isStartPage: false)
+            bind(tab)
+            tab.webView.load(URLRequest(url: url))
+            return tab
+        }
+    }
+
+    private func bind(_ tab: BrowserTab) {
+        tabSinks[tab.id] = tab.objectWillChange.sink { [weak self] _ in
+            Task { @MainActor in
+                self?.persistSession()
+            }
+        }
+    }
+
+    private func unbind(_ tab: BrowserTab) {
+        tabSinks.removeValue(forKey: tab.id)
+    }
+
+    private func persistSession() {
+        SessionStore.save(tabs: tabs, activeID: activeBrowserTabID)
     }
 }

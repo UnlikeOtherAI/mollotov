@@ -18,8 +18,9 @@ export const ErrorCode = {
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
 
 export interface ApiError {
-  code: ErrorCode;
+  code: string;
   message: string;
+  diagnostics?: Record<string, unknown>;
   [key: string]: unknown;
 }
 

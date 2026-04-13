@@ -18,8 +18,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -29,19 +27,13 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -111,8 +103,6 @@ private fun ExpandedBar(
     tabCount: Int,
     onAddTab: () -> Unit,
 ) {
-    var urlText by remember(currentUrl) { mutableStateOf(currentUrl) }
-
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
@@ -124,24 +114,12 @@ private fun ExpandedBar(
             Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Forward", modifier = Modifier.size(18.dp))
         }
 
-        OutlinedTextField(
-            value = urlText,
-            onValueChange = { urlText = it },
-            singleLine = true,
-            placeholder = { Text("URL", fontSize = 14.sp) },
+        HistoryAutocompleteField(
+            currentUrl = currentUrl,
+            placeholder = "URL",
+            onNavigate = onNavigate,
             shape = RoundedCornerShape(50),
             textStyle = MaterialTheme.typography.bodySmall,
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
-            keyboardActions =
-                KeyboardActions(onGo = {
-                    val url =
-                        if (urlText.startsWith("http://") || urlText.startsWith("https://")) {
-                            urlText
-                        } else {
-                            "https://$urlText"
-                        }
-                    onNavigate(url)
-                }),
             modifier = Modifier.weight(1f).padding(horizontal = 4.dp).height(44.dp),
         )
 

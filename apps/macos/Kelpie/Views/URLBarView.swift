@@ -28,6 +28,7 @@ struct URLBarView: View {
 
     @State private var urlText: String = ""
     @State private var isNarrow = false
+    @FocusState private var isAddressFieldFocused: Bool
 
     var body: some View {
         VStack(spacing: 4) {
@@ -101,6 +102,7 @@ struct URLBarView: View {
             urlText = browserState.currentURL
         }
         .onChange(of: browserState.currentURL) { _, newURL in
+            guard !isAddressFieldFocused else { return }
             urlText = newURL
         }
     }
@@ -239,11 +241,27 @@ struct URLBarView: View {
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(.secondary)
 
-            TextField("Search or enter website name", text: $urlText)
-                .textFieldStyle(.plain)
-                .font(.system(size: 13))
-                .lineLimit(1)
-                .onSubmit { navigate() }
+            ZStack(alignment: .leading) {
+                if let suffix = inlineCompletionSuffix {
+                    HStack(spacing: 0) {
+                        Text(verbatim: urlText)
+                            .hidden()
+                        Text(verbatim: suffix)
+                            .foregroundStyle(.secondary)
+                        Spacer(minLength: 0)
+                    }
+                    .font(.system(size: 13))
+                    .lineLimit(1)
+                    .allowsHitTesting(false)
+                }
+
+                TextField("Search or enter website name", text: $urlText)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13))
+                    .lineLimit(1)
+                    .focused($isAddressFieldFocused)
+                    .onSubmit { navigate() }
+            }
         }
         .padding(.horizontal, 12)
         .frame(height: 34)
@@ -369,10 +387,68 @@ struct URLBarView: View {
     }
 
     private func navigate() {
-        var url = urlText.trimmingCharacters(in: .whitespaces)
-        if !url.hasPrefix("http://") && !url.hasPrefix("https://") {
+        var url = resolvedNavigationText()
+        if !startsWithScheme(url) {
             url = "https://\(url)"
         }
         onNavigate(url)
+    }
+
+    private var inlineCompletionSuffix: String? {
+        let trimmedInput = urlText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard isAddressFieldFocused,
+              let display = inlineCompletionDisplay(for: trimmedInput),
+              display.count > trimmedInput.count
+        else {
+            return nil
+        }
+        return String(display.dropFirst(trimmedInput.count))
+    }
+
+    private func resolvedNavigationText() -> String {
+        let trimmedInput = urlText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedInput.isEmpty else { return trimmedInput }
+        return HistoryStore.shared.bestURLCompletion(for: trimmedInput) ?? trimmedInput
+    }
+
+    private func inlineCompletionDisplay(for input: String) -> String? {
+        guard !input.isEmpty,
+              let fullCompletion = HistoryStore.shared.bestURLCompletion(for: input)
+        else {
+            return nil
+        }
+
+        return completionDisplayCandidates(for: fullCompletion, input: input)
+            .first { candidate in
+                candidate.count > input.count &&
+                    candidate.lowercased().hasPrefix(input.lowercased())
+            }
+    }
+
+    private func completionDisplayCandidates(for fullCompletion: String, input: String) -> [String] {
+        if startsWithScheme(input) {
+            return [fullCompletion]
+        }
+
+        let withoutScheme = stripScheme(from: fullCompletion)
+        let withoutWww = stripLeadingWww(from: withoutScheme)
+        return [withoutWww, withoutScheme, fullCompletion].reduce(into: [String]()) { result, candidate in
+            guard !result.contains(candidate) else { return }
+            result.append(candidate)
+        }
+    }
+
+    private func startsWithScheme(_ value: String) -> Bool {
+        let lowered = value.lowercased()
+        return lowered.hasPrefix("http://") || lowered.hasPrefix("https://")
+    }
+
+    private func stripScheme(from value: String) -> String {
+        guard let range = value.range(of: "://") else { return value }
+        return String(value[range.upperBound...])
+    }
+
+    private func stripLeadingWww(from value: String) -> String {
+        value.lowercased().hasPrefix("www.") ? String(value.dropFirst(4)) : value
     }
 }

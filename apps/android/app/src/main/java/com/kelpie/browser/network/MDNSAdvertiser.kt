@@ -11,12 +11,15 @@ class MDNSAdvertiser(
     private val deviceInfo: DeviceInfo,
 ) {
     private var nsdManager: NsdManager? = null
+    private var registrationInFlight = false
+    private var shouldBeRegistered = false
     var isRegistered = false
         private set
 
     private val registrationListener =
         object : NsdManager.RegistrationListener {
             override fun onServiceRegistered(serviceInfo: NsdServiceInfo) {
+                registrationInFlight = false
                 isRegistered = true
                 Log.i("MDNSAdvertiser", "Registered: ${serviceInfo.serviceName}")
             }
@@ -25,24 +28,39 @@ class MDNSAdvertiser(
                 serviceInfo: NsdServiceInfo,
                 errorCode: Int,
             ) {
+                registrationInFlight = false
                 isRegistered = false
                 Log.e("MDNSAdvertiser", "Registration failed: $errorCode")
             }
 
             override fun onServiceUnregistered(serviceInfo: NsdServiceInfo) {
+                registrationInFlight = false
                 isRegistered = false
                 Log.i("MDNSAdvertiser", "Unregistered: ${serviceInfo.serviceName}")
+                if (shouldBeRegistered) {
+                    registerService()
+                }
             }
 
             override fun onUnregistrationFailed(
                 serviceInfo: NsdServiceInfo,
                 errorCode: Int,
             ) {
+                registrationInFlight = false
                 Log.e("MDNSAdvertiser", "Unregistration failed: $errorCode")
             }
         }
 
-    fun register() {
+    fun ensureRegistered() {
+        shouldBeRegistered = true
+        if (isRegistered || registrationInFlight) {
+            return
+        }
+
+        registerService()
+    }
+
+    private fun registerService() {
         val serviceInfo =
             NsdServiceInfo().apply {
                 serviceName = deviceInfo.name
@@ -59,6 +77,7 @@ class MDNSAdvertiser(
                 setAttribute("engine", "webview")
             }
 
+        registrationInFlight = true
         nsdManager =
             (context.getSystemService(Context.NSD_SERVICE) as NsdManager).also {
                 it.registerService(serviceInfo, NsdManager.PROTOCOL_DNS_SD, registrationListener)
@@ -66,10 +85,16 @@ class MDNSAdvertiser(
     }
 
     fun unregister() {
+        shouldBeRegistered = false
+        if (!isRegistered && !registrationInFlight) {
+            return
+        }
+
         try {
             nsdManager?.unregisterService(registrationListener)
         } catch (e: Exception) {
             Log.w("MDNSAdvertiser", "Unregister error: ${e.message}")
+            registrationInFlight = false
         }
         nsdManager = null
         isRegistered = false

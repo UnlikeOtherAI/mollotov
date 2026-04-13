@@ -18,6 +18,7 @@ describe("explainCommand", () => {
 
   it("explains click with related commands", () => {
     const output = explainCommand("click");
+    expect(output).toContain("Platforms:");
     expect(output).toContain("Related:");
     expect(output).toContain("tap");
   });
@@ -36,6 +37,7 @@ describe("explainCommand", () => {
   it("explains browser launch", () => {
     const output = explainCommand("browser launch");
     expect(output).toContain("browser launch");
+    expect(output).toContain("Platforms: macos");
     expect(output).toContain("launches a new macOS app instance");
   });
 });

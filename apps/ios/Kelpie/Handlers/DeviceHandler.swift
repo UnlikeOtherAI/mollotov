@@ -286,27 +286,26 @@ struct DeviceHandler {
     }
 
     private func getCapabilities() -> [String: Any] {
-        [
-            "cdp": false,
-            "nativeAPIs": true,
-            "bridgeScripts": true,
-            "screenshot": true,
-            "fullPageScreenshot": true,
-            "cookies": true,
-            "storage": true,
-            "geolocation": false,
-            "requestInterception": false,
-            "consoleLogs": true,
-            "networkLogs": false,
-            "mutations": true,
-            "shadowDOM": true,
-            "clipboard": true,
-            "keyboard": true,
-            "tabs": true,
-            "iframes": true,
-            "dialogs": true,
-            "viewportPresets": true
-        ]
+        let unsupported = Set([
+            "set-geolocation",
+            "clear-geolocation",
+            "set-request-interception",
+            "get-intercepted-requests",
+            "clear-request-interception",
+            "set-fullscreen",
+            "get-fullscreen",
+            "set-renderer",
+            "get-renderer"
+        ])
+        let partial = Set<String>()
+        let supported = iosCapabilityMethods.filter { !unsupported.contains($0) && !partial.contains($0) }
+        return successResponse([
+            "version": deviceInfo.version,
+            "platform": "ios",
+            "supported": supported,
+            "partial": Array(partial).sorted(),
+            "unsupported": Array(unsupported).sorted()
+        ])
     }
 
     private func viewportPresetPayload(_ preset: TabletViewportPreset) -> [String: Any] {
@@ -328,3 +327,38 @@ struct DeviceHandler {
         ]
     }
 }
+
+private let iosCapabilityMethods = [
+    "navigate", "back", "forward", "reload", "get-current-url", "set-home", "get-home",
+    "debug-screens", "set-debug-overlay", "get-debug-overlay",
+    "screenshot", "get-dom", "query-selector", "query-selector-all", "get-element-text", "get-attributes",
+    "click", "tap", "fill", "type", "select-option", "check", "uncheck", "swipe",
+    "scroll", "scroll2", "scroll-to-top", "scroll-to-bottom", "scroll-to-y",
+    "get-viewport", "get-device-info", "get-viewport-presets", "get-capabilities", "report-issue",
+    "wait-for-element", "wait-for-navigation",
+    "find-element", "find-button", "find-link", "find-input",
+    "evaluate", "toast", "get-console-messages", "get-js-errors", "get-network-log",
+    "get-resource-timeline", "get-websockets", "get-websocket-messages", "clear-console",
+    "get-accessibility-tree", "screenshot-annotated", "click-annotation", "fill-annotation",
+    "get-visible-elements", "get-page-text", "get-form-state",
+    "get-dialog", "handle-dialog", "set-dialog-auto-handler",
+    "get-tabs", "new-tab", "switch-tab", "close-tab",
+    "get-iframes", "switch-to-iframe", "switch-to-main", "get-iframe-context",
+    "get-cookies", "set-cookie", "delete-cookies",
+    "get-storage", "set-storage", "clear-storage",
+    "watch-mutations", "get-mutations", "stop-watching",
+    "query-shadow-dom", "get-shadow-roots",
+    "get-clipboard", "set-clipboard",
+    "set-geolocation", "clear-geolocation",
+    "set-request-interception", "get-intercepted-requests", "clear-request-interception",
+    "show-keyboard", "hide-keyboard", "get-keyboard-state",
+    "resize-viewport", "reset-viewport", "set-viewport-preset", "is-element-obscured",
+    "safari-auth", "set-orientation", "get-orientation",
+    "show-commentary", "hide-commentary", "highlight", "hide-highlight",
+    "play-script", "abort-script", "get-script-status",
+    "snapshot-3d-enter", "snapshot-3d-exit", "snapshot-3d-status", "snapshot-3d-set-mode", "snapshot-3d-zoom", "snapshot-3d-reset-view",
+    "ai-status", "ai-load", "ai-unload", "ai-infer", "ai-record",
+    "set-fullscreen", "get-fullscreen",
+    "set-renderer", "get-renderer",
+    "get-tap-calibration", "set-tap-calibration"
+]

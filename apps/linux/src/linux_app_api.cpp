@@ -1,8 +1,14 @@
 #include "linux_app_internal.h"
+#include "tap_runtime_utils.h"
+#include "web_runtime_utils.h"
 
+#include <algorithm>
+#include <cmath>
+#include <optional>
 #include <set>
 
 #include "kelpie/error_codes.h"
+#include "kelpie/base64.h"
 #include "kelpie/response_helpers.h"
 
 namespace kelpie::linuxapp {
@@ -67,7 +73,11 @@ LinuxApp::json LinuxApp::Capabilities() const {
       "get-device-info",  "get-capabilities","get-bookmarks",    "add-bookmark",
       "remove-bookmark",  "clear-bookmarks", "get-history",      "clear-history",
       "get-network-log",  "get-console-messages", "get-js-errors","toast",
-      "set-fullscreen",   "get-fullscreen",
+      "report-issue",
+      "set-fullscreen",   "get-fullscreen",  "tap",              "click",
+      "screenshot",       "screenshot-annotated", "click-annotation",
+      "fill-annotation",
+      "get-tap-calibration", "set-tap-calibration",
   };
   const std::set<std::string> partial_routes = {"evaluate", "get-console-messages", "get-network-log"};
 
@@ -87,7 +97,14 @@ LinuxApp::json LinuxApp::Capabilities() const {
       unsupported.push_back(tool.http_endpoint);
       continue;
     }
-    if (tool.http_endpoint == "screenshot" && !ScreenshotSupported()) {
+    if ((tool.http_endpoint == "screenshot" || tool.http_endpoint == "screenshot-annotated") &&
+        !ScreenshotSupported()) {
+      unsupported.push_back(tool.http_endpoint);
+      continue;
+    }
+    if ((tool.http_endpoint == "click" || tool.http_endpoint == "click-annotation" ||
+         tool.http_endpoint == "fill-annotation") &&
+        !HasNativeBrowser()) {
       unsupported.push_back(tool.http_endpoint);
       continue;
     }
@@ -158,15 +175,253 @@ LinuxApp::json LinuxApp::HandleApiRequest(std::string_view endpoint,
     if (endpoint == "get-home") {
       return kelpie::SuccessResponse({{"url", HomeUrl()}});
     }
+    if (endpoint == "report-issue") {
+      return ReportIssue(params);
+    }
+    if (endpoint == "get-tap-calibration") {
+      const TapCalibration calibration = LoadTapCalibration(impl_->config.profile_dir);
+      return kelpie::SuccessResponse(
+          {{"offsetX", calibration.offset_x}, {"offsetY", calibration.offset_y}});
+    }
+    if (endpoint == "set-tap-calibration") {
+      const auto offset_x = JsonNumber(params, "offsetX");
+      const auto offset_y = JsonNumber(params, "offsetY");
+      if (!offset_x.has_value() || !offset_y.has_value() ||
+          !std::isfinite(*offset_x) || !std::isfinite(*offset_y)) {
+        if (status_code != nullptr) {
+          *status_code = kelpie::ErrorCodeHttpStatus(kelpie::ErrorCode::kInvalidParams);
+        }
+        return kelpie::ErrorResponse(kelpie::ErrorCode::kInvalidParams,
+                                     "offsetX and offsetY are required numbers");
+      }
+      const TapCalibration calibration =
+          SaveTapCalibration(impl_->config.profile_dir, *offset_x, *offset_y);
+      return kelpie::SuccessResponse(
+          {{"offsetX", calibration.offset_x}, {"offsetY", calibration.offset_y}});
+    }
     if (endpoint == "evaluate") {
       return kelpie::SuccessResponse(
           {{"result", impl_->handler_context.EvaluateJsReturningString(params.value("expression", ""))}});
     }
-    if (endpoint == "screenshot") {
-      if (status_code != nullptr) {
-        *status_code = 503;
+    if (endpoint == "click") {
+      const auto selector_it = params.find("selector");
+      if (selector_it == params.end() || !selector_it->is_string() ||
+          selector_it->get<std::string>().empty()) {
+        if (status_code != nullptr) {
+          *status_code = kelpie::ErrorCodeHttpStatus(kelpie::ErrorCode::kInvalidParams);
+        }
+        return kelpie::ErrorResponse(kelpie::ErrorCode::kInvalidParams, "selector is required");
       }
-      return kelpie::ErrorResponse("cef_unavailable", "CEF SDK is not linked in this build");
+      if (!HasNativeBrowser()) {
+        if (status_code != nullptr) {
+          *status_code = kelpie::ErrorCodeHttpStatus(kelpie::ErrorCode::kPlatformNotSupported);
+        }
+        return kelpie::ErrorResponse(kelpie::ErrorCode::kPlatformNotSupported,
+                                     "click requires a browser-backed Linux renderer");
+      }
+      const json result = impl_->handler_context.EvaluateJsReturningJson(
+          SelectorActivationScript(selector_it->get<std::string>()));
+      if (result.value("error", std::string()) == "not_found") {
+        if (status_code != nullptr) {
+          *status_code = kelpie::ErrorCodeHttpStatus(kelpie::ErrorCode::kElementNotFound);
+        }
+        return kelpie::ErrorResponse(kelpie::ErrorCode::kElementNotFound,
+                                     "No element matching selector",
+                                     result.value("diagnostics", json::object()));
+      }
+      if (result.value("error", std::string()) == "not_visible") {
+        if (status_code != nullptr) {
+          *status_code = kelpie::ErrorCodeHttpStatus(kelpie::ErrorCode::kElementNotVisible);
+        }
+        return kelpie::ErrorResponse(kelpie::ErrorCode::kElementNotVisible,
+                                     "Element is not visible or is obscured",
+                                     result.value("diagnostics", json::object()));
+      }
+      return kelpie::SuccessResponse({{"element", result}});
+    }
+    if (endpoint == "tap") {
+      const auto requested_x = JsonNumber(params, "x");
+      const auto requested_y = JsonNumber(params, "y");
+      if (!requested_x.has_value() || !requested_y.has_value() ||
+          !std::isfinite(*requested_x) || !std::isfinite(*requested_y)) {
+        if (status_code != nullptr) {
+          *status_code = kelpie::ErrorCodeHttpStatus(kelpie::ErrorCode::kInvalidParams);
+        }
+        return kelpie::ErrorResponse(kelpie::ErrorCode::kInvalidParams,
+                                     "x and y are required numbers");
+      }
+      if (!HasNativeBrowser()) {
+        if (status_code != nullptr) {
+          *status_code = kelpie::ErrorCodeHttpStatus(kelpie::ErrorCode::kPlatformNotSupported);
+        }
+        return kelpie::ErrorResponse(kelpie::ErrorCode::kPlatformNotSupported,
+                                     "tap requires a browser-backed Linux renderer");
+      }
+
+      const TapCalibration calibration = LoadTapCalibration(impl_->config.profile_dir);
+      const json viewport = impl_->handler_context.EvaluateJsReturningJson(
+          "(() => ({width: Math.max(window.innerWidth || 0, 1), height: Math.max(window.innerHeight || 0, 1)}))()");
+      const double width = viewport.value("width", 1.0);
+      const double height = viewport.value("height", 1.0);
+      const double applied_x =
+          ClampCoordinate(*requested_x + calibration.offset_x, 0.0, std::max(width - 1.0, 0.0));
+      const double applied_y =
+          ClampCoordinate(*requested_y + calibration.offset_y, 0.0, std::max(height - 1.0, 0.0));
+      const std::string color_rgb =
+          OverlayRgbFromHex(params.value("color", std::string("#3B82F6")));
+      const json diagnostics = impl_->handler_context.EvaluateJsReturningJson(
+          TapScript(*requested_x,
+                    *requested_y,
+                    applied_x,
+                    applied_y,
+                    calibration.offset_x,
+                    calibration.offset_y,
+                    color_rgb));
+      return kelpie::SuccessResponse({{"x", *requested_x},
+                                      {"y", *requested_y},
+                                      {"appliedX", applied_x},
+                                      {"appliedY", applied_y},
+                                      {"offsetX", calibration.offset_x},
+                                      {"offsetY", calibration.offset_y},
+                                      {"diagnostics", diagnostics}});
+    }
+    if (endpoint == "screenshot") {
+      const auto resolution = ParseScreenshotResolution(params);
+      if (!resolution.has_value()) {
+        if (status_code != nullptr) {
+          *status_code = kelpie::ErrorCodeHttpStatus(kelpie::ErrorCode::kInvalidParams);
+        }
+        return kelpie::ErrorResponse(kelpie::ErrorCode::kInvalidParams,
+                                     "resolution must be 'native' or 'viewport'");
+      }
+      if (!ScreenshotSupported()) {
+        if (status_code != nullptr) {
+          *status_code = 503;
+        }
+        return kelpie::ErrorResponse("cef_unavailable", "CEF SDK is not linked in this build");
+      }
+      const ScreenshotViewportMetrics viewport =
+          LoadScreenshotViewportMetrics(impl_->handler_context);
+      const std::vector<std::uint8_t> bytes =
+          ScaleScreenshotBytes(SnapshotBytes(), *resolution, viewport);
+      const auto dimensions = ParsePngDimensions(bytes);
+      if (bytes.empty() || !dimensions.has_value()) {
+        if (status_code != nullptr) {
+          *status_code = kelpie::ErrorCodeHttpStatus(kelpie::ErrorCode::kWebviewError);
+        }
+        return kelpie::ErrorResponse(kelpie::ErrorCode::kWebviewError,
+                                     "Failed to capture screenshot");
+      }
+      json payload = ScreenshotMetadata(dimensions->first, dimensions->second, "png",
+                                        *resolution, viewport);
+      payload["image"] = kelpie::Base64Encode(bytes);
+      return kelpie::SuccessResponse(payload);
+    }
+    if (endpoint == "screenshot-annotated") {
+      const auto resolution = ParseScreenshotResolution(params);
+      if (!resolution.has_value()) {
+        if (status_code != nullptr) {
+          *status_code = kelpie::ErrorCodeHttpStatus(kelpie::ErrorCode::kInvalidParams);
+        }
+        return kelpie::ErrorResponse(kelpie::ErrorCode::kInvalidParams,
+                                     "resolution must be 'native' or 'viewport'");
+      }
+      if (!ScreenshotSupported()) {
+        if (status_code != nullptr) {
+          *status_code = 503;
+        }
+        return kelpie::ErrorResponse("cef_unavailable", "CEF SDK is not linked in this build");
+      }
+      const ScreenshotViewportMetrics viewport =
+          LoadScreenshotViewportMetrics(impl_->handler_context);
+      const std::vector<std::uint8_t> bytes =
+          ScaleScreenshotBytes(SnapshotBytes(), *resolution, viewport);
+      const auto dimensions = ParsePngDimensions(bytes);
+      if (bytes.empty() || !dimensions.has_value()) {
+        if (status_code != nullptr) {
+          *status_code = kelpie::ErrorCodeHttpStatus(kelpie::ErrorCode::kWebviewError);
+        }
+        return kelpie::ErrorResponse(kelpie::ErrorCode::kWebviewError,
+                                     "Failed to capture screenshot");
+      }
+      json payload = ScreenshotMetadata(dimensions->first, dimensions->second, "png",
+                                        *resolution, viewport);
+      payload["image"] = kelpie::Base64Encode(bytes);
+      payload["annotations"] = impl_->handler_context.EvaluateJsReturningJson(AnnotationElementsScript());
+      return kelpie::SuccessResponse(payload);
+    }
+    if (endpoint == "click-annotation") {
+      const auto index = params.find("index");
+      if (index == params.end() || !index->is_number_integer()) {
+        if (status_code != nullptr) {
+          *status_code = kelpie::ErrorCodeHttpStatus(kelpie::ErrorCode::kInvalidParams);
+        }
+        return kelpie::ErrorResponse(kelpie::ErrorCode::kInvalidParams, "index is required");
+      }
+      if (!HasNativeBrowser()) {
+        if (status_code != nullptr) {
+          *status_code = kelpie::ErrorCodeHttpStatus(kelpie::ErrorCode::kPlatformNotSupported);
+        }
+        return kelpie::ErrorResponse(kelpie::ErrorCode::kPlatformNotSupported,
+                                     "click-annotation requires a browser-backed Linux renderer");
+      }
+      const json result =
+          impl_->handler_context.EvaluateJsReturningJson(AnnotationActivationScript(index->get<int>()));
+      if (result.value("error", std::string()) == "not_found") {
+        if (status_code != nullptr) {
+          *status_code = kelpie::ErrorCodeHttpStatus(kelpie::ErrorCode::kElementNotFound);
+        }
+        return kelpie::ErrorResponse(kelpie::ErrorCode::kElementNotFound,
+                                     "Annotation index not found",
+                                     result.value("diagnostics", json::object()));
+      }
+      if (result.value("error", std::string()) == "not_visible") {
+        if (status_code != nullptr) {
+          *status_code = kelpie::ErrorCodeHttpStatus(kelpie::ErrorCode::kElementNotVisible);
+        }
+        return kelpie::ErrorResponse(kelpie::ErrorCode::kElementNotVisible,
+                                     "Annotated element is not visible or is obscured",
+                                     result.value("diagnostics", json::object()));
+      }
+      return kelpie::SuccessResponse({{"element", result}});
+    }
+    if (endpoint == "fill-annotation") {
+      const auto index = params.find("index");
+      const auto value = params.find("value");
+      if (index == params.end() || !index->is_number_integer() || value == params.end() ||
+          !value->is_string()) {
+        if (status_code != nullptr) {
+          *status_code = kelpie::ErrorCodeHttpStatus(kelpie::ErrorCode::kInvalidParams);
+        }
+        return kelpie::ErrorResponse(kelpie::ErrorCode::kInvalidParams,
+                                     "index and value are required");
+      }
+      if (!HasNativeBrowser()) {
+        if (status_code != nullptr) {
+          *status_code = kelpie::ErrorCodeHttpStatus(kelpie::ErrorCode::kPlatformNotSupported);
+        }
+        return kelpie::ErrorResponse(kelpie::ErrorCode::kPlatformNotSupported,
+                                     "fill-annotation requires a browser-backed Linux renderer");
+      }
+      const json result = impl_->handler_context.EvaluateJsReturningJson(
+          FillAnnotationScript(index->get<int>(), value->get<std::string>()));
+      if (result.value("error", std::string()) == "not_found") {
+        if (status_code != nullptr) {
+          *status_code = kelpie::ErrorCodeHttpStatus(kelpie::ErrorCode::kElementNotFound);
+        }
+        return kelpie::ErrorResponse(kelpie::ErrorCode::kElementNotFound,
+                                     "Annotation index not found",
+                                     result.value("diagnostics", json::object()));
+      }
+      if (result.value("error", std::string()) == "not_editable") {
+        if (status_code != nullptr) {
+          *status_code = kelpie::ErrorCodeHttpStatus(kelpie::ErrorCode::kInvalidParams);
+        }
+        return kelpie::ErrorResponse(kelpie::ErrorCode::kInvalidParams,
+                                     "Annotated element is not an editable form control",
+                                     result.value("diagnostics", json::object()));
+      }
+      return kelpie::SuccessResponse({{"element", result}, {"value", value->get<std::string>()}});
     }
     if (endpoint == "get-device-info") {
       return DeviceInfo();

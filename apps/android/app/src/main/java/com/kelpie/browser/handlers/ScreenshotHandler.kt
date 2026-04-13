@@ -1,18 +1,53 @@
 package com.kelpie.browser.handlers
 
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.os.Handler
-import android.os.Looper
 import com.kelpie.browser.network.Router
 import com.kelpie.browser.network.errorResponse
 import com.kelpie.browser.network.successResponse
-import java.io.ByteArrayOutputStream
-import java.util.Base64
-import kotlin.coroutines.resume
-import kotlin.coroutines.suspendCoroutine
 
-private val mainHandler = Handler(Looper.getMainLooper())
+enum class ScreenshotResolution(
+    val wireValue: String,
+) {
+    NATIVE("native"),
+    VIEWPORT("viewport"),
+    ;
+
+    companion object {
+        fun parse(raw: Any?): ScreenshotResolution? =
+            when (raw) {
+                null -> NATIVE
+                is String -> entries.firstOrNull { it.wireValue == raw }
+                else -> null
+            }
+    }
+}
+
+data class ScreenshotViewportMetrics(
+    val viewportWidth: Int,
+    val viewportHeight: Int,
+    val devicePixelRatio: Double,
+) {
+    fun metadata(
+        imageWidth: Int,
+        imageHeight: Int,
+        format: String,
+        resolution: ScreenshotResolution,
+    ): Map<String, Any> {
+        val scaleX = if (viewportWidth > 0) imageWidth.toDouble() / viewportWidth.toDouble() else 1.0
+        val scaleY = if (viewportHeight > 0) imageHeight.toDouble() / viewportHeight.toDouble() else 1.0
+        return mapOf(
+            "width" to imageWidth,
+            "height" to imageHeight,
+            "format" to format,
+            "resolution" to resolution.wireValue,
+            "coordinateSpace" to "viewport-css-pixels",
+            "viewportWidth" to viewportWidth,
+            "viewportHeight" to viewportHeight,
+            "devicePixelRatio" to devicePixelRatio,
+            "imageScaleX" to scaleX,
+            "imageScaleY" to scaleY,
+        )
+    }
+}
 
 class ScreenshotHandler(
     private val ctx: HandlerContext,
@@ -22,37 +57,14 @@ class ScreenshotHandler(
     }
 
     private suspend fun screenshot(body: Map<String, Any?>): Map<String, Any?> {
-        val wv = ctx.webView ?: return errorResponse("NO_WEBVIEW", "No WebView")
         val format = body["format"] as? String ?: "png"
         val quality = (body["quality"] as? Int) ?: 80
-
-        val bitmap =
-            suspendCoroutine<Bitmap?> { cont ->
-                mainHandler.post {
-                    try {
-                        val bmp = Bitmap.createBitmap(wv.width, wv.height, Bitmap.Config.ARGB_8888)
-                        val canvas = Canvas(bmp)
-                        wv.draw(canvas)
-                        cont.resume(bmp)
-                    } catch (_: Exception) {
-                        cont.resume(null)
-                    }
-                }
-            } ?: return errorResponse("SCREENSHOT_FAILED", "Failed to capture screenshot")
-
-        val stream = ByteArrayOutputStream()
-        val compressFormat = if (format == "jpeg") Bitmap.CompressFormat.JPEG else Bitmap.CompressFormat.PNG
-        bitmap.compress(compressFormat, quality, stream)
-        val base64 = Base64.getEncoder().encodeToString(stream.toByteArray())
-        bitmap.recycle()
-
-        return successResponse(
-            mapOf(
-                "image" to base64,
-                "width" to wv.width,
-                "height" to wv.height,
-                "format" to format,
-            ),
-        )
+        val resolution =
+            ScreenshotResolution.parse(body["resolution"])
+                ?: return errorResponse("INVALID_PARAMS", "resolution must be 'native' or 'viewport'")
+        val payload =
+            ctx.captureScreenshotPayload(format, quality, resolution)
+                ?: return errorResponse("SCREENSHOT_FAILED", "Failed to capture screenshot")
+        return successResponse(payload)
     }
 }

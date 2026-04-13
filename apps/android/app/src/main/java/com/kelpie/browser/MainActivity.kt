@@ -9,12 +9,11 @@ import com.kelpie.browser.browser.BookmarkStore
 import com.kelpie.browser.browser.HistoryStore
 import com.kelpie.browser.browser.HomeStore
 import com.kelpie.browser.device.DeviceInfo
-import com.kelpie.browser.devtools.ConsoleHandler
-import com.kelpie.browser.devtools.MutationHandler
 import com.kelpie.browser.devtools.NetworkLogHandler
 import com.kelpie.browser.handlers.BookmarkHandler
 import com.kelpie.browser.handlers.BrowserManagementHandler
 import com.kelpie.browser.handlers.CommentaryHandler
+import com.kelpie.browser.handlers.ConsoleHandler
 import com.kelpie.browser.handlers.DOMHandler
 import com.kelpie.browser.handlers.DeviceHandler
 import com.kelpie.browser.handlers.EvaluateHandler
@@ -22,15 +21,21 @@ import com.kelpie.browser.handlers.HandlerContext
 import com.kelpie.browser.handlers.HighlightHandler
 import com.kelpie.browser.handlers.HistoryHandler
 import com.kelpie.browser.handlers.InteractionHandler
+import com.kelpie.browser.handlers.MutationHandler
 import com.kelpie.browser.handlers.NavigationHandler
 import com.kelpie.browser.handlers.NetworkInspectorHandler
 import com.kelpie.browser.handlers.ScreenshotHandler
 import com.kelpie.browser.handlers.ScriptHandler
 import com.kelpie.browser.handlers.ScriptPlaybackState
 import com.kelpie.browser.handlers.ScrollHandler
+import com.kelpie.browser.handlers.ShadowDOMHandler
 import com.kelpie.browser.handlers.Snapshot3DHandler
 import com.kelpie.browser.handlers.SwipeHandler
+import com.kelpie.browser.handlers.TapCalibrationHandler
+import com.kelpie.browser.handlers.TapCalibrationStore
+import com.kelpie.browser.handlers.WebSocketHandler
 import com.kelpie.browser.llm.LLMHandler
+import com.kelpie.browser.network.FeedbackStore
 import com.kelpie.browser.network.HTTPServer
 import com.kelpie.browser.network.MDNSAdvertiser
 import com.kelpie.browser.network.Router
@@ -54,6 +59,7 @@ class MainActivity : ComponentActivity() {
         HomeStore.init(this)
         BookmarkStore.init(this)
         HistoryStore.init(this)
+        TapCalibrationStore.init(this)
 
         setContent {
             KelpieTheme {
@@ -82,12 +88,15 @@ class MainActivity : ComponentActivity() {
         ScreenshotHandler(handlerContext).register(router)
         DOMHandler(handlerContext).register(router)
         InteractionHandler(handlerContext).register(router)
+        TapCalibrationHandler().register(router)
         ScrollHandler(handlerContext).register(router)
         DeviceHandler(handlerContext, deviceInfo, this).register(router)
         EvaluateHandler(handlerContext).register(router)
         ConsoleHandler(handlerContext).register(router)
         NetworkLogHandler(handlerContext).register(router)
+        WebSocketHandler(handlerContext).register(router)
         MutationHandler(handlerContext).register(router)
+        ShadowDOMHandler(handlerContext).register(router)
         BrowserManagementHandler(handlerContext, applicationContext).register(router)
         LLMHandler(handlerContext).register(router)
         AIHandler(applicationContext, handlerContext).register(router)
@@ -118,6 +127,31 @@ class MainActivity : ComponentActivity() {
             mapOf("success" to true)
         }
 
+        router.register("report-issue") { body ->
+            val category =
+                body["category"] as? String
+                    ?: return@register errorResponse("MISSING_PARAM", "category is required")
+            val command =
+                body["command"] as? String
+                    ?: return@register errorResponse("MISSING_PARAM", "command is required")
+            val record =
+                FeedbackStore.save(
+                    context = applicationContext,
+                    body = body + mapOf("category" to category, "command" to command),
+                    platform = "android",
+                    deviceId = deviceInfo.id,
+                    deviceName = deviceInfo.name,
+                )
+            successResponse(
+                mapOf(
+                    "reportId" to record.reportId,
+                    "storedAt" to record.storedAt,
+                    "platform" to "android",
+                    "deviceId" to deviceInfo.id,
+                ),
+            )
+        }
+
         router.register("safari-auth") { body ->
             val wv = handlerContext.webView
             if (wv == null) {
@@ -131,17 +165,22 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        router.registerStubs() // Fill remaining unimplemented methods
+        router.registerFallbacks()
     }
 
     private fun startServer(deviceInfo: DeviceInfo) {
-        httpServer = HTTPServer(port = deviceInfo.port, router = router).also { it.start() }
+        httpServer = HTTPServer(port = deviceInfo.port, router = router, appContext = applicationContext).also { it.start() }
 
         mdnsAdvertiser =
             MDNSAdvertiser(
                 context = this,
                 deviceInfo = deviceInfo,
-            ).also { it.register() }
+            )
+    }
+
+    override fun onStart() {
+        super.onStart()
+        mdnsAdvertiser?.ensureRegistered()
     }
 
     override fun onResume() {
@@ -149,10 +188,14 @@ class MainActivity : ComponentActivity() {
         handlerContext.chromeAuth.onResume(handlerContext.webView)
     }
 
+    override fun onStop() {
+        mdnsAdvertiser?.unregister()
+        super.onStop()
+    }
+
     override fun onDestroy() {
         handlerContext.dialogState.dismissPending()
         super.onDestroy()
         httpServer?.stop()
-        mdnsAdvertiser?.unregister()
     }
 }

@@ -30,6 +30,7 @@ int32_t kelpie_history_store_remove_by_id(KelpieHistoryStoreRef store, const cha
 void kelpie_history_store_update_latest_title(KelpieHistoryStoreRef store,
                                                 const char* url,
                                                 const char* title);
+char* kelpie_history_store_best_url_completion(KelpieHistoryStoreRef store, const char* query);
 char* kelpie_history_store_to_json(KelpieHistoryStoreRef store);
 int32_t kelpie_history_store_count(KelpieHistoryStoreRef store);
 void kelpie_history_store_load_json(KelpieHistoryStoreRef store, const char* json);

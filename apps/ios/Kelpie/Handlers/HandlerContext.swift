@@ -1,5 +1,75 @@
 import WebKit
 
+enum ScreenshotResolution: String {
+    case native
+    case viewport
+
+    static func parse(_ raw: Any?) -> Self? {
+        guard let raw else { return .native }
+        guard let value = raw as? String else { return nil }
+        return Self(rawValue: value)
+    }
+}
+
+struct ScreenshotViewportMetrics {
+    let viewportWidth: Int
+    let viewportHeight: Int
+    let devicePixelRatio: Double
+
+    func metadata(
+        imageWidth: Int,
+        imageHeight: Int,
+        format: String,
+        resolution: ScreenshotResolution
+    ) -> [String: Any] {
+        let scaleX = viewportWidth > 0 ? Double(imageWidth) / Double(viewportWidth) : 1
+        let scaleY = viewportHeight > 0 ? Double(imageHeight) / Double(viewportHeight) : 1
+        return [
+            "width": imageWidth,
+            "height": imageHeight,
+            "format": format,
+            "resolution": resolution.rawValue,
+            "coordinateSpace": "viewport-css-pixels",
+            "viewportWidth": viewportWidth,
+            "viewportHeight": viewportHeight,
+            "devicePixelRatio": devicePixelRatio,
+            "imageScaleX": scaleX,
+            "imageScaleY": scaleY
+        ]
+    }
+}
+
+private func imagePixelSize(_ image: UIImage) -> (width: Int, height: Int) {
+    if let cgImage = image.cgImage {
+        return (cgImage.width, cgImage.height)
+    }
+    return (
+        Int(round(image.size.width * image.scale)),
+        Int(round(image.size.height * image.scale))
+    )
+}
+
+private func scaledImage(
+    from image: UIImage,
+    to resolution: ScreenshotResolution,
+    using viewport: ScreenshotViewportMetrics
+) -> UIImage {
+    guard resolution == .viewport else { return image }
+    let sourceSize = imagePixelSize(image)
+    let targetWidth = max(Int(round(Double(sourceSize.width) / max(viewport.devicePixelRatio, 1.0))), 1)
+    let targetHeight = max(Int(round(Double(sourceSize.height) / max(viewport.devicePixelRatio, 1.0))), 1)
+    guard targetWidth != sourceSize.width || targetHeight != sourceSize.height else {
+        return image
+    }
+
+    let format = UIGraphicsImageRendererFormat.default()
+    format.scale = 1
+    let renderer = UIGraphicsImageRenderer(size: CGSize(width: targetWidth, height: targetHeight), format: format)
+    return renderer.image { _ in
+        image.draw(in: CGRect(x: 0, y: 0, width: targetWidth, height: targetHeight))
+    }
+}
+
 /// Shared context providing access to the WebView for all handlers.
 @MainActor
 final class HandlerContext: NSObject, WKScriptMessageHandler {
@@ -10,6 +80,9 @@ final class HandlerContext: NSObject, WKScriptMessageHandler {
     var consoleMessages: [[String: Any]] = []
     var isIn3DInspector = false
     var scriptPlaybackState: ScriptPlaybackState?
+    var annotationSessionId: String?
+    var annotationPageURL: String?
+    var annotationElementCount: Int?
     let safariAuth = SafariAuthHelper()
     let dialogState = DialogState()
     let keyboardObserver = KeyboardObserver()
@@ -69,6 +142,16 @@ final class HandlerContext: NSObject, WKScriptMessageHandler {
     func evaluateJSReturningString(_ script: String) async throws -> String {
         let result = try await evaluateJS(script)
         return result as? String ?? String(describing: result ?? "null")
+    }
+
+    func evaluateJSReturningArray(_ script: String) async throws -> [[String: Any]] {
+        let wrapped = "JSON.stringify((\(script)))"
+        let jsonString = try await evaluateJSReturningString(wrapped)
+        guard let data = jsonString.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+            return []
+        }
+        return json
     }
 
     /// Show a touch indicator at viewport coordinates with a ripple animation.
@@ -158,6 +241,54 @@ final class HandlerContext: NSObject, WKScriptMessageHandler {
         return json
     }
 
+    func screenshotViewportMetrics() async throws -> ScreenshotViewportMetrics {
+        let result = try await evaluateJSReturningJSON("""
+        (function() {
+            return {
+                viewportWidth: Math.max(window.innerWidth || 0, 1),
+                viewportHeight: Math.max(window.innerHeight || 0, 1),
+                devicePixelRatio: window.devicePixelRatio || 1
+            };
+        })()
+        """)
+        return ScreenshotViewportMetrics(
+            viewportWidth: (result["viewportWidth"] as? NSNumber)?.intValue ?? 1,
+            viewportHeight: (result["viewportHeight"] as? NSNumber)?.intValue ?? 1,
+            devicePixelRatio: (result["devicePixelRatio"] as? NSNumber)?.doubleValue ?? 1
+        )
+    }
+
+    func screenshotPayload(
+        from image: UIImage,
+        format: String,
+        quality: Double,
+        resolution: ScreenshotResolution
+    ) async throws -> [String: Any] {
+        let viewport = try await screenshotViewportMetrics()
+        let normalizedFormat = format == "jpeg" ? "jpeg" : "png"
+        let rendered = scaledImage(from: image, to: resolution, using: viewport)
+        let imageData: Data?
+        if normalizedFormat == "jpeg" {
+            imageData = rendered.jpegData(compressionQuality: quality)
+        } else {
+            imageData = rendered.pngData()
+        }
+        guard let encoded = imageData else {
+            throw HandlerError.screenshotFailed
+        }
+        let pixelSize = imagePixelSize(rendered)
+        return [
+            "image": encoded.base64EncodedString()
+        ].merging(
+            viewport.metadata(
+                imageWidth: pixelSize.width,
+                imageHeight: pixelSize.height,
+                format: normalizedFormat,
+                resolution: resolution
+            )
+        ) { _, new in new }
+    }
+
     func mark3DInspectorInactive(notify: Bool) {
         isIn3DInspector = false
         if notify {
@@ -186,12 +317,21 @@ final class HandlerContext: NSObject, WKScriptMessageHandler {
 enum HandlerError: Error {
     case noWebView
     case elementNotFound(String)
+    case screenshotFailed
     case timeout
     case platformNotSupported(String)
 }
 
 func errorResponse(code: String, message: String) -> [String: Any] {
-    ["success": false, "error": ["code": code, "message": message]]
+    errorResponse(code: code, message: message, diagnostics: nil)
+}
+
+func errorResponse(code: String, message: String, diagnostics: [String: Any]?) -> [String: Any] {
+    var error: [String: Any] = ["code": code, "message": message]
+    if let diagnostics, !diagnostics.isEmpty {
+        error["diagnostics"] = diagnostics
+    }
+    return ["success": false, "error": error]
 }
 
 func successResponse(_ data: [String: Any] = [:]) -> [String: Any] {

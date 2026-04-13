@@ -9,6 +9,7 @@ class Router {
     private val routes = mutableMapOf<String, RouteHandler>()
     var webView: WebView? = null
     var handlerContext: HandlerContext? = null
+    var scriptPlaybackState: com.kelpie.browser.handlers.ScriptPlaybackState? = null
 
     fun register(
         method: String,
@@ -17,9 +18,20 @@ class Router {
         routes[method] = handler
     }
 
+    fun registerIfAbsent(
+        method: String,
+        handler: RouteHandler,
+    ) {
+        if (routes.containsKey(method)) {
+            return
+        }
+        routes[method] = handler
+    }
+
     suspend fun handle(
         method: String,
         body: Map<String, Any?>,
+        bypassRecordingGate: Boolean = false,
     ): Pair<Int, Map<String, Any?>> {
         val handler =
             routes[method]
@@ -28,13 +40,22 @@ class Router {
                         "success" to false,
                         "error" to mapOf("code" to "NOT_FOUND", "message" to "Unknown method: $method"),
                     )
+        if (!bypassRecordingGate) {
+            val gateError = scriptPlaybackState?.recordingError(method)
+            if (gateError != null) {
+                return 409 to gateError
+            }
+        }
         val result = handler(body)
         val success = result["success"] as? Boolean ?: false
+        val errorCode = (result["error"] as? Map<*, *>)?.get("code") as? String
         val status =
             if (success) {
                 200
+            } else if (errorCode == "SCRIPT_PARTIAL_FAILURE" || errorCode == "SCRIPT_ABORTED" || result["aborted"] == true) {
+                200
             } else if (result.containsKey("error")) {
-                400
+                statusForErrorCode(errorCode)
             } else {
                 200
             }
@@ -47,111 +68,20 @@ class Router {
         return status to result
     }
 
-    fun registerStubs() {
+    fun registerFallbacks() {
         val methods =
-            listOf(
-                "navigate",
-                "back",
-                "forward",
-                "reload",
-                "get-current-url",
-                "screenshot",
-                "get-dom",
-                "query-selector",
-                "query-selector-all",
-                "get-element-text",
-                "get-attributes",
-                "click",
-                "tap",
-                "fill",
-                "type",
-                "select-option",
-                "check",
-                "uncheck",
-                "scroll",
-                "scroll2",
-                "scroll-to-top",
-                "scroll-to-bottom",
-                "scroll-to-y",
-                "get-viewport",
-                "get-device-info",
-                "get-viewport-presets",
-                "get-capabilities",
-                "wait-for-element",
-                "wait-for-navigation",
-                "find-element",
-                "find-button",
-                "find-link",
-                "find-input",
-                "ai-status",
-                "ai-load",
-                "ai-unload",
-                "ai-infer",
-                "ai-record",
-                "evaluate",
-                "get-console-messages",
-                "get-js-errors",
-                "get-network-log",
-                "get-resource-timeline",
-                "clear-console",
-                "get-accessibility-tree",
-                "screenshot-annotated",
-                "click-annotation",
-                "fill-annotation",
-                "get-visible-elements",
-                "get-page-text",
-                "get-form-state",
-                "get-dialog",
-                "handle-dialog",
-                "set-dialog-auto-handler",
-                "get-tabs",
-                "new-tab",
-                "switch-tab",
-                "close-tab",
-                "get-iframes",
-                "switch-to-iframe",
-                "switch-to-main",
-                "get-iframe-context",
-                "get-cookies",
-                "set-cookie",
-                "delete-cookies",
-                "get-storage",
-                "set-storage",
-                "clear-storage",
-                "watch-mutations",
-                "get-mutations",
-                "stop-watching",
-                "query-shadow-dom",
-                "get-shadow-roots",
-                "get-clipboard",
-                "set-clipboard",
-                "set-geolocation",
-                "clear-geolocation",
-                "set-request-interception",
-                "get-intercepted-requests",
-                "clear-request-interception",
-                "show-keyboard",
-                "hide-keyboard",
-                "get-keyboard-state",
-                "resize-viewport",
-                "reset-viewport",
-                "set-viewport-preset",
-                "is-element-obscured",
-                "snapshot-3d-enter",
-                "snapshot-3d-exit",
-                "snapshot-3d-status",
-                "snapshot-3d-set-mode",
-                "snapshot-3d-zoom",
-                "snapshot-3d-reset-view",
-            )
+            emptyList<String>()
         for (method in methods) {
-            if (!routes.containsKey(method)) {
-                register(method) {
-                    mapOf(
-                        "success" to false,
-                        "error" to mapOf("code" to "NOT_IMPLEMENTED", "message" to "$method not yet implemented"),
-                    )
-                }
+            val unsupported = androidUnsupportedMethods.contains(method)
+            registerIfAbsent(method) {
+                mapOf(
+                    "success" to false,
+                    "error" to
+                        mapOf(
+                            "code" to if (unsupported) "PLATFORM_NOT_SUPPORTED" else "NOT_IMPLEMENTED",
+                            "message" to if (unsupported) "$method is not supported on Android" else "$method not yet implemented",
+                        ),
+                )
             }
         }
     }
@@ -160,6 +90,47 @@ class Router {
 fun errorResponse(
     code: String,
     message: String,
-): Map<String, Any?> = mapOf("success" to false, "error" to mapOf("code" to code, "message" to message))
+    diagnostics: Map<String, Any?>? = null,
+): Map<String, Any?> {
+    val error = mutableMapOf<String, Any?>("code" to code, "message" to message)
+    if (diagnostics != null && diagnostics.isNotEmpty()) {
+        error["diagnostics"] = diagnostics
+    }
+    return mapOf("success" to false, "error" to error)
+}
 
 fun successResponse(data: Map<String, Any?> = emptyMap()): Map<String, Any?> = mutableMapOf<String, Any?>("success" to true).apply { putAll(data) }
+
+private val androidUnsupportedMethods =
+    setOf(
+        "debug-screens",
+        "set-debug-overlay",
+        "get-debug-overlay",
+        "safari-auth",
+        "set-geolocation",
+        "clear-geolocation",
+        "set-request-interception",
+        "get-intercepted-requests",
+        "clear-request-interception",
+        "set-fullscreen",
+        "get-fullscreen",
+        "set-renderer",
+        "get-renderer",
+    )
+
+private fun statusForErrorCode(code: String?): Int =
+    when (code) {
+        "ELEMENT_NOT_FOUND",
+        "WATCH_NOT_FOUND",
+        -> 404
+        "TIMEOUT" -> 408
+        "NAVIGATION_ERROR" -> 502
+        "PLATFORM_NOT_SUPPORTED" -> 501
+        "IFRAME_ACCESS_DENIED",
+        "PERMISSION_REQUIRED",
+        "SHADOW_ROOT_CLOSED",
+        -> 403
+        "RECORDING_IN_PROGRESS" -> 409
+        "WEBVIEW_ERROR" -> 500
+        else -> 400
+    }

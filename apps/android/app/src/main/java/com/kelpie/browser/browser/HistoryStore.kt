@@ -27,6 +27,10 @@ object HistoryStore {
     private lateinit var prefs: SharedPreferences
     private val nativeHandle = NativeCore.historyStoreCreate()
     private val lock = Any()
+
+    @Volatile
+    var clearGeneration: Int = 0
+        private set
     private val _entries = MutableStateFlow<List<HistoryEntry>>(emptyList())
     val entries: StateFlow<List<HistoryEntry>> = _entries.asStateFlow()
 
@@ -51,6 +55,7 @@ object HistoryStore {
     fun clear() {
         synchronized(lock) {
             NativeCore.historyStoreClear(nativeHandle)
+            clearGeneration += 1
             refreshFromNative(save = true)
         }
     }
@@ -62,6 +67,16 @@ object HistoryStore {
         synchronized(lock) {
             NativeCore.historyStoreUpdateLatestTitle(nativeHandle, url, title)
             refreshFromNative(save = true)
+        }
+    }
+
+    fun bestUrlCompletion(query: String): String? {
+        val trimmed = query.trim()
+        if (trimmed.isEmpty()) {
+            return null
+        }
+        synchronized(lock) {
+            return NativeCore.historyStoreBestUrlCompletion(nativeHandle, trimmed)?.takeIf { it.isNotBlank() }
         }
     }
 

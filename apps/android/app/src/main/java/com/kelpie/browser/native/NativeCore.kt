@@ -57,6 +57,11 @@ object NativeCore {
 
     external fun historyStoreToJson(handle: Long): String?
 
+    external fun historyStoreBestUrlCompletion(
+        handle: Long,
+        query: String,
+    ): String?
+
     external fun historyStoreCount(handle: Long): Int
 
     external fun historyStoreLoadJson(

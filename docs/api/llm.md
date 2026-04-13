@@ -6,6 +6,25 @@ These methods are specifically designed for LLM consumption — compact, semanti
 
 For protocol details, errors, and MCP tool names, see [README.md](README.md).
 
+## Recommended Interaction Order
+
+For reliable automation, prefer semantic targeting before visual or coordinate-driven interaction:
+
+1. `get-accessibility-tree`
+2. `find-element` / `find-button` / `find-link` / `find-input`
+3. `click` / `fill` / `select-option`
+4. Optional visual confirmation: `highlight` a known selector, then `screenshot` or `screenshot-annotated`
+5. `screenshot-annotated` + `click-annotation` / `fill-annotation`
+6. `tap` only when semantic and annotation-driven targeting both fail
+
+Raw coordinates should be the fallback, not the default.
+
+Kelpie's semantic and annotation endpoints return stable CSS selectors, not just tag names. Use those returned selectors directly with `click`, `fill`, or `select-option` instead of trying to synthesize a shorter selector yourself.
+
+If you already know the selector but want the model to reason about the same target visually, call `highlight` first and keep it visible with `durationMs: 0`, then take a screenshot. That draws a visible box/ring around the exact DOM target so the image and the selector stay aligned.
+
+When you must use screenshot-based grounding, prefer `resolution: "viewport"` so the image uses CSS-pixel/non-retina dimensions. That keeps screenshots smaller and makes the image coordinate space line up with Kelpie's interaction coordinate space more directly. If a response reports `imageScaleX` / `imageScaleY` greater than `1`, convert image coordinates back into viewport CSS pixels before calling `tap`.
+
 ---
 
 ## AI
@@ -118,6 +137,8 @@ These methods are designed for multi-device scenarios. On a single device they w
 
 ### `findElement`
 Search for an element and return detailed info about whether and where it was found.
+
+The returned `element.selector` is intended to be reusable as-is with the core interaction endpoints.
 
 ```json
 POST /v1/find-element
@@ -272,6 +293,7 @@ POST /v1/screenshot-annotated
 {
   "fullPage": false,          // optional
   "format": "png",            // optional
+  "resolution": "viewport",   // optional, "native" | "viewport"
   "interactableOnly": true,   // optional, default true — only label clickable/fillable elements
   "labelStyle": "numbered"    // optional, "numbered" | "badge"
 }
@@ -283,6 +305,16 @@ Response:
   "width": 390,
   "height": 844,
   "format": "png",
+  "resolution": "viewport",
+  "coordinateSpace": "viewport-css-pixels",
+  "viewportWidth": 390,
+  "viewportHeight": 844,
+  "devicePixelRatio": 3,
+  "imageScaleX": 1,
+  "imageScaleY": 1,
+  "annotationSessionId": "9f3e6d2a-0fb0-4b87-91d5-b3a0b26d4f16",
+  "validUntil": "next_navigation",
+  "hint": "Annotations are valid until the page URL changes. Take a fresh screenshot-annotated if you navigate.",
   "annotations": [
     {"index": 0, "role": "link", "name": "Home", "selector": "nav a:nth-child(1)", "rect": {"x": 20, "y": 60, "width": 50, "height": 24}},
     {"index": 1, "role": "link", "name": "About", "selector": "nav a:nth-child(2)", "rect": {"x": 80, "y": 60, "width": 50, "height": 24}},
@@ -293,6 +325,9 @@ Response:
   ]
 }
 ```
+
+Annotation rects are always reported in viewport CSS pixels, even if the image itself is returned at native scale.
+Annotations are valid only until the page URL changes. If you navigate, take a fresh `screenshot-annotated` before using annotation indices again.
 
 ### `clickAnnotation`
 Click an element by its annotation index from the last `screenshotAnnotated` call.
@@ -307,6 +342,22 @@ Response:
 {
   "success": true,
   "element": {"role": "button", "name": "Submit", "selector": "#submit"}
+}
+```
+
+`click-annotation` uses the same coordinate-bearing activation path as `click`. If the annotated target exists but its center point is hidden or covered, the endpoint fails with `ELEMENT_NOT_VISIBLE`.
+If the current page URL no longer matches the URL from the last `screenshot-annotated`, the endpoint fails with `ANNOTATION_EXPIRED` and includes the stale annotation session ID:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "ANNOTATION_EXPIRED",
+    "message": "Annotations expired because the page URL changed. Take a fresh screenshot-annotated before interacting again.",
+    "diagnostics": {
+      "annotationSessionId": "9f3e6d2a-0fb0-4b87-91d5-b3a0b26d4f16"
+    }
+  }
 }
 ```
 
@@ -327,6 +378,8 @@ Response:
   "value": "user@example.com"
 }
 ```
+
+`fill-annotation` uses the same annotation lifecycle as `click-annotation` and returns `ANNOTATION_EXPIRED` with the same diagnostics payload after URL-changing navigation.
 
 ---
 

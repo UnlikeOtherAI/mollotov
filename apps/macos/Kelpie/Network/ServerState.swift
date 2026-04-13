@@ -67,7 +67,7 @@ final class ServerState: ObservableObject {
         handlerContext.startSharedCookieSync()
 
         registerHandlers()
-        router.registerStubs()
+        router.registerFallbacks()
         let server = HTTPServer(port: resolvedPort, router: router)
         server.onBonjourStateChange = { [weak self] isAdvertising in
             Task { @MainActor in
@@ -90,37 +90,17 @@ final class ServerState: ObservableObject {
         router.handlerContext = ctx
         router.scriptPlaybackState = scriptPlaybackState
 
-        // Safari auth
         let safariAuth = SafariAuthHelper()
         safariAuth.handlerContext = ctx
-        router.register("safari-auth") { body in
-            let result: [String: Any] = await MainActor.run {
-                guard let renderer = ctx.renderer else {
-                    return errorResponse(code: "NO_WEBVIEW", message: "No WebView")
-                }
-                let urlStr = body["url"] as? String
-                guard let url = urlStr.flatMap({ URL(string: $0) }) ?? renderer.currentURL else {
-                    return errorResponse(code: "NO_URL", message: "No URL to authenticate")
-                }
-                safariAuth.authenticate(url: url)
-                return successResponse(["started": true, "url": url.absoluteString])
-            }
-            return result
-        }
-
-        // Toast
-        router.register("toast") { body in
-            guard let message = body["message"] as? String else {
-                return errorResponse(code: "MISSING_PARAM", message: "message is required")
-            }
-            await self.showShellToast(message)
-            return successResponse(["message": message])
-        }
+        registerSafariAuthHandler(context: ctx, safariAuth: safariAuth)
+        registerToastHandler()
+        registerReportIssueHandler()
 
         NavigationHandler(context: ctx).register(on: router)
         ScreenshotHandler(context: ctx).register(on: router)
         DOMHandler(context: ctx).register(on: router)
         InteractionHandler(context: ctx).register(on: router)
+        TapCalibrationHandler().register(on: router)
         ScrollHandler(context: ctx).register(on: router)
         DeviceHandler(
             context: ctx,
@@ -132,6 +112,7 @@ final class ServerState: ObservableObject {
         EvaluateHandler(context: ctx).register(on: router)
         ConsoleHandler(context: ctx).register(on: router)
         NetworkHandler(context: ctx).register(on: router)
+        WebSocketHandler(context: ctx).register(on: router)
         MutationHandler(context: ctx).register(on: router)
         ShadowDOMHandler(context: ctx).register(on: router)
         BrowserManagementHandler(context: ctx, viewportState: viewportState).register(on: router)
@@ -162,6 +143,62 @@ final class ServerState: ObservableObject {
                 await self?.switchRenderer(to: engine)
             }
         ).register(on: router)
+    }
+
+    @MainActor
+    private func registerSafariAuthHandler(context: HandlerContext, safariAuth: SafariAuthHelper) {
+        router.register("safari-auth") { body in
+            await MainActor.run {
+                guard let renderer = context.renderer else {
+                    return errorResponse(code: "NO_WEBVIEW", message: "No WebView")
+                }
+                let urlString = body["url"] as? String
+                guard let url = urlString.flatMap({ URL(string: $0) }) ?? renderer.currentURL else {
+                    return errorResponse(code: "NO_URL", message: "No URL to authenticate")
+                }
+                safariAuth.authenticate(url: url)
+                return successResponse(["started": true, "url": url.absoluteString])
+            }
+        }
+    }
+
+    @MainActor
+    private func registerToastHandler() {
+        router.register("toast") { body in
+            guard let message = body["message"] as? String else {
+                return errorResponse(code: "MISSING_PARAM", message: "message is required")
+            }
+            await self.showShellToast(message)
+            return successResponse(["message": message])
+        }
+    }
+
+    @MainActor
+    private func registerReportIssueHandler() {
+        router.register("report-issue") { [deviceInfo] body in
+            guard body["category"] is String else {
+                return errorResponse(code: "MISSING_PARAM", message: "category is required")
+            }
+            guard body["command"] is String else {
+                return errorResponse(code: "MISSING_PARAM", message: "command is required")
+            }
+            do {
+                let record = try FeedbackStore.save(
+                    payload: body,
+                    platform: "macos",
+                    deviceID: deviceInfo.id,
+                    deviceName: deviceInfo.name
+                )
+                return successResponse([
+                    "reportId": record.reportID,
+                    "storedAt": record.storedAt,
+                    "platform": "macos",
+                    "deviceId": deviceInfo.id
+                ])
+            } catch {
+                return errorResponse(code: "WEBVIEW_ERROR", message: error.localizedDescription)
+            }
+        }
     }
 
     /// Switches active renderer with cookie migration.

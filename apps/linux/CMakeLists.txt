@@ -98,6 +98,8 @@ add_executable(kelpie-linux
   src/http_server.cpp
   src/linux_app.cpp
   src/linux_app_api.cpp
+  src/tap_runtime_utils.cpp
+  src/web_runtime_utils.cpp
   src/headless_shell.cpp
   src/gui_shell.cpp
   src/gtk_browser_view.cpp
@@ -172,6 +174,14 @@ add_custom_command(TARGET kelpie-linux POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_if_different
     "${CMAKE_CURRENT_SOURCE_DIR}/../macos/Kelpie/Assets.xcassets/AppIcon.appiconset/icon-1024.png"
     "$<TARGET_FILE_DIR:kelpie-linux>/icon-1024.png"
+)
+
+add_custom_command(TARGET kelpie-linux POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E make_directory
+    "$<TARGET_FILE_DIR:kelpie-linux>/diagnostics"
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../assets/diagnostics/coordinate-calibration.html"
+    "$<TARGET_FILE_DIR:kelpie-linux>/diagnostics/coordinate-calibration.html"
 )
 
 if(KELPIE_LINUX_HAS_CEF)

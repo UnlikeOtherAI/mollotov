@@ -23,10 +23,29 @@ nlohmann::json ErrorResponse(ErrorCode code, std::string_view message) {
   return ErrorResponse(ErrorCodeToString(code), message);
 }
 
+nlohmann::json ErrorResponse(ErrorCode code,
+                             std::string_view message,
+                             const nlohmann::json& diagnostics) {
+  return ErrorResponse(ErrorCodeToString(code), message, diagnostics);
+}
+
 nlohmann::json ErrorResponse(std::string_view code, std::string_view message) {
   return {
       {"success", false},
       {"error", {{"code", code}, {"message", message}}},
+  };
+}
+
+nlohmann::json ErrorResponse(std::string_view code,
+                             std::string_view message,
+                             const nlohmann::json& diagnostics) {
+  nlohmann::json error = {{"code", code}, {"message", message}};
+  if (diagnostics.is_object() && !diagnostics.empty()) {
+    error["diagnostics"] = diagnostics;
+  }
+  return {
+      {"success", false},
+      {"error", error},
   };
 }
 

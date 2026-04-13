@@ -4,7 +4,7 @@ import { deviceCommand } from "./helpers.js";
 export function registerInteraction(program: Command): void {
   program
     .command("click <selector>")
-    .description("Click an element")
+    .description("Click an element by selector")
     .option("--click-timeout <ms>", "Wait for element timeout")
     .action(async (selector: string, opts: { clickTimeout?: string }) => {
       const body: Record<string, unknown> = { selector };
@@ -14,7 +14,7 @@ export function registerInteraction(program: Command): void {
 
   program
     .command("tap <x> <y>")
-    .description("Tap at specific coordinates")
+    .description("Tap at specific coordinates (last resort)")
     .action(async (x: string, y: string) => {
       await deviceCommand(program, "tap", { x: Number(x), y: Number(y) });
     });

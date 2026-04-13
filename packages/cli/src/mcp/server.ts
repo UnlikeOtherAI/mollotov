@@ -13,10 +13,17 @@ import { getApprovedModels, findModel } from "../ai/models.js";
 import { ModelStore } from "../ai/store.js";
 import { buildDownloadUrl, downloadModel } from "../ai/download.js";
 import { detectOllama, listOllamaModels } from "../ai/ollama.js";
+import { saveFeedbackReport, summarizeFeedbackReports } from "../feedback/store.js";
+import { enrichDevicesWithCapabilities } from "../discovery/capabilities.js";
 
 export function createMcpServer(): McpServer {
   const server = new McpServer(
-    { name: "kelpie", version: "0.1.0" },
+    {
+      name: "kelpie",
+      version: "0.1.0",
+      description:
+        "LLM-first browser automation server. When a tool fails unexpectedly, platform behavior is inconsistent, or a missing capability blocks the task, report it after checking for duplicates at https://github.com/UnlikeOtherAI/kelpie/issues with the command, parameters, platform, error, and expected behavior.",
+    },
     { capabilities: { tools: {} } },
   );
 
@@ -31,7 +38,7 @@ export function createMcpServer(): McpServer {
 }
 
 function registerBrowserTool(server: McpServer, tool: BrowserToolDef): void {
-  server.registerTool(tool.name, { description: tool.description, inputSchema: tool.schema }, async (args) => {
+  server.registerTool(tool.name, { description: describeTool(tool.description, tool.platforms), inputSchema: tool.schema }, async (args) => {
     const deviceId = args.device as string;
     const device = await getDevice(deviceId);
     if (!device) {
@@ -39,12 +46,24 @@ function registerBrowserTool(server: McpServer, tool: BrowserToolDef): void {
     }
     const body = tool.bodyFromArgs(args as Record<string, unknown>);
     const result = await sendCommand(device, tool.method, body);
+    if (tool.method === "reportIssue" && result.ok && (result.data as { success?: boolean }).success === true) {
+      const remote = result.data as {
+        reportId?: string;
+        storedAt?: string;
+      };
+      await saveFeedbackReport(body as Parameters<typeof saveFeedbackReport>[0], {
+        deviceId: device.id,
+        deviceName: device.name,
+        remoteReportId: remote.reportId,
+        remoteStoredAt: remote.storedAt,
+      });
+    }
     return { content: [{ type: "text", text: JSON.stringify(result.data) }] };
   });
 }
 
 function registerCliTool(server: McpServer, tool: CliToolDef): void {
-  server.registerTool(tool.name, { description: tool.description, inputSchema: tool.schema }, async (args) => {
+  server.registerTool(tool.name, { description: describeTool(tool.description, tool.platforms), inputSchema: tool.schema }, async (args) => {
     const params = args as Record<string, unknown>;
 
     if (tool.kind === "discovery") {
@@ -70,6 +89,12 @@ function registerCliTool(server: McpServer, tool: CliToolDef): void {
 }
 
 async function handleDiscovery(method: string, params: Record<string, unknown>): Promise<{ content: { type: "text"; text: string }[] }> {
+  if (method === "feedbackSummary") {
+    const limit = typeof params.limit === "number" ? params.limit : 10;
+    const summary = await summarizeFeedbackReports(limit);
+    return { content: [{ type: "text" as const, text: JSON.stringify(summary) }] };
+  }
+
   if (method === "aiModels") {
     const store = new ModelStore();
     const approved = getApprovedModels();
@@ -123,7 +148,7 @@ async function handleDiscovery(method: string, params: Record<string, unknown>):
 
   if (method === "discover") {
     const timeout = typeof params.timeout === "number" ? params.timeout : 3000;
-    const found = await scanForDevices(timeout);
+    const found = await enrichDevicesWithCapabilities(await scanForDevices(timeout));
     addDevices(found);
     const devices = getAllDevices();
     return { content: [{ type: "text", text: JSON.stringify({ success: true, devices, count: devices.length }) }] };
@@ -131,6 +156,16 @@ async function handleDiscovery(method: string, params: Record<string, unknown>):
   // listDevices
   const devices = getAllDevices();
   return { content: [{ type: "text", text: JSON.stringify({ success: true, devices, count: devices.length }) }] };
+}
+
+function describeTool(description: string, platforms?: readonly string[]): string {
+  if (!platforms) {
+    return description;
+  }
+  if (platforms.length === 0) {
+    return `${description} Platforms: none currently.`;
+  }
+  return `${description} Platforms: ${platforms.join(", ")}.`;
 }
 
 function getFilteredDevices(params: Record<string, unknown>): DiscoveredDevice[] {

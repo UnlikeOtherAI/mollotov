@@ -1,15 +1,18 @@
 #include "linux_app.h"
 
+#include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
+#include <random>
 #include <sstream>
 #include <utility>
 
 #include "gui_shell.h"
 #include "headless_shell.h"
 #include "linux_app_internal.h"
-
+#include "kelpie/response_helpers.h"
 #if KELPIE_LINUX_HAS_CEF
 #include "include/cef_app.h"
 #endif
@@ -30,6 +33,45 @@ std::filesystem::path HomeUrlPath(const std::string& profile_dir) {
   return std::filesystem::path(profile_dir) / "home_url.txt";
 }
 
+std::filesystem::path SessionUrlPath(const std::string& profile_dir) {
+  return std::filesystem::path(profile_dir) / "session_url.txt";
+}
+
+std::filesystem::path FeedbackDirectory(const std::string& profile_dir) {
+  return std::filesystem::path(profile_dir) / "feedback";
+}
+
+std::string CurrentIso8601Utc() {
+  const auto now = std::chrono::system_clock::now();
+  const auto seconds = std::chrono::system_clock::to_time_t(now);
+  std::tm utc_tm{};
+#if defined(_WIN32)
+  gmtime_s(&utc_tm, &seconds);
+#else
+  gmtime_r(&seconds, &utc_tm);
+#endif
+  std::ostringstream stream;
+  stream << std::put_time(&utc_tm, "%Y-%m-%dT%H:%M:%SZ");
+  return stream.str();
+}
+
+std::string GenerateUuidV4() {
+  static std::random_device device;
+  static std::mt19937 generator(device());
+  std::uniform_int_distribution<int> nibble(0, 15);
+  std::uniform_int_distribution<int> variant(8, 11);
+
+  std::ostringstream stream;
+  for (int index = 0; index < 32; ++index) {
+    if (index == 8 || index == 12 || index == 16 || index == 20) {
+      stream << '-';
+    }
+    const int value = index == 12 ? 4 : (index == 16 ? variant(generator) : nibble(generator));
+    stream << std::hex << std::nouppercase << value;
+  }
+  return stream.str();
+}
+
 std::string NormalizeHomeUrl(const std::string& url) {
   return url.empty() ? std::string(kDefaultHomeUrl) : url;
 }
@@ -48,6 +90,25 @@ std::string LoadHomeUrl(const std::string& profile_dir) {
 
 void PersistHomeUrl(const std::string& profile_dir, const std::string& url) {
   WriteTextFile(HomeUrlPath(profile_dir), NormalizeHomeUrl(url));
+}
+
+std::string LoadSessionUrl(const std::string& profile_dir) {
+  const std::string saved = ReadTextFile(SessionUrlPath(profile_dir));
+  if (saved.empty()) {
+    return std::string();
+  }
+  std::string trimmed = saved;
+  while (!trimmed.empty() && (trimmed.back() == '\n' || trimmed.back() == '\r')) {
+    trimmed.pop_back();
+  }
+  return trimmed;
+}
+
+void PersistSessionUrl(const std::string& profile_dir, const std::string& url) {
+  if (url.empty()) {
+    return;
+  }
+  WriteTextFile(SessionUrlPath(profile_dir), url);
 }
 
 std::string InitialUrl(const AppConfig& config) {
@@ -127,13 +188,15 @@ void LinuxApp::Impl::PersistStores() const {
 void LinuxApp::Impl::RecordNavigation(const std::string& url) {
   history.Record(url, renderer->CurrentTitle());
   network.AppendDocumentNavigation(url, 200, "text/html");
+  PersistSessionUrl(config.profile_dir, url);
   PersistStores();
 }
 
 LinuxApp::LinuxApp(AppConfig config, int argc, char* argv[])
     : impl_([&config, argc, argv]() {
         if (config.url.empty()) {
-          config.url = LoadHomeUrl(config.profile_dir);
+          const std::string session_url = LoadSessionUrl(config.profile_dir);
+          config.url = session_url.empty() ? LoadHomeUrl(config.profile_dir) : session_url;
         }
         return std::make_unique<Impl>(std::move(config), argc, argv);
       }()) {
@@ -398,6 +461,37 @@ std::vector<std::uint8_t> LinuxApp::SnapshotBytes() const {
 
 std::string LinuxApp::HomeUrl() const {
   return LoadHomeUrl(impl_->config.profile_dir);
+}
+
+LinuxApp::json LinuxApp::ReportIssue(const json& params) {
+  const std::string category = params.value("category", "");
+  if (category.empty()) {
+    return kelpie::ErrorResponse(kelpie::ErrorCode::kInvalidParams, "category is required");
+  }
+  const std::string command = params.value("command", "");
+  if (command.empty()) {
+    return kelpie::ErrorResponse(kelpie::ErrorCode::kInvalidParams, "command is required");
+  }
+
+  const std::string report_id = GenerateUuidV4();
+  const std::string stored_at = CurrentIso8601Utc();
+  const DeviceInfoSnapshot device = impl_->device_info.Collect();
+  json payload = params;
+  payload["reportId"] = report_id;
+  payload["storedAt"] = stored_at;
+  payload["platform"] = "linux";
+  payload["deviceId"] = device.id;
+  payload["deviceName"] = device.name;
+
+  WriteTextFile(FeedbackDirectory(impl_->config.profile_dir) /
+                    (stored_at + "-" + report_id + ".json"),
+                payload.dump(2));
+  return kelpie::SuccessResponse({
+      {"reportId", report_id},
+      {"storedAt", stored_at},
+      {"platform", "linux"},
+      {"deviceId", payload["deviceId"]},
+  });
 }
 
 void LinuxApp::SetHomeUrl(const std::string& url) {

@@ -1,4 +1,4 @@
-import type { Platform, RuntimeMode } from "@unlikeotherai/kelpie-shared";
+import type { DeviceCapabilities, Platform, RuntimeMode } from "@unlikeotherai/kelpie-shared";
 
 export interface DiscoveredDevice {
   id: string;
@@ -12,6 +12,7 @@ export interface DiscoveredDevice {
   height: number;
   version: string;
   lastSeen: number;
+  capabilities?: DeviceCapabilities;
 }
 
 export interface GlobalOptions {

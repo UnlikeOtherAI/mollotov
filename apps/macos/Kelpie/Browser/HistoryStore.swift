@@ -63,6 +63,7 @@ final class HistoryStore: ObservableObject {
     }
 
     @Published private(set) var entries: [HistoryEntry] = []
+    private(set) var clearGeneration = 0
 
     private static let maxEntries = 500
     private let key = "kelpie_history"
@@ -97,6 +98,7 @@ final class HistoryStore: ObservableObject {
     func clear() {
         guard let storeHandle else { return }
         kelpie_history_store_clear(storeHandle)
+        clearGeneration += 1
         refreshFromCore()
         persist()
     }
@@ -119,6 +121,21 @@ final class HistoryStore: ObservableObject {
         }
         refreshFromCore()
         persist()
+    }
+
+    func bestURLCompletion(for query: String) -> String? {
+        guard let storeHandle else { return nil }
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        return trimmed.withCString { queryPointer in
+            guard let pointer = kelpie_history_store_best_url_completion(storeHandle, queryPointer) else {
+                return nil
+            }
+            defer { kelpie_free_string(pointer) }
+            let result = String(cString: pointer)
+            return result.isEmpty ? nil : result
+        }
     }
 
     func toJSON() -> [[String: Any]] {

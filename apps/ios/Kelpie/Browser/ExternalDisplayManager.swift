@@ -166,6 +166,7 @@ final class ExternalDisplayManager: ObservableObject {
         let ucc = config.userContentController
         ucc.addUserScript(NetworkBridge.bridgeScript)
         ucc.add(serverState.handlerContext, name: "kelpieNetwork")
+        ucc.addUserScript(WebSocketBridge.bridgeScript)
         ucc.addUserScript(ConsoleHandler.bridgeScript)
         ucc.add(serverState.handlerContext, name: "kelpieConsole")
 

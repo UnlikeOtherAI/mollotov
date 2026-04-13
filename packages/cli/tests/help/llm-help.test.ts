@@ -6,7 +6,7 @@ describe("generateLlmHelp", () => {
     const output = generateLlmHelp();
     const parsed = JSON.parse(output);
     expect(Array.isArray(parsed)).toBe(true);
-    expect(parsed.length).toBe(143);
+    expect(parsed.length).toBe(148);
   });
 
   it("each command entry has required fields", () => {
@@ -34,8 +34,74 @@ describe("generateLlmHelp", () => {
     const output = generateLlmHelp("click");
     const parsed = JSON.parse(output);
     expect(parsed.command).toBe("click");
-    expect(parsed.errors).toContain("ELEMENT_NOT_FOUND");
+    expect(parsed.errors).toContainEqual(
+      expect.objectContaining({
+        code: "ELEMENT_NOT_FOUND",
+      }),
+    );
     expect(parsed.related).toContain("tap");
+  });
+
+  it("includes platform, defaults, enum values, and response metadata", () => {
+    const output = generateLlmHelp("screenshot");
+    const parsed = JSON.parse(output);
+    expect(parsed.platforms).toContain("ios");
+    const resolutionParam = parsed.params.find((p: { name: string }) => p.name === "resolution");
+    expect(resolutionParam?.values).toEqual(["native", "viewport"]);
+    expect(resolutionParam?.default).toBe("viewport");
+    expect(parsed.response).toContainEqual(
+      expect.objectContaining({
+        name: "devicePixelRatio",
+      }),
+    );
+  });
+
+  it("describes nested request shapes for complex commands", () => {
+    const output = generateLlmHelp("set-request-interception");
+    const parsed = JSON.parse(output);
+    const rulesParam = parsed.params.find((p: { name: string }) => p.name === "rules");
+    expect(rulesParam?.type).toBe("array");
+    expect(rulesParam?.items?.type).toBe("object");
+    expect(rulesParam?.items?.fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "pattern", type: "string" }),
+        expect.objectContaining({ name: "action", type: "enum" }),
+      ]),
+    );
+  });
+
+  it("returns help for report-issue with structured diagnostics", () => {
+    const output = generateLlmHelp("report-issue");
+    const parsed = JSON.parse(output);
+    expect(parsed.command).toBe("report-issue");
+    const diagnosticsParam = parsed.params.find((p: { name: string }) => p.name === "diagnostics");
+    expect(diagnosticsParam?.type).toBe("record");
+    expect(parsed.response).toContainEqual(
+      expect.objectContaining({
+        name: "reportId",
+      }),
+    );
+  });
+
+  it("marks tap as a last-resort command", () => {
+    const output = generateLlmHelp("tap");
+    const parsed = JSON.parse(output);
+    expect(parsed.when.toLowerCase()).toContain("last-resort");
+    expect(parsed.explanation).toContain("Prefer click");
+  });
+
+  it("presents accessibility tree as the preferred semantic starting point", () => {
+    const output = generateLlmHelp("get-accessibility-tree");
+    const parsed = JSON.parse(output);
+    expect(parsed.explanation).toContain("best first step");
+    expect(parsed.related).toContain("find-element");
+  });
+
+  it("tells models they can highlight before taking a screenshot", () => {
+    const output = generateLlmHelp("highlight show");
+    const parsed = JSON.parse(output);
+    expect(parsed.explanation).toContain("capture a screenshot");
+    expect(parsed.related).toContain("screenshot-annotated");
   });
 
   it("returns error for unknown command", () => {
@@ -68,5 +134,25 @@ describe("generateLlmHelp", () => {
     const parsed = JSON.parse(output);
     expect(parsed.command).toBe("browser launch");
     expect(parsed.params.some((p: { name: string }) => p.name === "port")).toBe(true);
+  });
+
+  it("resolves grouped CLI aliases like renderer get", () => {
+    const output = generateLlmHelp("renderer get");
+    const parsed = JSON.parse(output);
+    expect(parsed.command).toBe("renderer get");
+    expect(parsed.purpose).toContain("renderer");
+  });
+
+  it("resolves platform utility aliases like debug-overlay set", () => {
+    const output = generateLlmHelp("debug-overlay set");
+    const parsed = JSON.parse(output);
+    expect(parsed.command).toBe("debug-overlay set");
+    expect(parsed.purpose).toContain("debug overlay");
+  });
+
+  it("includes reporting guidance in the full help output", () => {
+    const parsed = JSON.parse(generateLlmHelp());
+    expect(parsed[0].command).toBe("reporting");
+    expect(parsed[0].explanation).toContain("github.com/UnlikeOtherAI/kelpie/issues");
   });
 });

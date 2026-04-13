@@ -16,6 +16,9 @@ struct ScreenshotHandler {
 
         let fullPage = body["fullPage"] as? Bool ?? false
         let format = body["format"] as? String ?? "png"
+        guard let resolution = ScreenshotResolution.parse(body["resolution"]) else {
+            return errorResponse(code: "INVALID_PARAMS", message: "resolution must be 'native' or 'viewport'")
+        }
 
         let config = WKSnapshotConfiguration()
         if !fullPage {
@@ -24,22 +27,15 @@ struct ScreenshotHandler {
 
         do {
             let image = try await webView.takeSnapshot(configuration: config)
-            let data: Data?
-            if format == "jpeg" {
-                let quality = (body["quality"] as? Double ?? 80) / 100.0
-                data = image.jpegData(compressionQuality: quality)
-            } else {
-                data = image.pngData()
-            }
-            guard let imageData = data else {
-                return errorResponse(code: "SCREENSHOT_FAILED", message: "Failed to encode image")
-            }
-            return successResponse([
-                "image": imageData.base64EncodedString(),
-                "width": Int(image.size.width * image.scale),
-                "height": Int(image.size.height * image.scale),
-                "format": format
-            ])
+            let quality = ((body["quality"] as? NSNumber)?.doubleValue ?? 80) / 100.0
+            return successResponse(
+                try await context.screenshotPayload(
+                    from: image,
+                    format: format,
+                    quality: quality,
+                    resolution: resolution
+                )
+            )
         } catch {
             return errorResponse(code: "SCREENSHOT_FAILED", message: error.localizedDescription)
         }

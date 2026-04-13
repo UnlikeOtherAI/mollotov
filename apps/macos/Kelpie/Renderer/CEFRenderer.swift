@@ -146,33 +146,13 @@ final class CEFRenderer: RendererEngine {
         let urlToLoad = pendingURL
         pendingURL = nil
 
-        if hasCookieWork, let urlToLoad {
-            // CEF's C API set_cookie consistently returns 0 in external message
-            // loop mode — the cookie store is never accessible via the C API.
-            // Workaround: load the URL first, then inject cookies via JS after
-            // the page loads and reload so they take effect for all requests.
-            NSLog(
-                "[CEFRenderer] will inject %d cookies via JS after load, url=%@",
-                pendingCookies.count,
-                urlToLoad.absoluteString
-            )
-            let cookiesToInject = pendingCookies
-            pendingCookies.removeAll()
-            pendingDeleteAllCookies = false
-            bridge.loadURL(urlToLoad.absoluteString)
-            Task { @MainActor [weak self] in
-                guard let self, let bridge = self.bridge else { return }
-                // Wait for the page to finish loading
-                for _ in 0..<200 { // up to ~10s
-                    try? await Task.sleep(nanoseconds: 50_000_000) // 50ms
-                    if !bridge.isLoading() { break }
-                }
-                self.injectCookiesViaJS(cookiesToInject)
+        if hasCookieWork {
+            if let urlToLoad {
+                pendingNavigation = urlToLoad
             }
-        } else if hasCookieWork {
-            // Cookie work but no URL — just clear pending state
-            pendingCookies.removeAll()
-            pendingDeleteAllCookies = false
+            Task { @MainActor [weak self] in
+                await self?.flushDeferredStateIfPossible()
+            }
         } else if let urlToLoad {
             bridge.loadURL(urlToLoad.absoluteString)
         }
@@ -282,6 +262,14 @@ final class CEFRenderer: RendererEngine {
 
     func allCookies() async -> [HTTPCookie] {
         guard let bridge else { return [] }
+        if let cookies = await withCheckedContinuation({ (continuation: CheckedContinuation<[HTTPCookie]?, Never>) in
+            bridge.getAllCookiesViaCDP { success, cookieDicts in
+                continuation.resume(returning: success ? Self.cookies(from: cookieDicts) : nil)
+            }
+        }) {
+            return cookies
+        }
+
         return await withCheckedContinuation { continuation in
             let state = CookieContinuationState()
 
@@ -291,31 +279,7 @@ final class CEFRenderer: RendererEngine {
                 }
                 state.didResume = true
 
-                let cookies = cookieDicts.compactMap { dict -> HTTPCookie? in
-                    guard let dict = dict as? [String: Any],
-                          let name = dict["name"] as? String,
-                          let value = dict["value"] as? String,
-                          let domain = dict["domain"] as? String,
-                          let path = dict["path"] as? String else { return nil }
-
-                    var props: [HTTPCookiePropertyKey: Any] = [
-                        .name: name,
-                        .value: value,
-                        .domain: domain,
-                        .path: path
-                    ]
-                    if let httpOnly = dict["httpOnly"] as? Bool, httpOnly {
-                        props[.init("HttpOnly")] = "TRUE"
-                    }
-                    if let secure = dict["secure"] as? Bool, secure {
-                        props[.secure] = "TRUE"
-                    }
-                    if let expires = dict["expires"] as? Date {
-                        props[.expires] = expires
-                    }
-                    return HTTPCookie(properties: props)
-                }
-                continuation.resume(returning: cookies)
+                continuation.resume(returning: Self.cookies(from: cookieDicts))
             }
         }
     }
@@ -328,11 +292,6 @@ final class CEFRenderer: RendererEngine {
             pendingCookies.append(contentsOf: cookies)
             return
         }
-        // CEF's C API set_cookie doesn't work in external message loop mode.
-        // Inject non-httpOnly cookies via JS if we have a loaded page on a
-        // matching domain. httpOnly cookies are skipped (JS can't set them).
-        // Skip injection while hidden: executing JS while CEF's view is hidden
-        // triggers a compositor repaint that crashes CEF's rendering pipeline.
         guard !containerView.isHidden else {
             if pendingDeleteAllCookies {
                 pendingCookies.removeAll()
@@ -340,34 +299,20 @@ final class CEFRenderer: RendererEngine {
             pendingCookies.append(contentsOf: cookies)
             return
         }
-        guard let host = currentURL?.host else { return }
-        var js = ""
-        for cookie in cookies {
-            if cookie.isHTTPOnly { continue }
-            let domain = cookie.domain.trimmingCharacters(in: CharacterSet(charactersIn: "."))
-            guard host == domain || host.hasSuffix(".\(domain)") else { continue }
-            let cookieName = JSEscape.string(cookie.name)
-            let cookieValue = JSEscape.string(cookie.value)
-            var parts = "\(cookieName)=\(cookieValue)"
-            if !cookie.path.isEmpty { parts += "; path=\(cookie.path)" }
-            if !cookie.domain.isEmpty { parts += "; domain=\(cookie.domain)" }
-            if cookie.isSecure { parts += "; secure" }
-            if let expires = cookie.expiresDate {
-                let formatter = DateFormatter()
-                formatter.locale = Locale(identifier: "en_US_POSIX")
-                formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
-                formatter.timeZone = TimeZone(identifier: "GMT")
-                parts += "; expires=\(formatter.string(from: expires))"
-            }
-            js += "document.cookie='\(parts)';\n"
-        }
-        guard !js.isEmpty else { return }
-        _ = try? await evaluateJS(js)
+        await applyCookiesViaCDP(cookies, primeURLForJSFallback: currentURL, reloadAfterJSErrorFallback: false)
     }
 
     func deleteCookie(_ cookie: HTTPCookie) async {
-        let js = "document.cookie = '\(cookie.name)=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=\(cookie.path); domain=\(cookie.domain)';"
-        _ = try? await evaluateJS(js)
+        guard let bridge else { return }
+        let deleted = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+            bridge.deleteCookie(viaCDP: cookie.name, domain: cookie.domain, path: cookie.path) { success in
+                continuation.resume(returning: success)
+            }
+        }
+        if deleted {
+            return
+        }
+        await expireCookiesViaJS([cookie])
     }
 
     func deleteAllCookies() async {
@@ -381,11 +326,15 @@ final class CEFRenderer: RendererEngine {
             pendingCookies.removeAll()
             return
         }
-        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-            bridge.deleteAllCookies { _ in
-                cont.resume()
+        let deletedViaCDP = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+            bridge.deleteAllCookiesViaCDP { success, _ in
+                continuation.resume(returning: success)
             }
         }
+        if deletedViaCDP {
+            return
+        }
+        await expireCookiesViaJS(await allCookies())
     }
 
     func takeSnapshot() async throws -> NSImage {
@@ -403,23 +352,111 @@ final class CEFRenderer: RendererEngine {
         return image
     }
 
-    private func injectCookiesViaJS(_ cookies: [HTTPCookie]) {
+    private func injectCookiesViaJS(_ cookies: [HTTPCookie], reloadAfterInjection: Bool) {
         guard let bridge, let host = currentURL?.host else { return }
         let matching = cookies.filter { cookie in
             let domain = cookie.domain.trimmingCharacters(in: CharacterSet(charactersIn: "."))
             return host == domain || host.hasSuffix(".\(domain)")
         }
-        guard !matching.isEmpty else { return }
+        let js = cookieInjectionScript(for: matching)
+        guard !js.isEmpty else { return }
         NSLog("[CEFRenderer] injecting %d cookies via JS for host=%@", matching.count, host)
+        bridge.evaluateJavaScript(js) { [weak self] _, error in
+            if let error {
+                NSLog("[CEFRenderer] JS cookie injection error: %@", error.localizedDescription)
+            } else if reloadAfterInjection {
+                NSLog("[CEFRenderer] JS cookies injected, reloading")
+                Task { @MainActor [weak self] in
+                    self?.bridge?.reload()
+                }
+            }
+        }
+    }
+
+    nonisolated private static func cookies(from cookieDicts: [Any]) -> [HTTPCookie] {
+        cookieDicts.compactMap { item -> HTTPCookie? in
+            guard let dict = item as? [String: Any] else { return nil }
+            guard let name = dict["name"] as? String,
+                  let value = dict["value"] as? String,
+                  let domain = dict["domain"] as? String,
+                  let path = dict["path"] as? String else { return nil }
+
+            var props: [HTTPCookiePropertyKey: Any] = [
+                .name: name,
+                .value: value,
+                .domain: domain,
+                .path: path
+            ]
+            if let httpOnly = dict["httpOnly"] as? Bool, httpOnly {
+                props[.init("HttpOnly")] = "TRUE"
+            }
+            if let secure = dict["secure"] as? Bool, secure {
+                props[.secure] = "TRUE"
+            }
+            if let expires = dict["expires"] as? Date {
+                props[.expires] = expires
+            } else if let expires = dict["expires"] as? NSNumber, expires.doubleValue > 0 {
+                props[.expires] = Date(timeIntervalSince1970: expires.doubleValue)
+            }
+            if let sameSite = dict["sameSite"] as? String, !sameSite.isEmpty {
+                props[HTTPCookiePropertyKey("SameSite")] = sameSite
+            }
+            return HTTPCookie(properties: props)
+        }
+    }
+
+    private func applyCookiesViaCDP(_ cookies: [HTTPCookie],
+                                    primeURLForJSFallback: URL?,
+                                    reloadAfterJSErrorFallback: Bool) async {
+        guard let bridge else { return }
+        var failedCookies: [HTTPCookie] = []
+
+        for cookie in cookies {
+            let set = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+                bridge.setCookieViaCDP(
+                    cookie.name,
+                    value: cookie.value,
+                    domain: cookie.domain,
+                    path: cookie.path,
+                    httpOnly: cookie.isHTTPOnly,
+                    secure: cookie.isSecure,
+                    sameSite: cookie.sameSitePolicy?.rawValue,
+                    expires: cookie.expiresDate
+                ) { success in
+                    continuation.resume(returning: success)
+                }
+            }
+
+            if !set {
+                failedCookies.append(cookie)
+            }
+        }
+
+        guard !failedCookies.isEmpty else { return }
+
+        if reloadAfterJSErrorFallback, let urlToPrime = primeURLForJSFallback {
+            bridge.loadURL(urlToPrime.absoluteString)
+            for _ in 0..<200 {
+                try? await Task.sleep(nanoseconds: 50_000_000)
+                if !bridge.isLoading() { break }
+            }
+        }
+
+        injectCookiesViaJS(failedCookies, reloadAfterInjection: reloadAfterJSErrorFallback)
+    }
+
+    private func cookieInjectionScript(for cookies: [HTTPCookie]) -> String {
         var js = ""
-        for cookie in matching {
-            if cookie.isHTTPOnly { continue }
+        for cookie in cookies where !cookie.isHTTPOnly {
             let cookieName = JSEscape.string(cookie.name)
             let cookieValue = JSEscape.string(cookie.value)
             var parts = "\(cookieName)=\(cookieValue)"
             if !cookie.path.isEmpty { parts += "; path=\(cookie.path)" }
             if !cookie.domain.isEmpty { parts += "; domain=\(cookie.domain)" }
             if cookie.isSecure { parts += "; secure" }
+            if let sameSite = cookie.sameSitePolicy?.rawValue, !sameSite.isEmpty {
+                parts += "; SameSite=\(sameSite)"
+            }
             if let expires = cookie.expiresDate {
                 let formatter = DateFormatter()
                 formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -429,17 +466,27 @@ final class CEFRenderer: RendererEngine {
             }
             js += "document.cookie='\(parts)';\n"
         }
-        guard !js.isEmpty else { return }
-        bridge.evaluateJavaScript(js) { [weak self] _, error in
-            if let error {
-                NSLog("[CEFRenderer] JS cookie injection error: %@", error.localizedDescription)
-            } else {
-                NSLog("[CEFRenderer] JS cookies injected, reloading")
-                Task { @MainActor [weak self] in
-                    self?.bridge?.reload()
-                }
+        return js
+    }
+
+    private func expireCookiesViaJS(_ cookies: [HTTPCookie]) async {
+        let expiredCookies = cookies.map { cookie in
+            var properties: [HTTPCookiePropertyKey: Any] = [
+                .name: cookie.name,
+                .value: "",
+                .domain: cookie.domain,
+                .path: cookie.path,
+                .expires: Date(timeIntervalSince1970: 0)
+            ]
+            if cookie.isSecure {
+                properties[.secure] = "TRUE"
             }
+            if let sameSite = cookie.sameSitePolicy?.rawValue, !sameSite.isEmpty {
+                properties[HTTPCookiePropertyKey("SameSite")] = sameSite
+            }
+            return HTTPCookie(properties: properties)
         }
+        injectCookiesViaJS(expiredCookies.compactMap { $0 }, reloadAfterInjection: false)
     }
 
     private func scheduleSurfaceRefresh() {
@@ -464,10 +511,13 @@ final class CEFRenderer: RendererEngine {
 
         if pendingDeleteAllCookies {
             pendingDeleteAllCookies = false
-            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-                bridge.deleteAllCookies { _ in
-                    cont.resume()
+            let deleted = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+                bridge.deleteAllCookiesViaCDP { success, _ in
+                    continuation.resume(returning: success)
                 }
+            }
+            if !deleted {
+                await expireCookiesViaJS(await allCookies())
             }
         }
 
@@ -481,21 +531,17 @@ final class CEFRenderer: RendererEngine {
             return
         }
 
-        let cookiesToInject = pendingCookies
+        let cookiesToApply = pendingCookies
         pendingCookies.removeAll()
-        let urlToPrime = deferredNavigation ?? currentURL
-        guard let urlToPrime else {
-            pendingCookies = cookiesToInject
-            return
-        }
+        await applyCookiesViaCDP(
+            cookiesToApply,
+            primeURLForJSFallback: deferredNavigation ?? currentURL,
+            reloadAfterJSErrorFallback: true
+        )
 
-        bridge.loadURL(urlToPrime.absoluteString)
-
-        for _ in 0..<200 {
-            try? await Task.sleep(nanoseconds: 50_000_000)
-            if !bridge.isLoading() { break }
+        if let deferredNavigation {
+            bridge.loadURL(deferredNavigation.absoluteString)
         }
-        injectCookiesViaJS(cookiesToInject)
     }
 
     private func recordCompletedDocumentNavigation() {

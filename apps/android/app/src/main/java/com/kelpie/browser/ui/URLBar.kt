@@ -5,23 +5,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -37,7 +29,6 @@ fun URLBar(
     onSnapshot3D: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var urlText by remember(currentUrl) { mutableStateOf(currentUrl) }
     val navigationButtonSize = 44.dp
 
     Row(
@@ -54,23 +45,11 @@ fun URLBar(
             Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Forward")
         }
 
-        OutlinedTextField(
-            value = urlText,
-            onValueChange = { urlText = it },
-            singleLine = true,
-            placeholder = { Text("Enter URL") },
+        HistoryAutocompleteField(
+            currentUrl = currentUrl,
+            placeholder = "Enter URL",
+            onNavigate = onNavigate,
             shape = CircleShape,
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
-            keyboardActions =
-                KeyboardActions(onGo = {
-                    val url =
-                        if (urlText.startsWith("http://") || urlText.startsWith("https://")) {
-                            urlText
-                        } else {
-                            "https://$urlText"
-                        }
-                    onNavigate(url)
-                }),
             modifier =
                 Modifier
                     .weight(1f)

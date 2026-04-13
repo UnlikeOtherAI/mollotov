@@ -1,6 +1,14 @@
 import { z } from "zod";
 
 const platforms = ["ios", "android", "macos", "linux", "windows"] as const;
+type ToolPlatform = (typeof platforms)[number];
+const allPlatforms = [...platforms] as readonly ToolPlatform[];
+const applePlatforms = ["ios", "macos"] as const;
+const mobilePlatforms = ["ios", "android"] as const;
+const viewportPresetPlatforms = ["ios", "android", "macos"] as const;
+const fullscreenPlatforms = ["macos", "linux"] as const;
+const iosOnlyPlatforms = ["ios"] as const;
+const unavailablePlatforms = [] as const;
 
 // --- Shared schema fragments ---
 
@@ -9,6 +17,7 @@ const selector = z.string().describe("CSS selector");
 const url = z.string().describe("URL");
 const timeout = z.number().optional().describe("Timeout in milliseconds");
 const message = z.string().optional().describe("Optional message to show on device screen as a toast overlay while this action runs. Use this to narrate what you are doing, e.g. 'Clicking the login button' or 'Scrolling to pricing section'. The toast appears at the bottom of the viewport with a semi-transparent background.");
+const screenshotResolution = z.enum(["native", "viewport"]).optional().describe("Screenshot resolution: 'viewport' returns CSS-pixel/non-retina output that lines up with tap coordinates more directly; 'native' preserves full renderer detail.");
 const point = z.object({
   x: z.number().describe("Viewport X coordinate"),
   y: z.number().describe("Viewport Y coordinate"),
@@ -26,6 +35,7 @@ export interface BrowserToolDef {
   name: string;
   description: string;
   method: string;
+  platforms?: readonly ToolPlatform[];
   schema: Record<string, z.ZodType>;
   bodyFromArgs: (args: Record<string, unknown>) => Record<string, unknown>;
 }
@@ -35,6 +45,7 @@ export interface CliToolDef {
   description: string;
   method: string;
   kind: "group" | "smartQuery" | "discovery";
+  platforms?: readonly ToolPlatform[];
   schema: Record<string, z.ZodType>;
   bodyFromArgs: (args: Record<string, unknown>) => Record<string, unknown>;
 }
@@ -42,6 +53,13 @@ export interface CliToolDef {
 function passthrough(args: Record<string, unknown>): Record<string, unknown> {
   const { device: _d, ...rest } = args;
   return rest;
+}
+
+function screenshotBody(defaultResolution: "native" | "viewport") {
+  return (args: Record<string, unknown>): Record<string, unknown> => {
+    const { device: _d, resolution, ...rest } = args;
+    return { ...rest, resolution: resolution ?? defaultResolution };
+  };
 }
 
 function filterBody(args: Record<string, unknown>): Record<string, unknown> {
@@ -62,12 +80,12 @@ export const browserTools: BrowserToolDef[] = [
   { name: "kelpie_get_home", description: "Get the device home page URL", method: "getHome", schema: { device }, bodyFromArgs: passthrough },
 
   // Debug
-  { name: "kelpie_debug_screens", description: "Get screen/scene/external display diagnostics. Shows UIScreen count, connected scenes, and external display manager state.", method: "debugScreens", schema: { device }, bodyFromArgs: passthrough },
-  { name: "kelpie_set_debug_overlay", description: "Enable or disable the on-screen debug overlay showing screen/scene/connection info", method: "setDebugOverlay", schema: { device, enabled: z.boolean().describe("Enable or disable the debug overlay") }, bodyFromArgs: passthrough },
-  { name: "kelpie_get_debug_overlay", description: "Get current debug overlay state", method: "getDebugOverlay", schema: { device }, bodyFromArgs: passthrough },
+  { name: "kelpie_debug_screens", description: "Get screen/scene/external display diagnostics. Shows UIScreen count, connected scenes, and external display manager state.", method: "debugScreens", platforms: iosOnlyPlatforms, schema: { device }, bodyFromArgs: passthrough },
+  { name: "kelpie_set_debug_overlay", description: "Enable or disable the on-screen debug overlay showing screen/scene/connection info", method: "setDebugOverlay", platforms: iosOnlyPlatforms, schema: { device, enabled: z.boolean().describe("Enable or disable the debug overlay") }, bodyFromArgs: passthrough },
+  { name: "kelpie_get_debug_overlay", description: "Get current debug overlay state", method: "getDebugOverlay", platforms: iosOnlyPlatforms, schema: { device }, bodyFromArgs: passthrough },
 
   // Screenshots
-  { name: "kelpie_screenshot", description: "Take a screenshot of the device browser", method: "screenshot", schema: { device, fullPage: z.boolean().optional().describe("Capture full page"), format: z.enum(["png", "jpeg"]).optional().describe("Image format"), quality: z.number().optional().describe("JPEG quality 0-100") }, bodyFromArgs: passthrough },
+  { name: "kelpie_screenshot", description: "Take a screenshot of the device browser. For LLM use, this defaults to viewport/CSS-pixel resolution so coordinates line up with tap more directly and the image uses less context. Request resolution='native' only when you need full renderer detail.", method: "screenshot", schema: { device, fullPage: z.boolean().optional().describe("Capture full page"), format: z.enum(["png", "jpeg"]).optional().describe("Image format"), quality: z.number().optional().describe("JPEG quality 0-100"), resolution: screenshotResolution }, bodyFromArgs: screenshotBody("viewport") },
 
   // DOM
   { name: "kelpie_get_dom", description: "Get the DOM tree as HTML", method: "getDOM", schema: { device, selector: selector.optional().describe("Root selector"), depth: z.number().optional().describe("Max depth") }, bodyFromArgs: passthrough },
@@ -77,8 +95,8 @@ export const browserTools: BrowserToolDef[] = [
   { name: "kelpie_get_attributes", description: "Get all attributes of an element", method: "getAttributes", schema: { device, selector }, bodyFromArgs: passthrough },
 
   // Interaction
-  { name: "kelpie_click", description: "Click an element. Shows a blue touch indicator at the element location.", method: "click", schema: { device, selector, timeout, message }, bodyFromArgs: passthrough },
-  { name: "kelpie_tap", description: "Tap at specific coordinates. Shows a blue touch indicator at the tap point.", method: "tap", schema: { device, x: z.number().describe("X coordinate"), y: z.number().describe("Y coordinate"), message }, bodyFromArgs: passthrough },
+  { name: "kelpie_click", description: "Click an element by CSS selector. Prefer this over coordinate taps whenever you can identify the target semantically or via find-element/get-accessibility-tree. The selectors returned by semantic and annotation tools are meant to be fed back here directly. Shows a blue touch indicator at the element location.", method: "click", schema: { device, selector, timeout, message }, bodyFromArgs: passthrough },
+  { name: "kelpie_tap", description: "Tap at specific viewport coordinates as a last resort. Prefer click, fill, or click-annotation first. Saved tap calibration offsets are applied automatically before dispatch. Shows a blue touch indicator at the applied tap point.", method: "tap", schema: { device, x: z.number().describe("X coordinate"), y: z.number().describe("Y coordinate"), message }, bodyFromArgs: passthrough },
   { name: "kelpie_fill", description: "Fill a form field with a value. Shows a touch indicator at the field.", method: "fill", schema: { device, selector, value: z.string().describe("Value to fill"), mode: z.enum(["instant", "typing"]).optional().describe("Fill mode: instant (default) sets value immediately, typing types character by character"), delay: z.number().optional().describe("Delay between keystrokes in ms when mode is typing (default 50)"), timeout, message }, bodyFromArgs: passthrough },
   { name: "kelpie_type", description: "Type text character by character", method: "type", schema: { device, selector: selector.optional(), text: z.string().describe("Text to type"), delay: z.number().optional().describe("Delay between keystrokes in ms") }, bodyFromArgs: passthrough },
   { name: "kelpie_select_option", description: "Select an option from a dropdown", method: "selectOption", schema: { device, selector, value: z.string().describe("Option value to select") }, bodyFromArgs: passthrough },
@@ -87,7 +105,7 @@ export const browserTools: BrowserToolDef[] = [
   { name: "kelpie_swipe", description: "Swipe between two viewport coordinates with a visible trail overlay", method: "swipe", schema: { device, from: point.describe("Swipe start point"), to: point.describe("Swipe end point"), durationMs: z.number().optional().describe("Swipe duration in milliseconds"), steps: z.number().optional().describe("Interpolation steps for the swipe"), color: z.string().optional().describe("Swipe overlay color, e.g. #3B82F6") }, bodyFromArgs: passthrough },
   { name: "kelpie_show_commentary", description: "Show a commentary text pill overlay inside the page viewport", method: "showCommentary", schema: { device, text: z.string().describe("Commentary text to display"), durationMs: z.number().optional().describe("How long to show the commentary. Use 0 to keep it visible until hidden."), position: z.enum(["top", "center", "bottom"]).optional().describe("Commentary position") }, bodyFromArgs: passthrough },
   { name: "kelpie_hide_commentary", description: "Hide the active commentary overlay", method: "hideCommentary", schema: { device }, bodyFromArgs: passthrough },
-  { name: "kelpie_highlight", description: "Draw a colored highlight ring around an element", method: "highlight", schema: { device, selector, color: z.string().optional().describe("Highlight color, e.g. #EF4444"), thickness: z.number().optional().describe("Highlight stroke width in pixels"), padding: z.number().optional().describe("Padding around the highlighted element in pixels"), animation: z.enum(["appear", "draw"]).optional().describe("Highlight animation style"), durationMs: z.number().optional().describe("How long to keep the highlight visible. Use 0 to keep it until hidden.") }, bodyFromArgs: passthrough },
+  { name: "kelpie_highlight", description: "Draw a colored highlight ring/box around an element. Use this when you already know the selector and want to visually anchor that element in a screenshot before asking an LLM to reason over the image. Set durationMs=0 to keep it visible until hidden.", method: "highlight", schema: { device, selector, color: z.string().optional().describe("Highlight color, e.g. #EF4444"), thickness: z.number().optional().describe("Highlight stroke width in pixels"), padding: z.number().optional().describe("Padding around the highlighted element in pixels"), animation: z.enum(["appear", "draw"]).optional().describe("Highlight animation style"), durationMs: z.number().optional().describe("How long to keep the highlight visible. Use 0 to keep it until hidden.") }, bodyFromArgs: passthrough },
   { name: "kelpie_hide_highlight", description: "Hide the active highlight overlay", method: "hideHighlight", schema: { device }, bodyFromArgs: passthrough },
   { name: "kelpie_play_script", description: "Run a timed recording script made of navigation, interaction, overlay, and wait actions", method: "playScript", schema: { device, actions: z.array(z.record(z.string(), z.any())).describe("Ordered list of script action objects"), overlayColor: z.string().optional().describe("Default overlay color for taps, typing, and swipes"), defaultWaitBetweenActions: z.number().optional().describe("Implicit wait inserted between actions in milliseconds"), continueOnError: z.boolean().optional().describe("Continue script playback after non-fatal action failures") }, bodyFromArgs: passthrough },
   { name: "kelpie_abort_script", description: "Abort the currently running recording script", method: "abortScript", schema: { device }, bodyFromArgs: passthrough },
@@ -102,19 +120,20 @@ export const browserTools: BrowserToolDef[] = [
 
   // Viewport & Device
   { name: "kelpie_get_viewport", description: "Get viewport dimensions and device pixel ratio", method: "getViewport", schema: { device }, bodyFromArgs: passthrough },
-  { name: "kelpie_get_viewport_presets", description: "List named viewport presets available for the current device or window geometry. Linux does not support viewport presets yet.", method: "getViewportPresets", schema: { device }, bodyFromArgs: passthrough },
+  { name: "kelpie_get_viewport_presets", description: "List named viewport presets available for the current device or window geometry. Linux does not support viewport presets yet.", method: "getViewportPresets", platforms: viewportPresetPlatforms, schema: { device }, bodyFromArgs: passthrough },
   { name: "kelpie_get_device_info", description: "Get full device information", method: "getDeviceInfo", schema: { device }, bodyFromArgs: passthrough },
   { name: "kelpie_get_capabilities", description: "Get device capabilities", method: "getCapabilities", schema: { device }, bodyFromArgs: passthrough },
+  { name: "kelpie_report_issue", description: "Report an automation failure with structured context so it can be aggregated locally and improved later.", method: "reportIssue", platforms: allPlatforms, schema: { device, category: z.string().describe("Failure category"), command: z.string().describe("Command that failed"), error: z.string().optional().describe("Error code"), context: z.string().optional().describe("What happened and why it mattered"), url: url.optional().describe("Page URL where the failure happened"), params: z.record(z.string(), z.unknown()).optional().describe("Original command params as a JSON object"), diagnostics: z.record(z.string(), z.unknown()).optional().describe("Structured diagnostics from the failure response"), screenshotBase64: z.string().optional().describe("Optional screenshot payload") }, bodyFromArgs: passthrough },
 
   // Wait
   { name: "kelpie_wait_for_element", description: "Wait for an element to appear or reach a state", method: "waitForElement", schema: { device, selector, timeout, state: z.enum(["attached", "visible", "hidden"]).optional().describe("Target state") }, bodyFromArgs: passthrough },
   { name: "kelpie_wait_for_navigation", description: "Wait for a navigation to complete", method: "waitForNavigation", schema: { device, timeout }, bodyFromArgs: passthrough },
 
   // Smart queries
-  { name: "kelpie_find_element", description: "Find an element by text content or role", method: "findElement", schema: { device, text: z.string().describe("Text to search for"), role: z.string().optional().describe("ARIA role filter"), selector: selector.optional() }, bodyFromArgs: passthrough },
-  { name: "kelpie_find_button", description: "Find a button by its text", method: "findButton", schema: { device, text: z.string().describe("Button text") }, bodyFromArgs: passthrough },
-  { name: "kelpie_find_link", description: "Find a link by its text", method: "findLink", schema: { device, text: z.string().describe("Link text") }, bodyFromArgs: passthrough },
-  { name: "kelpie_find_input", description: "Find an input field by label, placeholder, or name", method: "findInput", schema: { device, label: z.string().optional().describe("Input label"), placeholder: z.string().optional().describe("Input placeholder"), name: z.string().optional().describe("Input name attribute") }, bodyFromArgs: passthrough },
+  { name: "kelpie_find_element", description: "Find an element by text content or role and return a stable selector you can use with click or fill. Prefer this before screenshot-driven tapping.", method: "findElement", schema: { device, text: z.string().describe("Text to search for"), role: z.string().optional().describe("ARIA role filter"), selector: selector.optional() }, bodyFromArgs: passthrough },
+  { name: "kelpie_find_button", description: "Find a button by its text and return a stable selector for follow-up click or highlight", method: "findButton", schema: { device, text: z.string().describe("Button text") }, bodyFromArgs: passthrough },
+  { name: "kelpie_find_link", description: "Find a link by its text and return a stable selector for follow-up click or highlight", method: "findLink", schema: { device, text: z.string().describe("Link text") }, bodyFromArgs: passthrough },
+  { name: "kelpie_find_input", description: "Find an input field by label, placeholder, or name and return a stable selector for follow-up fill, click, or highlight", method: "findInput", schema: { device, label: z.string().optional().describe("Input label"), placeholder: z.string().optional().describe("Input placeholder"), name: z.string().optional().describe("Input name attribute") }, bodyFromArgs: passthrough },
 
   // Evaluate
   { name: "kelpie_evaluate", description: "Evaluate JavaScript in the page context", method: "evaluate", schema: { device, expression: z.string().describe("JavaScript expression to evaluate"), message }, bodyFromArgs: passthrough },
@@ -129,15 +148,17 @@ export const browserTools: BrowserToolDef[] = [
   // Network
   { name: "kelpie_get_network_log", description: "Get network request log", method: "getNetworkLog", schema: { device, type: z.string().optional().describe("Filter by resource type"), status: z.enum(["success", "error", "pending"]).optional(), since: z.string().optional(), limit: z.number().optional() }, bodyFromArgs: passthrough },
   { name: "kelpie_get_resource_timeline", description: "Get resource loading timeline", method: "getResourceTimeline", schema: { device }, bodyFromArgs: passthrough },
+  { name: "kelpie_get_websockets", description: "List active WebSocket connections", method: "getWebSockets", schema: { device }, bodyFromArgs: passthrough },
+  { name: "kelpie_get_websocket_messages", description: "Get recent WebSocket messages", method: "getWebSocketMessages", schema: { device, connectionIndex: z.number().optional().describe("Active connection index from getWebSockets"), limit: z.number().optional().describe("Max messages") }, bodyFromArgs: passthrough },
   { name: "kelpie_clear_console", description: "Clear console messages", method: "clearConsole", schema: { device }, bodyFromArgs: passthrough },
 
   // Accessibility
-  { name: "kelpie_get_accessibility_tree", description: "Get the accessibility tree for the page", method: "getAccessibilityTree", schema: { device, root: z.string().optional().describe("Root selector"), interactableOnly: z.boolean().optional(), maxDepth: z.number().optional() }, bodyFromArgs: passthrough },
+  { name: "kelpie_get_accessibility_tree", description: "Get the semantic accessibility tree for the page. This is usually the best first step for LLMs before clicking or filling.", method: "getAccessibilityTree", schema: { device, root: z.string().optional().describe("Root selector"), interactableOnly: z.boolean().optional(), maxDepth: z.number().optional() }, bodyFromArgs: passthrough },
 
   // Annotated screenshots
-  { name: "kelpie_screenshot_annotated", description: "Take a screenshot with numbered element annotations", method: "screenshotAnnotated", schema: { device, fullPage: z.boolean().optional(), format: z.enum(["png", "jpeg"]).optional(), interactableOnly: z.boolean().optional(), labelStyle: z.enum(["numbered", "badge"]).optional() }, bodyFromArgs: passthrough },
-  { name: "kelpie_click_annotation", description: "Click an annotated element by index", method: "clickAnnotation", schema: { device, index: z.number().describe("Annotation index") }, bodyFromArgs: passthrough },
-  { name: "kelpie_fill_annotation", description: "Fill an annotated element by index", method: "fillAnnotation", schema: { device, index: z.number().describe("Annotation index"), value: z.string().describe("Value to fill") }, bodyFromArgs: passthrough },
+  { name: "kelpie_screenshot_annotated", description: "Take a screenshot with numbered element annotations as a visual fallback. This defaults to viewport/CSS-pixel resolution for lower token cost and simpler coordinate mapping. If you already know the selector but want visual confirmation in the image, highlight it first and then capture a screenshot. Prefer semantic tools first, then use click-annotation or fill-annotation instead of raw taps.", method: "screenshotAnnotated", schema: { device, fullPage: z.boolean().optional(), format: z.enum(["png", "jpeg"]).optional(), interactableOnly: z.boolean().optional(), labelStyle: z.enum(["numbered", "badge"]).optional(), resolution: screenshotResolution }, bodyFromArgs: screenshotBody("viewport") },
+  { name: "kelpie_click_annotation", description: "Click an annotated element by index from the most recent annotated screenshot. Prefer this over raw coordinate taps when you need visual grounding.", method: "clickAnnotation", schema: { device, index: z.number().describe("Annotation index") }, bodyFromArgs: passthrough },
+  { name: "kelpie_fill_annotation", description: "Fill an annotated input by index from the most recent annotated screenshot. Prefer this over raw coordinate taps when working from a visual fallback.", method: "fillAnnotation", schema: { device, index: z.number().describe("Annotation index"), value: z.string().describe("Value to fill") }, bodyFromArgs: passthrough },
 
   // 3D DOM inspector (macOS only)
   { name: "kelpie_snapshot_3d_enter", description: "Enter the 3D DOM inspector view. Applies 3D transforms to the current page to visualize stacking depth. macOS only.", method: "snapshot3dEnter", schema: { device }, bodyFromArgs: passthrough },
@@ -197,37 +218,37 @@ export const browserTools: BrowserToolDef[] = [
   { name: "kelpie_set_clipboard", description: "Set clipboard text", method: "setClipboard", schema: { device, text: z.string().describe("Text to copy to clipboard") }, bodyFromArgs: passthrough },
 
   // Geolocation
-  { name: "kelpie_set_geolocation", description: "Override device geolocation", method: "setGeolocation", schema: { device, latitude: z.number().describe("Latitude"), longitude: z.number().describe("Longitude"), accuracy: z.number().optional().describe("Accuracy in meters") }, bodyFromArgs: passthrough },
-  { name: "kelpie_clear_geolocation", description: "Clear geolocation override", method: "clearGeolocation", schema: { device }, bodyFromArgs: passthrough },
+  { name: "kelpie_set_geolocation", description: "Override device geolocation", method: "setGeolocation", platforms: unavailablePlatforms, schema: { device, latitude: z.number().describe("Latitude"), longitude: z.number().describe("Longitude"), accuracy: z.number().optional().describe("Accuracy in meters") }, bodyFromArgs: passthrough },
+  { name: "kelpie_clear_geolocation", description: "Clear geolocation override", method: "clearGeolocation", platforms: unavailablePlatforms, schema: { device }, bodyFromArgs: passthrough },
 
   // Request interception
-  { name: "kelpie_set_request_interception", description: "Set request interception rules", method: "setRequestInterception", schema: { device, rules: z.array(z.object({ pattern: z.string(), action: z.enum(["block", "mock", "allow"]), mockResponse: z.object({ status: z.number(), headers: z.record(z.string(), z.string()), body: z.string() }).optional() })).describe("Interception rules") }, bodyFromArgs: passthrough },
-  { name: "kelpie_get_intercepted_requests", description: "Get intercepted requests", method: "getInterceptedRequests", schema: { device, since: z.string().optional(), limit: z.number().optional() }, bodyFromArgs: passthrough },
-  { name: "kelpie_clear_request_interception", description: "Clear all interception rules", method: "clearRequestInterception", schema: { device }, bodyFromArgs: passthrough },
+  { name: "kelpie_set_request_interception", description: "Set request interception rules", method: "setRequestInterception", platforms: unavailablePlatforms, schema: { device, rules: z.array(z.object({ pattern: z.string(), action: z.enum(["block", "mock", "allow"]), mockResponse: z.object({ status: z.number(), headers: z.record(z.string(), z.string()), body: z.string() }).optional() })).describe("Interception rules") }, bodyFromArgs: passthrough },
+  { name: "kelpie_get_intercepted_requests", description: "Get intercepted requests", method: "getInterceptedRequests", platforms: unavailablePlatforms, schema: { device, since: z.string().optional(), limit: z.number().optional() }, bodyFromArgs: passthrough },
+  { name: "kelpie_clear_request_interception", description: "Clear all interception rules", method: "clearRequestInterception", platforms: unavailablePlatforms, schema: { device }, bodyFromArgs: passthrough },
 
   // Keyboard & Viewport
-  { name: "kelpie_show_keyboard", description: "Show the on-screen keyboard", method: "showKeyboard", schema: { device, selector: selector.optional(), keyboardType: z.enum(["default", "email", "number", "phone", "url"]).optional() }, bodyFromArgs: passthrough },
-  { name: "kelpie_hide_keyboard", description: "Hide the on-screen keyboard", method: "hideKeyboard", schema: { device }, bodyFromArgs: passthrough },
-  { name: "kelpie_get_keyboard_state", description: "Get keyboard visibility and state", method: "getKeyboardState", schema: { device }, bodyFromArgs: passthrough },
+  { name: "kelpie_show_keyboard", description: "Show the on-screen keyboard", method: "showKeyboard", platforms: mobilePlatforms, schema: { device, selector: selector.optional(), keyboardType: z.enum(["default", "email", "number", "phone", "url"]).optional() }, bodyFromArgs: passthrough },
+  { name: "kelpie_hide_keyboard", description: "Hide the on-screen keyboard", method: "hideKeyboard", platforms: mobilePlatforms, schema: { device }, bodyFromArgs: passthrough },
+  { name: "kelpie_get_keyboard_state", description: "Get keyboard visibility and state", method: "getKeyboardState", platforms: mobilePlatforms, schema: { device }, bodyFromArgs: passthrough },
   { name: "kelpie_resize_viewport", description: "Resize the browser viewport", method: "resizeViewport", schema: { device, width: z.number().optional().describe("Viewport width"), height: z.number().optional().describe("Viewport height") }, bodyFromArgs: passthrough },
   { name: "kelpie_reset_viewport", description: "Reset viewport to device default", method: "resetViewport", schema: { device }, bodyFromArgs: passthrough },
-  { name: "kelpie_set_viewport_preset", description: "Activate a named viewport preset such as Compact / Base, Standard / Pro, or foldable sizes. Linux does not support viewport presets yet.", method: "setViewportPreset", schema: { device, presetId: z.string().describe("Viewport preset id returned by getViewportPresets") }, bodyFromArgs: passthrough },
-  { name: "kelpie_is_element_obscured", description: "Check if an element is obscured by keyboard or other elements", method: "isElementObscured", schema: { device, selector }, bodyFromArgs: passthrough },
+  { name: "kelpie_set_viewport_preset", description: "Activate a named viewport preset such as Compact / Base, Standard / Pro, or foldable sizes. Linux does not support viewport presets yet.", method: "setViewportPreset", platforms: viewportPresetPlatforms, schema: { device, presetId: z.string().describe("Viewport preset id returned by getViewportPresets") }, bodyFromArgs: passthrough },
+  { name: "kelpie_is_element_obscured", description: "Check if an element is obscured by keyboard or other elements", method: "isElementObscured", platforms: mobilePlatforms, schema: { device, selector }, bodyFromArgs: passthrough },
 
   // Orientation
-  { name: "kelpie_set_orientation", description: "Force the device into portrait, landscape, or auto orientation. Useful for testing responsive layouts and orientation-dependent features.", method: "setOrientation", schema: { device, orientation: z.enum(["portrait", "landscape", "auto"]).describe("Target orientation. 'auto' unlocks rotation.") }, bodyFromArgs: passthrough },
-  { name: "kelpie_get_orientation", description: "Get the current device orientation and lock state", method: "getOrientation", schema: { device }, bodyFromArgs: passthrough },
+  { name: "kelpie_set_orientation", description: "Force the device into portrait, landscape, or auto orientation. Useful for testing responsive layouts and orientation-dependent features.", method: "setOrientation", platforms: ["ios", "android", "macos"], schema: { device, orientation: z.enum(["portrait", "landscape", "auto"]).describe("Target orientation. 'auto' unlocks rotation.") }, bodyFromArgs: passthrough },
+  { name: "kelpie_get_orientation", description: "Get the current device orientation and lock state", method: "getOrientation", platforms: ["ios", "android", "macos"], schema: { device }, bodyFromArgs: passthrough },
 
   // Safari Auth
-  { name: "kelpie_safari_auth", description: "Open the current page (or a specific URL) in a Safari-backed authentication session. This lets the user authenticate using Safari's saved passwords and cookies, then syncs the session back into the browser. Use this when a login page requires credentials the user has saved in Safari, or when OAuth providers block in-app browsers. The user will see a Safari sheet and must complete authentication manually — the tool returns once they finish or cancel.", method: "safariAuth", schema: { device, url: url.optional().describe("URL to authenticate. Defaults to the current page URL."), message }, bodyFromArgs: passthrough },
+  { name: "kelpie_safari_auth", description: "Open the current page (or a specific URL) in a Safari-backed authentication session. This lets the user authenticate using Safari's saved passwords and cookies, then syncs the session back into the browser. Use this when a login page requires credentials the user has saved in Safari, or when OAuth providers block in-app browsers. The user will see a Safari sheet and must complete authentication manually — the tool returns once they finish or cancel.", method: "safariAuth", platforms: applePlatforms, schema: { device, url: url.optional().describe("URL to authenticate. Defaults to the current page URL."), message }, bodyFromArgs: passthrough },
 
   // Fullscreen (macOS only)
-  { name: "kelpie_set_fullscreen", description: "Enable or disable fullscreen mode for the desktop browser window (macOS only)", method: "setFullscreen", schema: { device, enabled: z.boolean().describe("Enable or disable fullscreen") }, bodyFromArgs: passthrough },
-  { name: "kelpie_get_fullscreen", description: "Get whether the desktop browser window is currently fullscreen (macOS only)", method: "getFullscreen", schema: { device }, bodyFromArgs: passthrough },
+  { name: "kelpie_set_fullscreen", description: "Enable or disable fullscreen mode for the desktop browser window", method: "setFullscreen", platforms: fullscreenPlatforms, schema: { device, enabled: z.boolean().describe("Enable or disable fullscreen") }, bodyFromArgs: passthrough },
+  { name: "kelpie_get_fullscreen", description: "Get whether the desktop browser window is currently fullscreen", method: "getFullscreen", platforms: fullscreenPlatforms, schema: { device }, bodyFromArgs: passthrough },
 
   // Renderer (macOS only)
-  { name: "kelpie_set_renderer", description: "Switch the browser rendering engine (macOS only). Available engines: 'webkit' (Safari/WebKit), 'chromium' (Chrome/CEF), 'gecko' (Firefox — requires Firefox.app installed). Cookies are migrated automatically so login sessions are preserved.", method: "setRenderer", schema: { device, engine: z.enum(["webkit", "chromium", "gecko"]).describe("Rendering engine to activate"), message }, bodyFromArgs: passthrough },
-  { name: "kelpie_get_renderer", description: "Get the current rendering engine and available engines (macOS only)", method: "getRenderer", schema: { device }, bodyFromArgs: passthrough },
+  { name: "kelpie_set_renderer", description: "Switch the browser rendering engine. Available engines: 'webkit' (Safari/WebKit), 'chromium' (Chrome/CEF), 'gecko' (Firefox — requires Firefox.app installed). Cookies are migrated automatically so login sessions are preserved.", method: "setRenderer", platforms: ["macos"], schema: { device, engine: z.enum(["webkit", "chromium", "gecko"]).describe("Rendering engine to activate"), message }, bodyFromArgs: passthrough },
+  { name: "kelpie_get_renderer", description: "Get the current rendering engine and available engines", method: "getRenderer", platforms: ["macos"], schema: { device }, bodyFromArgs: passthrough },
 
   // AI / Local Inference
   { name: "kelpie_ai_status", description: "Get the local inference engine status — whether a model is loaded, which model, its capabilities, and memory usage", method: "ai-status", schema: { device }, bodyFromArgs: passthrough },
@@ -243,6 +264,7 @@ export const cliTools: CliToolDef[] = [
   // Discovery
   { name: "kelpie_discover", description: "Discover devices on the local network via mDNS", method: "discover", kind: "discovery", schema: { timeout: z.number().optional().describe("Discovery timeout in ms (default 3000)") }, bodyFromArgs: filterBody },
   { name: "kelpie_list_devices", description: "List all discovered devices", method: "listDevices", kind: "discovery", schema: {}, bodyFromArgs: filterBody },
+  { name: "kelpie_feedback_summary", description: "Summarize locally stored automation feedback reports", method: "feedbackSummary", kind: "discovery", schema: { limit: z.number().optional().describe("How many recent reports to include (default 10)") }, bodyFromArgs: filterBody },
 
   // Group commands
   { name: "kelpie_group_navigate", description: "Navigate all (or filtered) devices to a URL", method: "navigate", kind: "group", schema: { ...filterProps, url: url.describe("URL to navigate to") }, bodyFromArgs: filterBody },

@@ -18,6 +18,8 @@ struct LLMHandler {
         router.register("screenshot-annotated") { body in await screenshotAnnotated(body) }
         router.register("click-annotation") { body in await clickAnnotation(body) }
         router.register("fill-annotation") { body in await fillAnnotation(body) }
+        router.register("query-shadow-dom") { body in await queryShadowDOM(body) }
+        router.register("get-shadow-roots") { _ in await getShadowRoots() }
     }
 
     @MainActor
@@ -66,7 +68,7 @@ struct LLMHandler {
     @MainActor
     private func getFormState(_ body: [String: Any]) async -> [String: Any] {
         let js = """
-        (function(){var forms=document.querySelectorAll('form');if(!forms.length)return{forms:[],formCount:0};return{forms:Array.from(forms).map(function(f,i){var fields=Array.from(f.querySelectorAll('input,select,textarea')).map(function(el){return{name:el.name||'',type:el.type||'text',selector:el.tagName.toLowerCase()+(el.name?'[name=\"'+el.name+'\"]':''),label:null,value:el.value||'',required:el.required,valid:el.checkValidity(),disabled:el.disabled};});var btn=f.querySelector('button[type=submit],input[type=submit]');return{selector:'form:nth-of-type('+(i+1)+')',action:f.action||'',method:f.method||'get',fields:fields,isValid:f.checkValidity(),emptyRequired:fields.filter(function(fl){return fl.required&&!fl.value;}).map(function(fl){return fl.name;}),submitButton:btn?{selector:btn.tagName.toLowerCase(),text:btn.textContent?.trim()||btn.value||'',disabled:btn.disabled}:null};}),formCount:forms.length};})()
+        (function(){\(elementSelectorBuilderScript())var forms=document.querySelectorAll('form');if(!forms.length)return{forms:[],formCount:0};return{forms:Array.from(forms).map(function(f){var fields=Array.from(f.querySelectorAll('input,select,textarea')).map(function(el){return{name:el.name||'',type:el.type||'text',selector:kelpieBuildSelector(el),label:null,value:el.value||'',required:el.required,valid:el.checkValidity(),disabled:el.disabled};});var btn=f.querySelector('button[type=submit],input[type=submit]');return{selector:kelpieBuildSelector(f),action:f.action||'',method:f.method||'get',fields:fields,isValid:f.checkValidity(),emptyRequired:fields.filter(function(fl){return fl.required&&!fl.value;}).map(function(fl){return fl.name;}),submitButton:btn?{selector:kelpieBuildSelector(btn),text:btn.textContent?.trim()||btn.value||'',disabled:btn.disabled}:null};}),formCount:forms.length};})()
         """
         do {
             let result = try await context.evaluateJSReturningJSON(js)
@@ -104,7 +106,7 @@ struct LLMHandler {
     private func findInput(_ body: [String: Any]) async -> [String: Any] {
         let label = body["label"] as? String ?? ""
         let js = """
-        (function(){var inputs=document.querySelectorAll('input,select,textarea');for(var el of inputs){var lbl=el.getAttribute('aria-label')||el.placeholder||el.name||'';if(lbl.toLowerCase().includes('\(JSEscape.string(label.lowercased()))')){var r=el.getBoundingClientRect();return{found:true,element:{tag:el.tagName.toLowerCase(),type:el.type||'text',name:el.name||'',selector:el.tagName.toLowerCase()+(el.name?'[name=\"'+el.name+'\"]':''),rect:{x:r.x,y:r.y,width:r.width,height:r.height}}};}}return{found:false};})()
+        (function(){\(elementSelectorBuilderScript())var inputs=document.querySelectorAll('input,select,textarea');for(var el of inputs){var lbl=el.getAttribute('aria-label')||el.placeholder||el.name||'';if(lbl.toLowerCase().includes('\(JSEscape.string(label.lowercased()))')){var r=el.getBoundingClientRect();return{found:true,element:{tag:el.tagName.toLowerCase(),type:el.type||'text',name:el.name||'',selector:kelpieBuildSelector(el),rect:{x:r.x,y:r.y,width:r.width,height:r.height}}};}}return{found:false};})()
         """
         do {
             let result = try await context.evaluateJSReturningJSON(js)
@@ -117,7 +119,7 @@ struct LLMHandler {
     @MainActor
     private func findByText(_ text: String, filter: String) async -> [String: Any] {
         let js = """
-        (function(){var all=document.querySelectorAll('*');for(var el of all){if(!(\(filter)))continue;var t=(el.textContent||'').trim();if(t.toLowerCase().includes('\(JSEscape.string(text.lowercased()))')){var r=el.getBoundingClientRect();if(r.width>0&&r.height>0)return{found:true,element:{tag:el.tagName.toLowerCase(),text:t.substring(0,100),selector:el.tagName.toLowerCase()+(el.id?'#'+el.id:''),rect:{x:r.x,y:r.y,width:r.width,height:r.height}}};}}return{found:false};})()
+        (function(){\(elementSelectorBuilderScript())var all=document.querySelectorAll('*');for(var el of all){if(!(\(filter)))continue;var t=(el.textContent||'').trim();if(t.toLowerCase().includes('\(JSEscape.string(text.lowercased()))')){var r=el.getBoundingClientRect();if(r.width>0&&r.height>0)return{found:true,element:{tag:el.tagName.toLowerCase(),text:t.substring(0,100),selector:kelpieBuildSelector(el),rect:{x:r.x,y:r.y,width:r.width,height:r.height}}};}}return{found:false};})()
         """
         do {
             return try await context.evaluateJSReturningJSON(js)
@@ -130,27 +132,34 @@ struct LLMHandler {
 
     @MainActor
     private func screenshotAnnotated(_ body: [String: Any]) async -> [String: Any] {
-        // Basic implementation: take screenshot + list annotations
         guard let webView = context.webView else {
             return errorResponse(code: "NO_WEBVIEW", message: "No WebView")
         }
-        let js = """
-        (function(){var els=document.querySelectorAll('a,button,input,select,textarea,[role=button]');return Array.from(els).slice(0,50).map(function(el,i){var r=el.getBoundingClientRect();if(r.width<=0||r.height<=0)return null;return{index:i,role:el.getAttribute('role')||el.tagName.toLowerCase(),name:(el.textContent||el.value||el.placeholder||'').trim().substring(0,50),selector:el.tagName.toLowerCase()+(el.id?'#'+el.id:''),rect:{x:r.x,y:r.y,width:r.width,height:r.height}};}).filter(Boolean);})()
-        """
+        guard let resolution = ScreenshotResolution.parse(body["resolution"] ?? "viewport") else {
+            return errorResponse(code: "INVALID_PARAMS", message: "resolution must be 'native' or 'viewport'")
+        }
         do {
+            let annotations = try await context.evaluateJSReturningArray(annotationElementsScript())
             let config = WKSnapshotConfiguration()
-            config.rect = webView.bounds
+            if !(body["fullPage"] as? Bool ?? false) {
+                config.rect = webView.bounds
+            }
             let image = try await webView.takeSnapshot(configuration: config)
-            let imageData = image.pngData() ?? Data()
-            let annotationsJSON = try await context.evaluateJSReturningString("JSON.stringify(\(js))")
-            let annotations = (try? JSONSerialization.jsonObject(with: Data(annotationsJSON.utf8))) as? [[String: Any]] ?? []
-            return successResponse([
-                "image": imageData.base64EncodedString(),
-                "width": Int(image.size.width * image.scale),
-                "height": Int(image.size.height * image.scale),
-                "format": "png",
-                "annotations": annotations
-            ])
+            var payload = try await context.screenshotPayload(
+                from: image,
+                format: body["format"] as? String ?? "png",
+                quality: ((body["quality"] as? NSNumber)?.doubleValue ?? 80) / 100.0,
+                resolution: resolution
+            )
+            let sessionId = UUID().uuidString.lowercased()
+            context.annotationSessionId = sessionId
+            context.annotationPageURL = context.webView?.url?.absoluteString
+            context.annotationElementCount = annotations.count
+            payload["annotations"] = annotations
+            payload["annotationSessionId"] = sessionId
+            payload["validUntil"] = "next_navigation"
+            payload["hint"] = "Annotations are valid until the page URL changes. Take a fresh screenshot-annotated if you navigate."
+            return successResponse(payload)
         } catch {
             return errorResponse(code: "SCREENSHOT_FAILED", message: error.localizedDescription)
         }
@@ -161,12 +170,26 @@ struct LLMHandler {
         guard let index = body["index"] as? Int else {
             return errorResponse(code: "MISSING_PARAM", message: "index is required")
         }
-        let js = """
-        (function(){var els=document.querySelectorAll('a,button,input,select,textarea,[role=button]');var el=Array.from(els).filter(function(e){var r=e.getBoundingClientRect();return r.width>0&&r.height>0;})[\(index)];if(!el)return null;el.scrollIntoView({block:'center'});el.click();return{role:el.getAttribute('role')||el.tagName.toLowerCase(),name:(el.textContent||'').trim().substring(0,50),selector:el.tagName.toLowerCase()+(el.id?'#'+el.id:'')};})()
-        """
+        if let expired = annotationExpiredError() {
+            return expired
+        }
         do {
-            let result = try await context.evaluateJSReturningJSON(js)
-            if result.isEmpty { return errorResponse(code: "ELEMENT_NOT_FOUND", message: "Annotation index \(index) not found") }
+            let result = try await context.evaluateJSReturningJSON(annotationActivationScript(index: index))
+            let diagnostics = result["diagnostics"] as? [String: Any]
+            if result.isEmpty || result["error"] as? String == "not_found" {
+                return errorResponse(
+                    code: "ELEMENT_NOT_FOUND",
+                    message: "Annotation index \(index) not found",
+                    diagnostics: diagnostics
+                )
+            }
+            if result["error"] as? String == "not_visible" {
+                return errorResponse(
+                    code: "ELEMENT_NOT_VISIBLE",
+                    message: "Annotated element \(index) is not visible or is obscured",
+                    diagnostics: diagnostics
+                )
+            }
             return successResponse(["element": result])
         } catch {
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
@@ -178,15 +201,72 @@ struct LLMHandler {
         guard let index = body["index"] as? Int, let value = body["value"] as? String else {
             return errorResponse(code: "MISSING_PARAM", message: "index and value are required")
         }
-        let js = """
-        (function(){var els=document.querySelectorAll('input,select,textarea');var el=Array.from(els).filter(function(e){var r=e.getBoundingClientRect();return r.width>0&&r.height>0;})[\(index)];if(!el)return null;el.focus();el.value='\(JSEscape.string(value))';el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));return{role:el.getAttribute('role')||el.tagName.toLowerCase(),name:(el.placeholder||el.name||'').trim(),selector:el.tagName.toLowerCase()+(el.id?'#'+el.id:'')};})()
-        """
+        if let expired = annotationExpiredError() {
+            return expired
+        }
         do {
-            let result = try await context.evaluateJSReturningJSON(js)
-            if result.isEmpty { return errorResponse(code: "ELEMENT_NOT_FOUND", message: "Annotation index \(index) not found") }
+            let result = try await context.evaluateJSReturningJSON(fillAnnotationScript(index: index, value: value))
+            let diagnostics = result["diagnostics"] as? [String: Any]
+            if result.isEmpty || result["error"] as? String == "not_found" {
+                return errorResponse(
+                    code: "ELEMENT_NOT_FOUND",
+                    message: "Annotation index \(index) not found",
+                    diagnostics: diagnostics
+                )
+            }
+            if result["error"] as? String == "not_editable" {
+                return errorResponse(
+                    code: "INVALID_PARAMS",
+                    message: "Annotated element \(index) is not an editable form control",
+                    diagnostics: diagnostics
+                )
+            }
             return successResponse(["element": result, "value": value])
         } catch {
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
         }
+    }
+
+    @MainActor
+    private func queryShadowDOM(_ body: [String: Any]) async -> [String: Any] {
+        guard let hostSelector = body["hostSelector"] as? String else {
+            return errorResponse(code: "MISSING_PARAM", message: "hostSelector is required")
+        }
+        let shadowSelector = body["shadowSelector"] as? String ?? "*"
+        let pierce = body["pierce"] as? Bool ?? true
+        let js = """
+        (function(){function f(h,s,r){if(!h||!h.shadowRoot)return null;var el=h.shadowRoot.querySelector(s);if(el)return el;if(r){var a=h.shadowRoot.querySelectorAll('*');for(var i=0;i<a.length;i++){if(a[i].shadowRoot){var found=f(a[i],s,true);if(found)return found;}}}return null;}var host=document.querySelector('\(JSEscape.string(hostSelector))');if(!host)return{found:false,error:'Host not found'};var el=f(host,'\(JSEscape.string(shadowSelector))',\(pierce ? "true" : "false"));if(!el)return{found:false};var r=el.getBoundingClientRect();var tag=el.tagName.toLowerCase();return{found:true,element:{tag:tag,text:(el.textContent||'').trim().substring(0,100),shadowHost:'\(JSEscape.string(hostSelector))',rect:{x:r.x,y:r.y,width:r.width,height:r.height},visible:r.width>0&&r.height>0,interactable:['a','button','input','select','textarea'].includes(tag)}};})()
+        """
+        do {
+            let result = try await context.evaluateJSReturningJSON(js)
+            return successResponse(result)
+        } catch {
+            return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
+        }
+    }
+
+    @MainActor
+    private func getShadowRoots() async -> [String: Any] {
+        let js = """
+        (function(){\(elementSelectorBuilderScript())var hosts=[];var all=document.querySelectorAll('*');for(var i=0;i<all.length;i++){var el=all[i];if(el.shadowRoot){var tag=el.tagName.toLowerCase();hosts.push({selector:kelpieBuildSelector(el),tag:tag,mode:'open',childCount:el.shadowRoot.childElementCount});}}return{hosts:hosts,count:hosts.length};})()
+        """
+        do {
+            let result = try await context.evaluateJSReturningJSON(js)
+            return successResponse(result)
+        } catch {
+            return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
+        }
+    }
+
+    @MainActor
+    private func annotationExpiredError() -> [String: Any]? {
+        guard let annotationPageURL = context.annotationPageURL else { return nil }
+        let currentPageURL = context.webView?.url?.absoluteString
+        guard currentPageURL != annotationPageURL else { return nil }
+        return errorResponse(
+            code: "ANNOTATION_EXPIRED",
+            message: "Annotations expired because the page URL changed. Take a fresh screenshot-annotated before interacting again.",
+            diagnostics: ["annotationSessionId": context.annotationSessionId ?? ""]
+        )
     }
 }

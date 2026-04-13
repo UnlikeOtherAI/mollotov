@@ -170,6 +170,7 @@ struct InferenceHarness {
             payload = (try? await context.evaluateJSReturningJSON(
                 """
                 (function() {
+                    \(elementSelectorBuilderScript())
                     var wanted = '\(JSEscape.string(text))'.toLowerCase();
                     var all = document.querySelectorAll('*');
                     for (var el of all) {
@@ -181,7 +182,7 @@ struct InferenceHarness {
                             found: true,
                             element: {
                                 tag: el.tagName.toLowerCase(),
-                                selector: el.tagName.toLowerCase() + (el.id ? '#' + el.id : ''),
+                                selector: kelpieBuildSelector(el),
                                 text: content.substring(0, 200)
                             }
                         };
@@ -195,12 +196,13 @@ struct InferenceHarness {
             payload = (try? await context.evaluateJSReturningJSON(
                 """
                 (function() {
+                    \(elementSelectorBuilderScript())
                     var forms = document.querySelectorAll('form');
                     return {
                         formCount: forms.length,
-                        forms: Array.from(forms).map(function(form, index) {
+                        forms: Array.from(forms).map(function(form) {
                             return {
-                                selector: 'form:nth-of-type(' + (index + 1) + ')',
+                                selector: kelpieBuildSelector(form),
                                 fields: Array.from(form.querySelectorAll('input,select,textarea')).map(function(el) {
                                     return {
                                         name: el.name || '',
@@ -295,6 +297,7 @@ struct InferenceHarness {
             payload = (try? await context.evaluateJSReturningJSON(
                 """
                 (function() {
+                    \(elementSelectorBuilderScript())
                     var elements = [];
                     var all = document.querySelectorAll('a,button,input,select,textarea,[role="button"],[role="link"]');
                     for (var el of all) {
@@ -305,7 +308,7 @@ struct InferenceHarness {
                             tag: el.tagName.toLowerCase(),
                             text: (el.textContent || el.value || '').trim().substring(0, 120),
                             role: el.getAttribute('role') || '',
-                            selector: el.tagName.toLowerCase() + (el.id ? '#' + el.id : '')
+                            selector: kelpieBuildSelector(el)
                         });
                         if (elements.length >= 100) break;
                     }

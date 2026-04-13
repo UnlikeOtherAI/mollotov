@@ -143,6 +143,18 @@ void kelpie_history_store_update_latest_title(KelpieHistoryStoreRef store,
   }
 }
 
+char* kelpie_history_store_best_url_completion(KelpieHistoryStoreRef store, const char* query) {
+  if (store == nullptr) {
+    return nullptr;
+  }
+  try {
+    return kelpie::state_c_api_internal::CopyString(
+        store->store.BestUrlCompletion(kelpie::state_c_api_internal::SafeCString(query)));
+  } catch (...) {
+    return nullptr;
+  }
+}
+
 char* kelpie_history_store_to_json(KelpieHistoryStoreRef store) {
   if (store == nullptr) {
     return nullptr;

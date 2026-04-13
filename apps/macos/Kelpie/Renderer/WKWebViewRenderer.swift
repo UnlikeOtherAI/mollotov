@@ -33,6 +33,7 @@ final class WKWebViewRenderer: NSObject, RendererEngine, WKScriptMessageHandler,
         let ucc = config.userContentController
         // Inject network bridge FIRST (saves postMessage ref before console bridge masks messageHandlers)
         ucc.addUserScript(Self.networkBridgeScript)
+        ucc.addUserScript(Self.webSocketBridgeScript)
         ucc.addUserScript(Self.consoleBridgeScript)
 
         webView = WKWebView(frame: NSRect(x: 0, y: 0, width: 1280, height: 800), configuration: config)
@@ -204,6 +205,7 @@ final class WKWebViewRenderer: NSObject, RendererEngine, WKScriptMessageHandler,
     // WKUserScript which is specific to this renderer.
     static let consoleBridgeScript: WKUserScript = ConsoleHandler.bridgeScript
     static let networkBridgeScript: WKUserScript = NetworkBridge.bridgeScript
+    static let webSocketBridgeScript: WKUserScript = WebSocketBridge.bridgeScript
 
     private func recordMainDocumentResponse(_ navigationResponse: WKNavigationResponse) {
         guard navigationResponse.isForMainFrame,

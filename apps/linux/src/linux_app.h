@@ -77,6 +77,7 @@ class LinuxApp {
                       const std::optional<std::string>& source = std::nullopt) const;
   json DeviceInfo() const;
   json Capabilities() const;
+  json ReportIssue(const json& params);
   json HandleApiRequest(std::string_view endpoint, const json& params, int* status_code);
 
   void ShowToast(const std::string& message);

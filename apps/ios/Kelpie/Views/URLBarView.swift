@@ -11,6 +11,7 @@ struct URLBarView: View {
     let onSnapshot3D: () -> Void
 
     @State private var urlText: String = ""
+    @FocusState private var isURLFieldFocused: Bool
     private let navigationButtonSize: CGFloat = 44
 
     var body: some View {
@@ -35,16 +36,7 @@ struct URLBarView: View {
             .accessibilityIdentifier("browser.nav.forward")
             .disabled(!browserState.canGoForward)
 
-            TextField("URL", text: $urlText)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Color(.systemGray6))
-                .clipShape(Capsule())
-                .autocapitalization(.none)
-                .disableAutocorrection(true)
-                .keyboardType(.URL)
-                .accessibilityIdentifier("browser.url.field")
-                .onSubmit { navigate() }
+            addressField
 
             if showAI {
                 Button(action: onAI) {
@@ -70,15 +62,103 @@ struct URLBarView: View {
         .padding(.vertical, 6)
         .onAppear { urlText = browserState.currentURL }
         .onChange(of: browserState.currentURL) { newURL in
+            guard !isURLFieldFocused else { return }
             urlText = newURL
         }
     }
 
+    private var addressField: some View {
+        ZStack(alignment: .leading) {
+            if let suffix = inlineCompletionSuffix {
+                HStack(spacing: 0) {
+                    Text(verbatim: urlText)
+                        .hidden()
+                    Text(verbatim: suffix)
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .allowsHitTesting(false)
+            }
+
+            TextField("URL", text: $urlText)
+                .autocapitalization(.none)
+                .disableAutocorrection(true)
+                .keyboardType(.URL)
+                .focused($isURLFieldFocused)
+                .accessibilityIdentifier("browser.url.field")
+                .onSubmit { navigate() }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color(.systemGray6))
+        .clipShape(Capsule())
+    }
+
     private func navigate() {
-        var url = urlText.trimmingCharacters(in: .whitespaces)
-        if !url.hasPrefix("http://") && !url.hasPrefix("https://") {
+        var url = resolvedNavigationText()
+        if !startsWithScheme(url) {
             url = "https://\(url)"
         }
         onNavigate(url)
+    }
+
+    private var inlineCompletionSuffix: String? {
+        let trimmedInput = urlText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard isURLFieldFocused,
+              let display = inlineCompletionDisplay(for: trimmedInput),
+              display.count > trimmedInput.count
+        else {
+            return nil
+        }
+        return String(display.dropFirst(trimmedInput.count))
+    }
+
+    private func resolvedNavigationText() -> String {
+        let trimmedInput = urlText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedInput.isEmpty else { return trimmedInput }
+        return HistoryStore.shared.bestURLCompletion(for: trimmedInput) ?? trimmedInput
+    }
+
+    private func inlineCompletionDisplay(for input: String) -> String? {
+        guard !input.isEmpty,
+              let fullCompletion = HistoryStore.shared.bestURLCompletion(for: input)
+        else {
+            return nil
+        }
+
+        return completionDisplayCandidates(for: fullCompletion, input: input)
+            .first { candidate in
+                candidate.count > input.count &&
+                    candidate.lowercased().hasPrefix(input.lowercased())
+            }
+    }
+
+    private func completionDisplayCandidates(for fullCompletion: String, input: String) -> [String] {
+        if startsWithScheme(input) {
+            return [fullCompletion]
+        }
+
+        let withoutScheme = stripScheme(from: fullCompletion)
+        let withoutWww = stripLeadingWww(from: withoutScheme)
+        return [withoutWww, withoutScheme, fullCompletion].reduce(into: [String]()) { result, candidate in
+            guard !result.contains(candidate) else { return }
+            result.append(candidate)
+        }
+    }
+
+    private func startsWithScheme(_ value: String) -> Bool {
+        let lowered = value.lowercased()
+        return lowered.hasPrefix("http://") || lowered.hasPrefix("https://")
+    }
+
+    private func stripScheme(from value: String) -> String {
+        guard let range = value.range(of: "://") else { return value }
+        return String(value[range.upperBound...])
+    }
+
+    private func stripLeadingWww(from value: String) -> String {
+        value.lowercased().hasPrefix("www.") ? String(value.dropFirst(4)) : value
     }
 }

@@ -1,9 +1,15 @@
 package com.kelpie.browser.llm
 
 import com.kelpie.browser.handlers.HandlerContext
+import com.kelpie.browser.handlers.ScreenshotResolution
+import com.kelpie.browser.handlers.annotationActivationScript
+import com.kelpie.browser.handlers.annotationElementsScript
+import com.kelpie.browser.handlers.elementSelectorBuilderScript
+import com.kelpie.browser.handlers.fillAnnotationScript
 import com.kelpie.browser.network.Router
 import com.kelpie.browser.network.errorResponse
 import com.kelpie.browser.network.successResponse
+import java.util.UUID
 
 class LLMHandler(
     private val ctx: HandlerContext,
@@ -17,11 +23,9 @@ class LLMHandler(
         router.register("find-button") { findButton(it) }
         router.register("find-link") { findLink(it) }
         router.register("find-input") { findInput(it) }
-        router.register("screenshot-annotated") { screenshotAnnotated() }
+        router.register("screenshot-annotated") { screenshotAnnotated(it) }
         router.register("click-annotation") { clickAnnotation(it) }
         router.register("fill-annotation") { fillAnnotation(it) }
-        router.register("query-shadow-dom") { queryShadowDOM(it) }
-        router.register("get-shadow-roots") { getShadowRoots() }
     }
 
     private suspend fun getAccessibilityTree(body: Map<String, Any?>): Map<String, Any?> {
@@ -98,22 +102,21 @@ class LLMHandler(
 
     private suspend fun getFormState(): Map<String, Any?> {
         val js =
-            "(function(){var forms=document.querySelectorAll('form');" +
+            "(function(){" + elementSelectorBuilderScript() + "var forms=document.querySelectorAll('form');" +
                 "if(!forms.length)return{forms:[],formCount:0};" +
-                "return{forms:Array.from(forms).map(function(f,i){" +
+                "return{forms:Array.from(forms).map(function(f){" +
                 "var fields=Array.from(f.querySelectorAll('input,select,textarea'))" +
                 ".map(function(el){return{name:el.name||'',type:el.type||'text'," +
-                "selector:el.tagName.toLowerCase()+" +
-                "(el.name?'[name=\"'+el.name+'\"]':'')," +
+                "selector:kelpieBuildSelector(el)," +
                 "value:el.value||'',required:el.required," +
                 "valid:el.checkValidity(),disabled:el.disabled};});" +
                 "var btn=f.querySelector('button[type=submit],input[type=submit]');" +
-                "return{selector:'form:nth-of-type('+(i+1)+')'," +
+                "return{selector:kelpieBuildSelector(f)," +
                 "action:f.action||'',method:f.method||'get',fields:fields," +
                 "isValid:f.checkValidity()," +
                 "emptyRequired:fields.filter(function(fl){" +
                 "return fl.required&&!fl.value;}).map(function(fl){return fl.name;})," +
-                "submitButton:btn?{selector:btn.tagName.toLowerCase()," +
+                "submitButton:btn?{selector:kelpieBuildSelector(btn)," +
                 "text:btn.textContent?.trim()||btn.value||''," +
                 "disabled:btn.disabled}:null};}),formCount:forms.length};})()"
         return try {
@@ -144,14 +147,14 @@ class LLMHandler(
     ): Map<String, Any?> {
         val safe = text.lowercase().replace("'", "\\'")
         val js =
-            "(function(){var all=document.querySelectorAll('*');" +
+            "(function(){" + elementSelectorBuilderScript() + "var all=document.querySelectorAll('*');" +
                 "for(var el of all){if(!($filter))continue;" +
                 "var t=(el.textContent||'').trim();" +
                 "if(t.toLowerCase().includes('$safe')){" +
                 "var r=el.getBoundingClientRect();" +
                 "if(r.width>0&&r.height>0)return{found:true,element:{" +
                 "tag:el.tagName.toLowerCase(),text:t.substring(0,100)," +
-                "selector:el.tagName.toLowerCase()+(el.id?'#'+el.id:'')," +
+                "selector:kelpieBuildSelector(el)," +
                 "rect:{x:r.x,y:r.y,width:r.width,height:r.height}}};}}return{found:false};})()"
         return try {
             ctx.evaluateJSReturningJSON(js)
@@ -164,15 +167,14 @@ class LLMHandler(
         val label = body["label"] as? String ?: ""
         val safe = label.lowercase().replace("'", "\\'")
         val js =
-            "(function(){var inputs=document.querySelectorAll('input,select,textarea');" +
+            "(function(){" + elementSelectorBuilderScript() + "var inputs=document.querySelectorAll('input,select,textarea');" +
                 "for(var el of inputs){" +
                 "var lbl=el.getAttribute('aria-label')||el.placeholder||el.name||'';" +
                 "if(lbl.toLowerCase().includes('$safe')){" +
                 "var r=el.getBoundingClientRect();" +
                 "return{found:true,element:{tag:el.tagName.toLowerCase()," +
                 "type:el.type||'text',name:el.name||''," +
-                "selector:el.tagName.toLowerCase()+" +
-                "(el.name?'[name=\"'+el.name+'\"]':'')," +
+                "selector:kelpieBuildSelector(el)," +
                 "rect:{x:r.x,y:r.y,width:r.width,height:r.height}}};}}return{found:false};})()"
         return try {
             ctx.evaluateJSReturningJSON(js)
@@ -181,22 +183,29 @@ class LLMHandler(
         }
     }
 
-    private suspend fun screenshotAnnotated(): Map<String, Any?> {
-        val js =
-            "(function(){var els=document.querySelectorAll(" +
-                "'a,button,input,select,textarea,[role=button]');" +
-                "return Array.from(els).slice(0,50).map(function(el,i){" +
-                "var r=el.getBoundingClientRect();" +
-                "if(r.width<=0||r.height<=0)return null;" +
-                "return{index:i," +
-                "role:el.getAttribute('role')||el.tagName.toLowerCase()," +
-                "name:(el.textContent||el.value||el.placeholder||'')" +
-                ".trim().substring(0,50)," +
-                "selector:el.tagName.toLowerCase()+(el.id?'#'+el.id:'')," +
-                "rect:{x:r.x,y:r.y,width:r.width,height:r.height}};}).filter(Boolean);})()"
+    private suspend fun screenshotAnnotated(body: Map<String, Any?>): Map<String, Any?> {
+        val format = body["format"] as? String ?: "png"
+        val resolution =
+            ScreenshotResolution.parse(body["resolution"] ?: "viewport")
+                ?: return errorResponse("INVALID_PARAMS", "resolution must be 'native' or 'viewport'")
         return try {
-            val annotations = ctx.evaluateJSReturningArray(js)
-            successResponse(mapOf("annotations" to annotations, "count" to annotations.size))
+            val annotations = ctx.evaluateJSReturningArray(annotationElementsScript())
+            val payload =
+                ctx.captureScreenshotPayload(format = format, resolution = resolution)
+                    ?: return errorResponse("SCREENSHOT_FAILED", "Failed to capture annotated screenshot")
+            val sessionId = UUID.randomUUID().toString().lowercase()
+            ctx.annotationSessionId = sessionId
+            ctx.annotationPageURL = ctx.webView?.url
+            ctx.annotationElementCount = annotations.size
+            successResponse(
+                payload +
+                    mapOf(
+                        "annotations" to annotations,
+                        "annotationSessionId" to sessionId,
+                        "validUntil" to "next_navigation",
+                        "hint" to "Annotations are valid until the page URL changes. Take a fresh screenshot-annotated if you navigate.",
+                    ),
+            )
         } catch (e: Exception) {
             errorResponse("EVAL_ERROR", e.message ?: "Unknown error")
         }
@@ -204,19 +213,16 @@ class LLMHandler(
 
     private suspend fun clickAnnotation(body: Map<String, Any?>): Map<String, Any?> {
         val index = (body["index"] as? Int) ?: return errorResponse("MISSING_PARAM", "index is required")
-        val js =
-            "(function(){var els=document.querySelectorAll(" +
-                "'a,button,input,select,textarea,[role=button]');" +
-                "var el=Array.from(els).filter(function(e){" +
-                "var r=e.getBoundingClientRect();" +
-                "return r.width>0&&r.height>0;})[$index];" +
-                "if(!el)return null;el.scrollIntoView({block:'center'});" +
-                "el.click();return{role:el.getAttribute('role')||" +
-                "el.tagName.toLowerCase()," +
-                "name:(el.textContent||'').trim().substring(0,50)};})()"
+        annotationExpiredError()?.let { return it }
         return try {
-            val result = ctx.evaluateJSReturningJSON(js)
-            if (result.isEmpty()) errorResponse("ELEMENT_NOT_FOUND", "Annotation index $index not found") else successResponse(mapOf("element" to result))
+            val result = ctx.evaluateJSReturningJSON(annotationActivationScript(index))
+            val diagnostics = result["diagnostics"] as? Map<String, Any?>
+            when (result["error"]) {
+                "not_found" -> errorResponse("ELEMENT_NOT_FOUND", "Annotation index $index not found", diagnostics)
+                "not_visible" -> errorResponse("ELEMENT_NOT_VISIBLE", "Annotated element $index is not visible or is obscured", diagnostics)
+                null -> successResponse(mapOf("element" to result))
+                else -> errorResponse("ELEMENT_NOT_FOUND", "Annotation index $index not found", diagnostics)
+            }
         } catch (e: Exception) {
             errorResponse("EVAL_ERROR", e.message ?: "Unknown error")
         }
@@ -225,71 +231,29 @@ class LLMHandler(
     private suspend fun fillAnnotation(body: Map<String, Any?>): Map<String, Any?> {
         val index = (body["index"] as? Int) ?: return errorResponse("MISSING_PARAM", "index is required")
         val value = body["value"] as? String ?: return errorResponse("MISSING_PARAM", "value is required")
-        val safeVal = value.replace("'", "\\'")
-        val js =
-            "(function(){var els=document.querySelectorAll('input,select,textarea');" +
-                "var el=Array.from(els).filter(function(e){" +
-                "var r=e.getBoundingClientRect();" +
-                "return r.width>0&&r.height>0;})[$index];" +
-                "if(!el)return null;el.focus();el.value='$safeVal';" +
-                "el.dispatchEvent(new Event('input',{bubbles:true}));" +
-                "el.dispatchEvent(new Event('change',{bubbles:true}));" +
-                "return{role:el.getAttribute('role')||el.tagName.toLowerCase()," +
-                "name:(el.placeholder||el.name||'').trim()};})()"
+        annotationExpiredError()?.let { return it }
         return try {
-            val result = ctx.evaluateJSReturningJSON(js)
-            if (result.isEmpty()) errorResponse("ELEMENT_NOT_FOUND", "Annotation index $index not found") else successResponse(mapOf("element" to result, "value" to value))
+            val result = ctx.evaluateJSReturningJSON(fillAnnotationScript(index, value))
+            val diagnostics = result["diagnostics"] as? Map<String, Any?>
+            when (result["error"]) {
+                "not_found" -> errorResponse("ELEMENT_NOT_FOUND", "Annotation index $index not found", diagnostics)
+                "not_editable" -> errorResponse("INVALID_PARAMS", "Annotated element $index is not an editable form control", diagnostics)
+                null -> successResponse(mapOf("element" to result, "value" to value))
+                else -> errorResponse("ELEMENT_NOT_FOUND", "Annotation index $index not found", diagnostics)
+            }
         } catch (e: Exception) {
             errorResponse("EVAL_ERROR", e.message ?: "Unknown error")
         }
     }
 
-    private suspend fun queryShadowDOM(body: Map<String, Any?>): Map<String, Any?> {
-        val hostSelector = body["hostSelector"] as? String ?: return errorResponse("MISSING_PARAM", "hostSelector is required")
-        val shadowSelector = body["shadowSelector"] as? String ?: "*"
-        val pierce = body["pierce"] as? Boolean ?: true
-        val safeHost = hostSelector.replace("'", "\\'")
-        val safeShadow = shadowSelector.replace("'", "\\'")
-        val js =
-            "(function(){function f(h,s,r){" +
-                "if(!h||!h.shadowRoot)return null;" +
-                "var el=h.shadowRoot.querySelector(s);if(el)return el;" +
-                "if(r){var a=h.shadowRoot.querySelectorAll('*');" +
-                "for(var i=0;i<a.length;i++){if(a[i].shadowRoot){" +
-                "var found=f(a[i],s,true);if(found)return found;}}}" +
-                "return null;}" +
-                "var host=document.querySelector('$safeHost');" +
-                "if(!host)return{found:false,error:'Host not found'};" +
-                "var el=f(host,'$safeShadow',$pierce);" +
-                "if(!el)return{found:false};" +
-                "var r=el.getBoundingClientRect();var tag=el.tagName.toLowerCase();" +
-                "return{found:true,element:{tag:tag," +
-                "text:(el.textContent||'').trim().substring(0,100)," +
-                "shadowHost:'$safeHost'," +
-                "rect:{x:r.x,y:r.y,width:r.width,height:r.height}," +
-                "visible:r.width>0&&r.height>0," +
-                "interactable:['a','button','input','select','textarea']" +
-                ".includes(tag)}};})()"
-        return try {
-            successResponse(ctx.evaluateJSReturningJSON(js))
-        } catch (e: Exception) {
-            errorResponse("EVAL_ERROR", e.message ?: "Unknown error")
-        }
-    }
-
-    private suspend fun getShadowRoots(): Map<String, Any?> {
-        val js =
-            "(function(){var hosts=[];var all=document.querySelectorAll('*');" +
-                "for(var i=0;i<all.length;i++){var el=all[i];" +
-                "if(el.shadowRoot){var tag=el.tagName.toLowerCase();" +
-                "hosts.push({selector:tag+(el.id?'#'+el.id:'')," +
-                "tag:tag,mode:'open'," +
-                "childCount:el.shadowRoot.childElementCount});}}" +
-                "return{hosts:hosts,count:hosts.length};})()"
-        return try {
-            successResponse(ctx.evaluateJSReturningJSON(js))
-        } catch (e: Exception) {
-            errorResponse("EVAL_ERROR", e.message ?: "Unknown error")
-        }
+    private fun annotationExpiredError(): Map<String, Any?>? {
+        val annotationPageURL = ctx.annotationPageURL ?: return null
+        val currentPageURL = ctx.webView?.url
+        if (currentPageURL == annotationPageURL) return null
+        return errorResponse(
+            "ANNOTATION_EXPIRED",
+            "Annotations expired because the page URL changed. Take a fresh screenshot-annotated before interacting again.",
+            mapOf("annotationSessionId" to (ctx.annotationSessionId ?: "")),
+        )
     }
 }

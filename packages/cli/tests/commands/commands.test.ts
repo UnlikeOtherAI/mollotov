@@ -148,6 +148,26 @@ describe("command API method mapping", () => {
     expect(capturedBody()).toEqual({ latitude: 37.77, longitude: -122.42, accuracy: 10 });
   });
 
+  it("toast sends the message payload", async () => {
+    mockFetch({ success: true, message: "hello" });
+    await sendCommand(device, "toast", { message: "hello" });
+    expect(capturedUrl()).toContain("/v1/toast");
+    expect(capturedBody()).toEqual({ message: "hello" });
+  });
+
+  it("debugScreens converts to debug-screens", async () => {
+    mockFetch({ success: true, screens: [] });
+    await sendCommand(device, "debugScreens");
+    expect(capturedUrl()).toContain("/v1/debug-screens");
+  });
+
+  it("safariAuth converts to safari-auth", async () => {
+    mockFetch({ success: true, started: true });
+    await sendCommand(device, "safariAuth", { url: "https://example.com/login" });
+    expect(capturedUrl()).toContain("/v1/safari-auth");
+    expect(capturedBody()).toEqual({ url: "https://example.com/login" });
+  });
+
   it("watchMutations sends options", async () => {
     mockFetch({ success: true, watchId: "mut_001" });
     await sendCommand(device, "watchMutations", { selector: "main", attributes: true, childList: true, subtree: true });

@@ -9,6 +9,9 @@ final class HandlerContext {
     var consoleMessages: [[String: Any]] = []
     var isIn3DInspector = false
     var scriptPlaybackState: ScriptPlaybackState?
+    var annotationSessionId: String?
+    var annotationPageURL: String?
+    var annotationElementCount: Int?
 
     /// Populated by BrowserView so tab handlers can drive the full tab lifecycle.
     var tabStore: TabStore?
@@ -82,6 +85,16 @@ final class HandlerContext {
         guard let data = jsonString.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return [:]
+        }
+        return json
+    }
+
+    func evaluateJSReturningArray(_ script: String) async throws -> [[String: Any]] {
+        let wrapped = "JSON.stringify((\(script)))"
+        let jsonString = try await evaluateJSReturningString(wrapped)
+        guard let data = jsonString.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+            return []
         }
         return json
     }
@@ -221,6 +234,56 @@ final class HandlerContext {
     func takeSnapshot() async throws -> NSImage {
         guard let renderer else { throw HandlerError.noWebView }
         return try await renderer.takeSnapshot()
+    }
+
+    func screenshotViewportMetrics() async throws -> ScreenshotViewportMetrics {
+        let result = try await evaluateJSReturningJSON("""
+        (function() {
+            return {
+                viewportWidth: Math.max(window.innerWidth || 0, 1),
+                viewportHeight: Math.max(window.innerHeight || 0, 1),
+                devicePixelRatio: window.devicePixelRatio || 1
+            };
+        })()
+        """)
+        return ScreenshotViewportMetrics(
+            viewportWidth: (result["viewportWidth"] as? NSNumber)?.intValue ?? 1,
+            viewportHeight: (result["viewportHeight"] as? NSNumber)?.intValue ?? 1,
+            devicePixelRatio: (result["devicePixelRatio"] as? NSNumber)?.doubleValue ?? 1
+        )
+    }
+
+    func screenshotPayload(
+        from image: NSImage,
+        format: String,
+        quality: Double,
+        resolution: ScreenshotResolution
+    ) async throws -> [String: Any] {
+        let viewport = try await screenshotViewportMetrics()
+        let normalizedFormat = format == "jpeg" ? "jpeg" : "png"
+        guard let bitmap = scaledBitmapRepresentation(from: image, to: resolution, using: viewport) else {
+            throw HandlerError.screenshotFailed
+        }
+
+        let imageData: Data?
+        if normalizedFormat == "jpeg" {
+            imageData = bitmap.representation(using: .jpeg, properties: [.compressionFactor: quality])
+        } else {
+            imageData = bitmap.representation(using: .png, properties: [:])
+        }
+        guard let encoded = imageData else {
+            throw HandlerError.screenshotFailed
+        }
+        return [
+            "image": encoded.base64EncodedString()
+        ].merging(
+            viewport.metadata(
+                imageWidth: bitmap.pixelsWide,
+                imageHeight: bitmap.pixelsHigh,
+                format: normalizedFormat,
+                resolution: resolution
+            )
+        ) { _, new in new }
     }
 
     func waitForViewportSize(_ size: CGSize) async {
@@ -393,12 +456,21 @@ extension Notification.Name {
 enum HandlerError: Error {
     case noWebView
     case elementNotFound(String)
+    case screenshotFailed
     case timeout
     case platformNotSupported(String)
 }
 
 func errorResponse(code: String, message: String) -> [String: Any] {
-    ["success": false, "error": ["code": code, "message": message]]
+    errorResponse(code: code, message: message, diagnostics: nil)
+}
+
+func errorResponse(code: String, message: String, diagnostics: [String: Any]?) -> [String: Any] {
+    var error: [String: Any] = ["code": code, "message": message]
+    if let diagnostics, !diagnostics.isEmpty {
+        error["diagnostics"] = diagnostics
+    }
+    return ["success": false, "error": error]
 }
 
 func successResponse(_ data: [String: Any] = [:]) -> [String: Any] {

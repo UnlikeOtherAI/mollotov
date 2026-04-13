@@ -48,17 +48,30 @@ export interface GetCurrentUrlResponse {
 
 // --- Screenshots ---
 
+export type ScreenshotResolution = "native" | "viewport";
+
 export interface ScreenshotRequest {
   fullPage?: boolean;
   format?: "png" | "jpeg";
   quality?: number;
+  resolution?: ScreenshotResolution;
 }
 
-export interface ScreenshotResponse extends SuccessResponse {
-  image: string;
+export interface ScreenshotMetadata {
   width: number;
   height: number;
   format: "png" | "jpeg";
+  resolution?: ScreenshotResolution;
+  coordinateSpace?: "viewport-css-pixels";
+  viewportWidth?: number;
+  viewportHeight?: number;
+  devicePixelRatio?: number;
+  imageScaleX?: number;
+  imageScaleY?: number;
+}
+
+export interface ScreenshotResponse extends SuccessResponse, ScreenshotMetadata {
+  image: string;
 }
 
 // --- DOM ---
@@ -126,6 +139,25 @@ export interface TapRequest {
 export interface TapResponse extends SuccessResponse {
   x: number;
   y: number;
+  appliedX: number;
+  appliedY: number;
+  offsetX: number;
+  offsetY: number;
+}
+
+export interface SetTapCalibrationRequest {
+  offsetX: number;
+  offsetY: number;
+}
+
+export interface GetTapCalibrationResponse extends SuccessResponse {
+  offsetX: number;
+  offsetY: number;
+}
+
+export interface SetTapCalibrationResponse extends SuccessResponse {
+  offsetX: number;
+  offsetY: number;
 }
 
 export interface FillRequest {
@@ -305,6 +337,7 @@ export interface ScreenshotAnnotatedRequest {
   format?: "png" | "jpeg";
   interactableOnly?: boolean;
   labelStyle?: "numbered" | "badge";
+  resolution?: ScreenshotResolution;
 }
 
 export interface Annotation {
@@ -315,11 +348,8 @@ export interface Annotation {
   rect: ElementRect;
 }
 
-export interface ScreenshotAnnotatedResponse extends SuccessResponse {
+export interface ScreenshotAnnotatedResponse extends SuccessResponse, ScreenshotMetadata {
   image: string;
-  width: number;
-  height: number;
-  format: "png" | "jpeg";
   annotations: Annotation[];
 }
 
@@ -661,16 +691,17 @@ export interface SetDialogAutoHandlerResponse extends SuccessResponse {
 // --- Browser: Tabs ---
 
 export interface TabInfo {
-  id: number;
+  id: string;
   url: string;
   title: string;
   active: boolean;
+  isLoading?: boolean;
 }
 
 export interface GetTabsResponse extends SuccessResponse {
   tabs: TabInfo[];
   count: number;
-  activeTab: number;
+  activeTab: string;
 }
 
 export interface NewTabRequest {
@@ -683,7 +714,7 @@ export interface NewTabResponse extends SuccessResponse {
 }
 
 export interface SwitchTabRequest {
-  tabId: number;
+  tabId: string;
 }
 
 export interface SwitchTabResponse extends SuccessResponse {
@@ -691,11 +722,11 @@ export interface SwitchTabResponse extends SuccessResponse {
 }
 
 export interface CloseTabRequest {
-  tabId: number;
+  tabId: string;
 }
 
 export interface CloseTabResponse extends SuccessResponse {
-  closed: number;
+  closed: string;
   tabCount: number;
 }
 

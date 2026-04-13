@@ -138,9 +138,9 @@ inline std::optional<T> OptionalValue(const json& object, const char* key) {
 // Normalizes a URL for equality comparison used in dedup.
 //
 // Applies only safe, lossless transformations:
-// - strips trailing slashes from the path (unless the path is "/" alone)
 // - removes an empty query string (? with no parameters)
 // - removes an empty fragment (# with no value)
+// - removes the single implicit root slash from origin-only HTTP(S) URLs
 //
 // The original URL is always preserved; this function is only used for
 // keying dedup lookups so that equivalent URLs collapse correctly.
@@ -165,19 +165,18 @@ inline std::string NormalizeUrl(std::string_view url) {
     base = base.substr(0, query_pos);
   }
 
-  // Strip trailing slashes from the base.
-  // Stop at the "://" boundary so that "file:///" stays as-is.
-  // If only slashes remain after stripping, the final "/" is preserved.
-  while (base.length() > 1 && base.back() == '/') {
-    if (base.length() >= 4 && base[base.length() - 4] == ':' &&
-        base[base.length() - 3] == '/' && base[base.length() - 2] == '/') {
-      break;  // ends with "://" — stop
+  // Only collapse the implicit root slash on bare HTTP(S) origins:
+  // https://example.com/ -> https://example.com
+  // Do not rewrite resource paths such as /docs/ because trailing slash can
+  // change the resource identity on real servers.
+  const size_t scheme_pos = base.find("://");
+  if (scheme_pos != std::string_view::npos &&
+      (base.substr(0, scheme_pos) == "http" || base.substr(0, scheme_pos) == "https")) {
+    const size_t authority_start = scheme_pos + 3;
+    const size_t slash_pos = base.find('/', authority_start);
+    if (slash_pos != std::string_view::npos && slash_pos == base.length() - 1) {
+      base.remove_suffix(1);
     }
-    base.remove_suffix(1);
-  }
-  // If only slashes remain (e.g. "//" or "///"), preserve a single "/".
-  if (base.length() == 1 && url.length() > 1 && url[0] == '/') {
-    base = "/";
   }
 
   std::string result;

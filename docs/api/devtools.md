@@ -1,6 +1,6 @@
 # Kelpie API — DevTools Methods
 
-Console/JS errors, network log, resource timeline, mutation observation, shadow DOM, request interception.
+Console/JS errors, network log, network inspector, resource timeline, WebSocket monitoring, mutation observation, shadow DOM, request interception.
 
 > **iOS parity note:** Many DevTools features on iOS use ephemeral bridge scripts since WKWebView lacks CDP. See the [Platform Support Matrix](README.md) for per-method details. Network logging and request interception are the most limited on iOS.
 
@@ -11,7 +11,7 @@ For protocol details, errors, and MCP tool names, see [README.md](README.md).
 ## Console & DevTools
 
 ### `getConsoleMessages`
-Get JavaScript console messages (errors, warnings, logs) from the current page. The browser captures these in real time via native console hooks (CDP `Runtime.consoleAPICalled` on Android, `WKScriptMessageHandler` console override on iOS).
+Get JavaScript console messages (errors, warnings, logs) from the current page. The browser captures these in real time via an injected native bridge on Android and `WKScriptMessageHandler` console override on Apple platforms.
 
 ```json
 POST /v1/get-console-messages
@@ -192,6 +192,193 @@ Response:
 }
 ```
 
+---
+
+## Network Inspector
+
+These endpoints expose the macOS network inspector state. They work against the inspector's captured request list and selection state rather than the cross-platform `get-network-log` payload.
+
+### `networkList`
+List captured network requests in summary form.
+
+The request body is optional. The current implementation also accepts optional filters: `method`, `category`, `statusRange`, and `urlPattern`.
+
+```json
+POST /v1/network-list
+
+Response:
+{
+  "success": true,
+  "entries": [
+    {
+      "index": 0,
+      "method": "GET",
+      "url": "https://example.com/",
+      "statusCode": 200,
+      "contentType": "text/html",
+      "category": "HTML",
+      "duration": 142,
+      "size": 45230
+    },
+    {
+      "index": 1,
+      "method": "POST",
+      "url": "https://api.example.com/data",
+      "statusCode": 500,
+      "contentType": "application/json",
+      "category": "JSON",
+      "duration": 2340,
+      "size": 128
+    }
+  ],
+  "total": 2
+}
+```
+
+### `networkDetail`
+Get the full detail for a captured request by summary index.
+
+```json
+POST /v1/network-detail
+{
+  "index": 1
+}
+
+Response:
+{
+  "success": true,
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "method": "POST",
+  "url": "https://api.example.com/data",
+  "statusCode": 500,
+  "contentType": "application/json",
+  "category": "JSON",
+  "initiator": "js",
+  "requestHeaders": {
+    "Content-Type": "application/json"
+  },
+  "responseHeaders": {
+    "Content-Type": "application/json"
+  },
+  "requestBody": "{\"query\":\"status\"}",
+  "responseBody": "{\"error\":\"Internal Server Error\"}",
+  "startTime": "2026-04-13T10:35:12Z",
+  "duration": 2340,
+  "size": 128
+}
+```
+
+If `index` is missing or out of range, the endpoint returns:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "INVALID_INDEX",
+    "message": "index is required and must be valid"
+  }
+}
+```
+
+### `networkCurrent`
+Get the currently selected request in the inspector.
+
+```json
+POST /v1/network-current
+
+Response:
+{
+  "success": true,
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "method": "POST",
+  "url": "https://api.example.com/data",
+  "statusCode": 500,
+  "contentType": "application/json",
+  "category": "JSON",
+  "initiator": "js",
+  "requestHeaders": {
+    "Content-Type": "application/json"
+  },
+  "responseHeaders": {
+    "Content-Type": "application/json"
+  },
+  "requestBody": "{\"query\":\"status\"}",
+  "responseBody": "{\"error\":\"Internal Server Error\"}",
+  "startTime": "2026-04-13T10:35:12Z",
+  "duration": 2340,
+  "size": 128
+}
+```
+
+If nothing is selected, the endpoint returns:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "NONE_SELECTED",
+    "message": "No request currently selected"
+  }
+}
+```
+
+### `networkClear`
+Clear the captured network inspector log.
+
+```json
+POST /v1/network-clear
+
+Response:
+{
+  "success": true,
+  "cleared": true
+}
+```
+
+### `networkSelect`
+Select a request for inspection.
+
+The current implementation accepts either `index` or `urlPattern`. If both are omitted, the endpoint returns `MISSING_PARAM`.
+
+```json
+POST /v1/network-select
+{
+  "index": 1
+}
+
+Response:
+{
+  "success": true,
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "method": "POST",
+  "url": "https://api.example.com/data",
+  "statusCode": 500,
+  "contentType": "application/json",
+  "category": "JSON",
+  "initiator": "js",
+  "requestHeaders": {
+    "Content-Type": "application/json"
+  },
+  "responseHeaders": {
+    "Content-Type": "application/json"
+  },
+  "requestBody": "{\"query\":\"status\"}",
+  "responseBody": "{\"error\":\"Internal Server Error\"}",
+  "startTime": "2026-04-13T10:35:12Z",
+  "duration": 2340,
+  "size": 128
+}
+```
+
+You can also select by URL substring:
+
+```json
+POST /v1/network-select
+{
+  "urlPattern": "/data"
+}
+```
+
 ### `getResourceTimeline`
 Get a chronological timeline of all page resources with load ordering — useful for understanding page load performance and identifying bottlenecks.
 
@@ -214,6 +401,60 @@ Response:
     {"url": "https://example.com/logo.svg", "type": "image", "start": 450, "end": 480, "status": 200},
     {"url": "https://api.example.com/data", "type": "fetch", "start": 500, "end": 2840, "status": 500}
   ]
+}
+```
+
+### `getWebSockets`
+List the active WebSocket connections visible to the current page. The bridge wraps the page `WebSocket` constructor at document start and tracks each live connection's current state and message counters.
+
+```json
+POST /v1/get-websockets
+
+Response:
+{
+  "success": true,
+  "connections": [
+    {
+      "url": "wss://example.com/socket",
+      "readyState": 1,
+      "protocol": "graphql-transport-ws",
+      "messagesSent": 12,
+      "messagesReceived": 18,
+      "createdAt": "2026-04-13T09:15:02.111Z"
+    }
+  ],
+  "count": 1
+}
+```
+
+### `getWebSocketMessages`
+Get recent WebSocket messages captured for active connections. Messages are normalized to bounded string previews and include direction and timestamp. Use `connectionIndex` to scope the response to one connection from `getWebSockets`.
+
+```json
+POST /v1/get-websocket-messages
+{
+  "connectionIndex": null,
+  "limit": 100
+}
+
+Response:
+{
+  "success": true,
+  "messages": [
+    {
+      "connectionIndex": 0,
+      "direction": "sent",
+      "data": "{\"type\":\"ping\"}",
+      "timestamp": "2026-04-13T09:15:05.444Z"
+    },
+    {
+      "connectionIndex": 0,
+      "direction": "received",
+      "data": "{\"type\":\"pong\"}",
+      "timestamp": "2026-04-13T09:15:05.890Z"
+    }
+  ],
+  "count": 2
 }
 ```
 

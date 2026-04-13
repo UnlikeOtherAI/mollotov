@@ -95,23 +95,41 @@ final class HTTPServer: @unchecked Sendable {
         let path = parts.count > 1 ? String(parts[1]) : "/"
 
         var statusCode = 200
-        var responseBody: [String: Any]
+        var responseData = Data()
+        var contentType = "application/json"
 
         if httpMethod == "POST", path.hasPrefix("/v1/") {
             let method = String(path.dropFirst("/v1/".count))
-            let jsonBody = parseJSON(body)
+            guard let jsonBody = parseJSON(body) else {
+                statusCode = 400
+                responseData = (try? JSONSerialization.data(
+                    withJSONObject: errorResponse(code: "INVALID_JSON", message: "Request body is not valid JSON")
+                )) ?? Data("{}".utf8)
+                let response = buildHTTPResponse(statusCode: statusCode, body: responseData, contentType: contentType)
+                connection.send(content: response, completion: .contentProcessed { _ in
+                    connection.cancel()
+                })
+                return
+            }
             let (code, result) = await router.handle(method: method, body: jsonBody)
             statusCode = code
-            responseBody = result
+            responseData = (try? JSONSerialization.data(withJSONObject: result)) ?? Data("{}".utf8)
+        } else if httpMethod == "GET", path == "/debug/coordinate-calibration" {
+            if let page = coordinateCalibrationPage() {
+                responseData = page
+                contentType = "text/html; charset=utf-8"
+            } else {
+                statusCode = 500
+                responseData = Data(#"{"error":"Coordinate calibration page missing from bundle"}"#.utf8)
+            }
         } else if path == "/health" {
-            responseBody = ["status": "ok"]
+            responseData = Data(#"{"status":"ok"}"#.utf8)
         } else {
             statusCode = 404
-            responseBody = ["error": "Not found"]
+            responseData = Data(#"{"error":"Not found"}"#.utf8)
         }
 
-        let jsonData = (try? JSONSerialization.data(withJSONObject: responseBody)) ?? Data("{}".utf8)
-        let response = buildHTTPResponse(statusCode: statusCode, body: jsonData)
+        let response = buildHTTPResponse(statusCode: statusCode, body: responseData, contentType: contentType)
         connection.send(content: response, completion: .contentProcessed { _ in
             connection.cancel()
         })
@@ -126,16 +144,23 @@ final class HTTPServer: @unchecked Sendable {
         return (requestLine, body)
     }
 
-    private func parseJSON(_ body: String) -> [String: Any] {
-        guard !body.isEmpty,
-              let data = body.data(using: .utf8),
+    private func parseJSON(_ body: String) -> [String: Any]? {
+        guard !body.isEmpty else { return [:] }
+        guard let data = body.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            return [:]
+            return nil
         }
         return json
     }
 
-    private func buildHTTPResponse(statusCode: Int, body: Data) -> Data {
+    private func coordinateCalibrationPage() -> Data? {
+        guard let url = Bundle.main.url(forResource: "coordinate-calibration", withExtension: "html") else {
+            return nil
+        }
+        return try? Data(contentsOf: url)
+    }
+
+    private func buildHTTPResponse(statusCode: Int, body: Data, contentType: String) -> Data {
         let statusText: String
         switch statusCode {
         case 200: statusText = "OK"
@@ -146,7 +171,7 @@ final class HTTPServer: @unchecked Sendable {
         }
         let header = """
         HTTP/1.1 \(statusCode) \(statusText)\r
-        Content-Type: application/json\r
+        Content-Type: \(contentType)\r
         Content-Length: \(body.count)\r
         Access-Control-Allow-Origin: *\r
         Connection: close\r

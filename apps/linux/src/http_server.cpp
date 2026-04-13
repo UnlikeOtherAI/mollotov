@@ -7,6 +7,8 @@
 
 #include <cerrno>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <sstream>
 #include <string_view>
 
@@ -38,11 +40,10 @@ std::string HttpStatusText(int status) {
   }
 }
 
-std::string JsonResponse(int status, const json& payload) {
-  const std::string body = payload.dump();
+std::string TextResponse(int status, std::string_view body, std::string_view content_type) {
   std::ostringstream stream;
   stream << "HTTP/1.1 " << status << ' ' << HttpStatusText(status) << "\r\n"
-         << "Content-Type: application/json\r\n"
+         << "Content-Type: " << content_type << "\r\n"
          << "Content-Length: " << body.size() << "\r\n"
          << "Connection: close\r\n"
          << "Access-Control-Allow-Origin: *\r\n"
@@ -50,6 +51,31 @@ std::string JsonResponse(int status, const json& payload) {
          << "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n\r\n"
          << body;
   return stream.str();
+}
+
+std::string JsonResponse(int status, const json& payload) {
+  const std::string body = payload.dump();
+  return TextResponse(status, body, "application/json");
+}
+
+std::filesystem::path CurrentExecutablePath() {
+  std::error_code error;
+  const std::filesystem::path path = std::filesystem::read_symlink("/proc/self/exe", error);
+  return error ? std::filesystem::path() : path;
+}
+
+std::filesystem::path CoordinateCalibrationPagePath() {
+  return CurrentExecutablePath().parent_path() / "diagnostics" / "coordinate-calibration.html";
+}
+
+std::string ReadFile(const std::filesystem::path& path) {
+  std::ifstream stream(path);
+  if (!stream.good()) {
+    return std::string();
+  }
+  std::ostringstream buffer;
+  buffer << stream.rdbuf();
+  return buffer.str();
 }
 
 std::string ReadRequest(int fd) {
@@ -201,29 +227,43 @@ void HttpServer::AcceptLoop() {
     stream >> method >> path;
 
     int status = 200;
-    json payload = json::object();
+    std::string response;
     if (method == "OPTIONS") {
-      status = 204;
+      response = TextResponse(204, "", "text/plain; charset=utf-8");
     } else if (method == "GET" && path == "/health") {
-      payload = {{"status", "ok"}};
+      response = JsonResponse(200, {{"status", "ok"}});
+    } else if (method == "GET" && path == "/debug/coordinate-calibration") {
+      const std::string page = ReadFile(CoordinateCalibrationPagePath());
+      if (page.empty()) {
+        status = 500;
+        response = JsonResponse(
+            status,
+            {
+                {"success", false},
+                {"error", {{"code", "INTERNAL_ERROR"},
+                           {"message", "Coordinate calibration page missing from build output"}}},
+            });
+      } else {
+        response = TextResponse(200, page, "text/html; charset=utf-8");
+      }
     } else if (method == "POST" && path.rfind("/v1/", 0) == 0) {
       const json body = ParseJsonBody(request);
-      payload = handler_ != nullptr ? handler_(path.substr(4), body, &status) : json::object();
+      const json payload = handler_ != nullptr ? handler_(path.substr(4), body, &status) : json::object();
+      response = JsonResponse(status, payload);
     } else if (method == "GET" && path == "/mcp") {
       status = 501;
-      payload = {
+      response = JsonResponse(status, {
           {"success", false},
           {"error", {{"code", "PLATFORM_NOT_SUPPORTED"}, {"message", "MCP HTTP is not implemented yet"}}},
-      };
+      });
     } else {
       status = method == "GET" || method == "POST" ? 404 : 405;
-      payload = {
+      response = JsonResponse(status, {
           {"success", false},
           {"error", {{"code", "NOT_FOUND"}, {"message", "Unknown route"}}},
-      };
+      });
     }
 
-    const std::string response = JsonResponse(status, payload);
     send(client_fd, response.data(), response.size(), 0);
     shutdown(client_fd, SHUT_RDWR);
     close(client_fd);

@@ -1,6 +1,9 @@
 #include "kelpie/history_store.h"
 
 #include <algorithm>
+#include <array>
+#include <cctype>
+#include <string_view>
 #include <unordered_set>
 
 #include <nlohmann/json.hpp>
@@ -11,6 +14,37 @@ namespace kelpie {
 namespace {
 
 using json = nlohmann::json;
+
+std::string NormalizeCompletionQuery(const std::string& query) {
+  std::string normalized = kelpie::store_support::Lowercase(kelpie::store_support::Trim(query));
+  normalized.erase(
+      std::remove_if(normalized.begin(), normalized.end(), [](unsigned char ch) {
+        return std::isspace(ch) != 0;
+      }),
+      normalized.end());
+  return normalized;
+}
+
+std::string StripScheme(std::string_view value) {
+  const std::size_t scheme_pos = value.find("://");
+  if (scheme_pos == std::string_view::npos) {
+    return std::string(value);
+  }
+  return std::string(value.substr(scheme_pos + 3));
+}
+
+std::string StripLeadingWww(std::string value) {
+  if (value.rfind("www.", 0) == 0) {
+    value.erase(0, 4);
+  }
+  return value;
+}
+
+std::array<std::string, 3> CompletionCandidates(const std::string& url) {
+  const std::string lowered = kelpie::store_support::Lowercase(url);
+  const std::string no_scheme = StripScheme(lowered);
+  return {lowered, no_scheme, StripLeadingWww(no_scheme)};
+}
 
 json HistoryEntryToJson(const HistoryEntry& entry) {
   return json{
@@ -78,6 +112,25 @@ void HistoryStore::UpdateLatestTitle(const std::string& url, const std::string& 
     return;
   }
   latest.title = trimmed_title;
+}
+
+std::string HistoryStore::BestUrlCompletion(const std::string& query) const {
+  const std::string normalized_query = NormalizeCompletionQuery(query);
+  if (normalized_query.empty()) {
+    return std::string();
+  }
+
+  std::lock_guard<std::mutex> lock(mutex_);
+  for (auto it = entries_.rbegin(); it != entries_.rend(); ++it) {
+    for (const std::string& candidate : CompletionCandidates(it->url)) {
+      const std::string normalized_candidate = NormalizeCompletionQuery(candidate);
+      if (normalized_candidate.rfind(normalized_query, 0) == 0) {
+        return it->url;
+      }
+    }
+  }
+
+  return std::string();
 }
 
 void HistoryStore::LoadJson(const std::string& json_text) {

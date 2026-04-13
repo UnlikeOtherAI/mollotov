@@ -1,8 +1,154 @@
 # Kelpie API — Browser Management Methods
 
-Dialogs/alerts, tabs, iframes, cookies/storage, clipboard, geolocation, JS evaluation.
+Dialogs/alerts, tabs, iframes, cookies/storage, clipboard, geolocation, JS evaluation, bookmarks, history, fullscreen.
 
 For protocol details, errors, and MCP tool names, see [README.md](README.md).
+
+---
+
+## Bookmarks
+
+### `bookmarksAdd`
+Add a bookmark and return the full bookmark list.
+
+If `title` is omitted, Kelpie stores the `url` as the title.
+
+```json
+POST /v1/bookmarks-add
+{
+  "url": "https://example.com/docs",
+  "title": "Example Docs"
+}
+
+Response:
+{
+  "success": true,
+  "bookmarks": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "title": "Example Docs",
+      "url": "https://example.com/docs",
+      "createdAt": "2026-04-13T10:20:30Z"
+    }
+  ]
+}
+```
+
+### `bookmarksRemove`
+Remove a bookmark by bookmark UUID and return the remaining bookmark list.
+
+```json
+POST /v1/bookmarks-remove
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000"
+}
+
+Response:
+{
+  "success": true,
+  "bookmarks": []
+}
+```
+
+If `id` is missing or not a valid UUID, the endpoint returns:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "MISSING_PARAM",
+    "message": "id is required"
+  }
+}
+```
+
+### `bookmarksList`
+List all saved bookmarks.
+
+```json
+POST /v1/bookmarks-list
+
+Response:
+{
+  "success": true,
+  "bookmarks": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "title": "Example Docs",
+      "url": "https://example.com/docs",
+      "createdAt": "2026-04-13T10:20:30Z"
+    },
+    {
+      "id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+      "title": "Kelpie",
+      "url": "https://unlikeotherai.github.io/kelpie",
+      "createdAt": "2026-04-13T10:21:11Z"
+    }
+  ]
+}
+```
+
+### `bookmarksClear`
+Remove all saved bookmarks.
+
+```json
+POST /v1/bookmarks-clear
+
+Response:
+{
+  "success": true,
+  "cleared": true
+}
+```
+
+---
+
+## History
+
+### `historyList`
+List browsing history entries, newest first.
+
+`limit` is optional and defaults to `100`.
+
+```json
+POST /v1/history-list
+{
+  "limit": 2
+}
+
+Response:
+{
+  "success": true,
+  "entries": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "url": "https://example.com/docs",
+      "title": "Example Docs",
+      "timestamp": "2026-04-13T10:33:12Z"
+    },
+    {
+      "id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+      "url": "https://example.com/",
+      "title": "Example Domain",
+      "timestamp": "2026-04-13T10:31:04Z"
+    }
+  ],
+  "total": 24
+}
+```
+
+### `historyClear`
+Clear all browsing history.
+
+```json
+POST /v1/history-clear
+
+Response:
+{
+  "success": true,
+  "cleared": true
+}
+```
 
 ---
 
@@ -503,6 +649,41 @@ Response:
     "visibleInViewport": true,
     "obscuredByKeyboard": false
   }
+}
+```
+
+### `setFullscreen`
+Enable or disable fullscreen mode for the desktop browser window.
+
+This endpoint is macOS-only. It returns `NO_WINDOW` if there is no active browser window.
+
+If `enabled` is omitted, Kelpie treats it as `true`.
+
+```json
+POST /v1/set-fullscreen
+{
+  "enabled": true
+}
+
+Response:
+{
+  "success": true,
+  "enabled": true
+}
+```
+
+### `getFullscreen`
+Get whether the desktop browser window is currently fullscreen.
+
+This endpoint is macOS-only. It returns `NO_WINDOW` if there is no active browser window.
+
+```json
+POST /v1/get-fullscreen
+
+Response:
+{
+  "success": true,
+  "enabled": false
 }
 ```
 

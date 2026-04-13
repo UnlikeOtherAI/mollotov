@@ -242,6 +242,8 @@ Response:
 ### `setHome`
 Set the device's home page URL. Persisted across app restarts.
 
+If `url` is missing or empty, the endpoint returns `MISSING_PARAM`.
+
 ```json
 POST /v1/set-home
 {
@@ -258,6 +260,9 @@ Response:
 ### `getHome`
 Get the current home page URL.
 
+If no custom home page has been set, Kelpie returns the default home URL:
+`https://unlikeotherai.github.io/kelpie`
+
 ```json
 POST /v1/get-home
 
@@ -265,35 +270,6 @@ Response:
 {
   "success": true,
   "url": "https://example.com"
-}
-```
-
-### `setFullscreen`
-Enable or disable fullscreen mode for the desktop browser window.
-
-```json
-POST /v1/set-fullscreen
-{
-  "enabled": true
-}
-
-Response:
-{
-  "success": true,
-  "enabled": true
-}
-```
-
-### `getFullscreen`
-Get whether the desktop browser window is currently fullscreen.
-
-```json
-POST /v1/get-fullscreen
-
-Response:
-{
-  "success": true,
-  "enabled": false
 }
 ```
 
@@ -452,6 +428,8 @@ Response:
 Click an element by selector. Prefer this over raw coordinate taps whenever you can identify the target semantically.
 
 Selectors returned from `find-element`, `find-button`, `find-link`, `find-input`, `screenshot-annotated`, and related LLM endpoints are meant to be fed back into this endpoint directly.
+
+The `selector` field also accepts visible text content. Kelpie tries CSS selector resolution first; if that throws or finds nothing, it falls back to matching interactive elements by trimmed text content case-insensitively, then by partial text match.
 
 ```json
 POST /v1/click

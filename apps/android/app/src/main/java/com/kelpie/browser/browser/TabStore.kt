@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.webkit.WebView
 import com.kelpie.browser.handlers.HandlerContext
+import com.kelpie.browser.handlers.WebSocketHandler
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -21,43 +22,27 @@ class TabStore(
     val activeTab: BrowserTab?
         get() = _tabs.value.firstOrNull { it.id == _activeTabId.value }
 
-    var pendingRestorationUrls: List<String>? = null
-        private set
-    private var pendingRestorationActiveIndex: Int = 0
-
     init {
         val session = SessionStore.load(context)
-        val showStartPage =
-            !context
-                .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                .getBoolean(KEY_HIDE_WELCOME, false)
-        val tab = createTab(isStartPage = session != null || showStartPage)
-        _tabs.value = listOf(tab)
-        _activeTabId.value = tab.id
-        if (session == null && !showStartPage) {
-            tab.webView.loadUrl(HomeStore.url)
-        }
         if (session != null) {
-            pendingRestorationUrls = session.first
-            pendingRestorationActiveIndex = session.second
+            val restoredTabs = restoredTabs(session.first)
+            if (restoredTabs.isNotEmpty()) {
+                _tabs.value = restoredTabs
+                _activeTabId.value = restoredTabs[minOf(session.second, restoredTabs.size - 1)].id
+            }
         }
-    }
-
-    fun restoreSession() {
-        val urls = pendingRestorationUrls ?: return
-        val activeIndex = pendingRestorationActiveIndex
-        _tabs.value.forEach { it.webView.destroy() }
-        val newTabs = urls.map { url -> createTab(isStartPage = false).also { it.webView.loadUrl(url) } }
-        _tabs.value = newTabs
-        _activeTabId.value = newTabs[minOf(activeIndex, newTabs.size - 1)].id
-        pendingRestorationUrls = null
-        pendingRestorationActiveIndex = 0
-        SessionStore.clear(context)
-    }
-
-    fun discardPendingSession() {
-        pendingRestorationUrls = null
-        SessionStore.clear(context)
+        if (_tabs.value.isEmpty()) {
+            val showStartPage =
+                !context
+                    .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    .getBoolean(KEY_HIDE_WELCOME, false)
+            val tab = createTab(isStartPage = showStartPage)
+            _tabs.value = listOf(tab)
+            _activeTabId.value = tab.id
+            if (!showStartPage) {
+                tab.webView.loadUrl(HomeStore.url)
+            }
+        }
     }
 
     fun addTab(url: String? = null): BrowserTab {
@@ -66,26 +51,40 @@ class TabStore(
         _activeTabId.value = tab.id
         if (url != null) {
             tab.isStartPage = false
+            tab.currentUrl = url
             tab.webView.loadUrl(url)
         }
+        persistSession()
         return tab
     }
 
     fun closeTab(id: String) {
-        if (_tabs.value.size <= 1) return
         val index = _tabs.value.indexOfFirst { it.id == id }
         if (index < 0) return
+
+        if (_tabs.value.size == 1) {
+            val replacement = createTab()
+            val currentTab = _tabs.value.first()
+            currentTab.webView.destroy()
+            _tabs.value = listOf(replacement)
+            _activeTabId.value = replacement.id
+            persistSession()
+            return
+        }
+
         val removed = _tabs.value[index]
         _tabs.value = _tabs.value.filterNot { it.id == id }
         removed.webView.destroy()
         if (_activeTabId.value == id) {
             _activeTabId.value = _tabs.value[minOf(index, _tabs.value.size - 1)].id
         }
+        persistSession()
     }
 
     fun selectTab(id: String) {
         if (_tabs.value.any { it.id == id }) {
             _activeTabId.value = id
+            persistSession()
         }
     }
 
@@ -100,9 +99,22 @@ class TabStore(
                 settings.setSupportMultipleWindows(false)
                 settings.mediaPlaybackRequiresUserGesture = false
                 settings.userAgentString = BROWSER_USER_AGENT
-                addJavascriptInterface(JsBridge(handlerContext, null), "KelpieBridge")
+                addJavascriptInterface(JsBridge(handlerContext), "KelpieBridge")
+                WebSocketHandler.installBridge(this)
             }
         return BrowserTab(webView = webView, isStartPage = isStartPage)
+    }
+
+    private fun restoredTabs(urls: List<String>): List<BrowserTab> =
+        urls.map { url ->
+            createTab(isStartPage = false).also {
+                it.currentUrl = url
+                it.webView.loadUrl(url)
+            }
+        }
+
+    fun persistSession() {
+        SessionStore.save(context, _tabs.value, _activeTabId.value)
     }
 
     companion object {

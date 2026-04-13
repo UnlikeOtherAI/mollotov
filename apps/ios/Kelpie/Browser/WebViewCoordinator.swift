@@ -21,6 +21,7 @@ struct WebViewContainer: UIViewRepresentable {
             let ucc = config.userContentController
             ucc.addUserScript(NetworkBridge.bridgeScript)
             ucc.add(handlerContext, name: "kelpieNetwork")
+            ucc.addUserScript(WebSocketBridge.bridgeScript)
             ucc.addUserScript(ConsoleHandler.bridgeScript)
             ucc.add(handlerContext, name: "kelpieConsole")
             ucc.add(handlerContext, name: "kelpie3DSnapshot")

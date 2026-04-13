@@ -173,6 +173,8 @@ kelpie screenshot --device "My iPhone" --base64     # return raw base64 instead 
 
 **Default behavior: saves to file, returns the path.** Without `--output`, the CLI auto-generates a filename in the current directory using the pattern `{device}-{timestamp}.png` (e.g., `my-iphone-2026-03-30T10-15-32.png`). The JSON response contains the file path — never base64 — so LLMs don't waste tokens on image data.
 
+For LLM and MCP use, prefer viewport/CSS-pixel screenshots unless you explicitly need native renderer detail. The HTTP API now includes viewport mapping metadata (`viewportWidth`, `viewportHeight`, `devicePixelRatio`, `imageScaleX`, `imageScaleY`) so image coordinates can be converted back into tap coordinates when needed.
+
 | Flag | Behavior |
 |---|---|
 | *(no flag)* | Auto-save to `./{device}-{timestamp}.png`, return `{"file": "..."}` |
@@ -220,6 +222,14 @@ kelpie attributes "#email-input" --device "My iPhone"
 
 ## Interaction Commands
 
+Prefer semantic interaction over raw coordinates:
+
+1. Use `kelpie a11y`, `kelpie find-element`, `kelpie find-button`, or `kelpie find-input` to locate the target.
+2. Use `kelpie click` or `kelpie fill` with the returned selector.
+3. If you already know the selector but want visual confirmation, use `kelpie highlight show` and then `kelpie screenshot` or `kelpie annotate`.
+4. If semantic targeting fails, use `kelpie annotate` plus `kelpie click-annotation` / `kelpie fill-annotation`.
+5. Use `kelpie tap` only when the semantic and annotated flows are not enough.
+
 ### `kelpie click <selector>`
 
 ```bash
@@ -231,6 +241,8 @@ kelpie click "#submit-btn" --device "My iPhone"
 ```bash
 kelpie tap 195 420 --device "My iPhone"
 ```
+
+Use this only as a fallback. Coordinates are sensitive to viewport changes, scrolling, and overlays.
 
 ### `kelpie fill <selector> <value>`
 
@@ -277,6 +289,8 @@ kelpie commentary hide --device "My iPhone"
 kelpie highlight show "#signup" --device "My iPhone" --animation draw --color "#EF4444"
 kelpie highlight hide --device "My iPhone"
 ```
+
+Use `--duration 0` if you want the highlight to stay visible while you capture a screenshot and ask an LLM to reason over the image using that box/ring as the visual anchor.
 
 ---
 
@@ -407,6 +421,8 @@ kelpie a11y --device "My iPhone" --selector "main"
 ### `kelpie annotate`
 Take an annotated screenshot with numbered labels on interactive elements. Same file-saving behavior as `screenshot` — defaults to auto-save, returns the file path.
 
+For LLM use, prefer viewport/CSS-pixel output here too. Annotation rectangles are reported in viewport CSS pixels, not image pixels, so the index list stays stable even if the image is returned at native scale.
+
 ```bash
 kelpie annotate --device "My iPhone"
 kelpie annotate --device "My iPhone" --output ./annotated.png
@@ -420,6 +436,8 @@ Click an element by its annotation index from the last `annotate` call.
 ```bash
 kelpie click-index 5 --device "My iPhone"
 ```
+
+This uses the same coordinate-bearing activation path as `kelpie click`. If the annotated target exists but is hidden or covered at its center point, the command fails instead of activating the wrong element.
 
 ### `kelpie fill-index <index> <value>`
 Fill an element by its annotation index.
@@ -490,6 +508,8 @@ kelpie dialog auto --off --device "My iPhone"              # disable
 
 ### `kelpie tabs`
 List all open tabs.
+
+Open tabs and their current URLs are restored automatically when the browser app restarts, so `kelpie tabs` reflects the live restored session rather than a fresh blank state after relaunch.
 
 ```bash
 kelpie tabs --device "My iPhone"
@@ -759,6 +779,14 @@ Get viewport dimensions.
 kelpie viewport --device "My iPhone"
 ```
 
+### Platform utilities
+| Command | What it does | Platforms |
+|---|---|---|
+| `kelpie toast <message>` | Show a toast overlay on the device | All |
+| `kelpie debug-screens` / `kelpie debug-overlay get` / `kelpie debug-overlay set <enabled>` | Inspect or toggle the screen debug overlay | iOS |
+| `kelpie safari-auth [url]` | Start a browser-backed authentication flow | Apple + Android |
+| `kelpie orientation get` / `kelpie orientation set <mode>` / `kelpie renderer get` / `kelpie renderer set <engine>` | Read or change orientation / renderer state | Orientation: iOS, Android, macOS. Renderer: macOS |
+
 ---
 
 ## Group Commands
@@ -922,7 +950,7 @@ kelpie ai ask "describe what you see" --device mac -c screenshot
 Every command includes structured help designed for LLMs.
 
 ### `kelpie --llm-help`
-Outputs a complete machine-readable reference of all commands, their parameters, expected inputs/outputs, and usage guidance.
+Outputs a complete machine-readable reference of all commands, their parameters, expected inputs/outputs, usage guidance, and issue-reporting instructions for unexpected failures or missing capabilities.
 
 ```bash
 kelpie --llm-help                   # full reference
@@ -934,7 +962,7 @@ kelpie group --llm-help             # help for group commands
 - Command purpose and when to use it
 - Full parameter schema with types and defaults
 - Example request/response pairs
-- Common error scenarios and how to handle them
+- Common error scenarios, failure-reporting guidance, and the repo issue URL
 - Related commands and suggested workflows
 
 ### `kelpie explain <command>`

@@ -87,7 +87,7 @@ Each browser app has four internal layers:
 
 **Command Handler** — Translates incoming HTTP requests into native browser calls. Android uses CDP for most operations (no scripts enter the page). iOS uses native `evaluateJavaScript` calls and, for features WebKit doesn't expose natively, ephemeral bridge scripts that are cleared on navigation (see [iOS bridge scripts](#ios--no-injection-dom-access)). macOS routes the same handlers through the active renderer and adds `set-renderer` / `get-renderer` so the UI and API can switch engines at runtime.
 
-**Network Layer** — Embedded HTTP server (Swifter/Telegraph on iOS, Ktor on Android, Network.framework-based server on macOS, native socket server on Linux), MCP server over the same transport, and mDNS service advertisement.
+**Network Layer** — Embedded HTTP server (Swifter/Telegraph on iOS, Ktor on Android, Network.framework-based server on macOS, native socket server on Linux), MCP server over the same transport, and mDNS service advertisement. On macOS and Linux, advertisement stays tied to the long-lived server process. On iOS and Android, the app reasserts advertisement on foreground entry so discovery recovers after background suspension.
 
 ### Shared Native Libraries (`native/`)
 
@@ -139,6 +139,8 @@ Cross-platform C++17 static libraries with C ABI, shared by all platforms via br
 
 **MCP Server** — Wraps all CLI commands as MCP tools. An LLM connected via MCP can discover devices, send commands, and receive results without going through the CLI interface.
 
+**Session Persistence** — The tabbed browser shells persist their open tabs and active URL set as the session changes, then restore that session automatically on the next launch. This is separate from the configurable home page: a real saved session wins over the home/start page.
+
 ---
 
 ## Data Flow
@@ -150,11 +152,14 @@ LLM → CLI (kelpie click --device iphone "#submit")
   → Device Manager (resolve "iphone" → 192.168.1.42:8420)
   → HTTP POST 192.168.1.42:8420/v1/click {selector: "#submit"}
   → Browser Command Handler
-  → WKWebView.evaluateJavaScript("document.querySelector('#submit')")
-  → Native tap at element coordinates
-  → HTTP 200 {success: true, element: {tag: "button", text: "Submit"}}
+  → Resolve element, hit-test its rendered center, dispatch coordinate-bearing pointer + mouse events
+  → HTTP 200 {success: true, element: {tag: "button", text: "Submit", rect: {...}}}
   → CLI formats and returns result
 ```
+
+For screenshot-driven fallbacks, the browser returns explicit viewport mapping metadata with each screenshot: image size, viewport size, device pixel ratio, and computed image-to-viewport scale factors. LLM-facing flows prefer CSS-pixel/non-retina screenshots so the image payload is smaller and the coordinate system lines up with interaction APIs more directly.
+
+For raw coordinate fallbacks, the browser also exposes a bundled diagnostic page at `GET /debug/coordinate-calibration`. That page calls `get-tap-calibration`, `set-tap-calibration`, and `tap` against the same local HTTP server, which makes it possible to measure additive coordinate drift and persist exact X/Y offsets per app install.
 
 ### Group Command
 

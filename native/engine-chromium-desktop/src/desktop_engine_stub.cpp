@@ -56,6 +56,35 @@ bool DesktopEngine::ResizeViewport(int width, int height) {
   return true;
 }
 
+bool DesktopEngine::SendFocusEvent(bool focused) {
+  (void)focused;
+  return false;
+}
+
+bool DesktopEngine::SendMouseMoveEvent(int x, int y, bool mouse_leave) {
+  (void)x;
+  (void)y;
+  (void)mouse_leave;
+  return false;
+}
+
+bool DesktopEngine::SendMouseClickEvent(int x, int y, int button, bool mouse_up, int click_count) {
+  (void)x;
+  (void)y;
+  (void)button;
+  (void)mouse_up;
+  (void)click_count;
+  return false;
+}
+
+bool DesktopEngine::SendMouseWheelEvent(int x, int y, int delta_x, int delta_y) {
+  (void)x;
+  (void)y;
+  (void)delta_x;
+  (void)delta_y;
+  return false;
+}
+
 void DesktopEngine::SetConsoleSink(JsonEventSink) {}
 
 void DesktopEngine::SetNetworkSink(JsonEventSink) {}

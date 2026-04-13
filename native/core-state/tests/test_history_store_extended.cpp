@@ -12,14 +12,13 @@ namespace {
 void TestUrlNormalizationBugs() {
   std::cout << "Running TestUrlNormalizationBugs..." << std::endl;
 
-  // Bug 1: Multiple trailing slashes are not handled correctly.
-  // The current implementation only removes one slash.
-  assert(kelpie::store_support::NormalizeUrl("http://a.com/b//") == "http://a.com/b");
-  assert(kelpie::store_support::NormalizeUrl("http://a.com/b///") == "http://a.com/b");
+  // Collapse only the implicit root slash on bare origins.
+  assert(kelpie::store_support::NormalizeUrl("https://a.com/") == "https://a.com");
+  assert(kelpie::store_support::NormalizeUrl("http://a.com/") == "http://a.com");
 
-  // Bug 2: Path of only slashes
-  assert(kelpie::store_support::NormalizeUrl("//") == "/");
-  assert(kelpie::store_support::NormalizeUrl("///") == "/");
+  // Resource paths must stay distinct.
+  assert(kelpie::store_support::NormalizeUrl("http://a.com/b/") == "http://a.com/b/");
+  assert(kelpie::store_support::NormalizeUrl("http://a.com/b//") == "http://a.com/b//");
 
   std::cout << "TestUrlNormalizationBugs PASSED" << std::endl;
 }
@@ -33,8 +32,8 @@ void TestUrlNormalizationEdgeCases() {
     // Case: empty query, non-empty fragment
     assert(kelpie::store_support::NormalizeUrl("https://a.com?#frag") == "https://a.com#frag");
 
-    // Case: path with trailing slash
-    assert(kelpie::store_support::NormalizeUrl("/a/b/") == "/a/b");
+    // Case: path with trailing slash stays unchanged
+    assert(kelpie::store_support::NormalizeUrl("/a/b/") == "/a/b/");
 
     // Case: root path with trailing slash
     assert(kelpie::store_support::NormalizeUrl("https://a.com/") == "https://a.com");
@@ -42,8 +41,8 @@ void TestUrlNormalizationEdgeCases() {
     // Case: URL with only a scheme — "file:///" has no path, preserve the "/"
     assert(kelpie::store_support::NormalizeUrl("file:///") == "file:///");
 
-    // Case: URL with just domain and multiple slashes — all collapse to domain
-    assert(kelpie::store_support::NormalizeUrl("http://a.com//") == "http://a.com");
+    // Case: malformed paths with extra slashes are preserved
+    assert(kelpie::store_support::NormalizeUrl("http://a.com//") == "http://a.com//");
 
     std::cout << "TestUrlNormalizationEdgeCases PASSED" << std::endl;
 }

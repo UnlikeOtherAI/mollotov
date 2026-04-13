@@ -45,17 +45,17 @@ class BrowserManagementHandler(
         router.register("get-dialog") { getDialog() }
         router.register("handle-dialog") { handleDialog(it) }
         router.register("set-dialog-auto-handler") { setDialogAutoHandler(it) }
-        // Tabs (stub)
+        // Tabs
         router.register("get-tabs") { getTabs() }
-        router.register("new-tab") { successResponse(mapOf("tab" to mapOf("id" to 0, "url" to (it["url"] ?: ""), "title" to "", "active" to true), "tabCount" to 1)) }
-        router.register("switch-tab") { successResponse(mapOf("tab" to mapOf("id" to 0, "url" to "", "title" to "", "active" to true))) }
-        router.register("close-tab") { successResponse(mapOf("closed" to 1, "tabCount" to 1)) }
-        // Geolocation & Interception (stubs for now — CDP required for full impl)
-        router.register("set-geolocation") { successResponse(mapOf("set" to true)) }
-        router.register("clear-geolocation") { successResponse(mapOf("cleared" to true)) }
-        router.register("set-request-interception") { successResponse(mapOf("activeRules" to 0)) }
-        router.register("get-intercepted-requests") { successResponse(mapOf("requests" to emptyList<Any>(), "count" to 0)) }
-        router.register("clear-request-interception") { successResponse(mapOf("cleared" to 0)) }
+        router.register("new-tab") { newTab(it) }
+        router.register("switch-tab") { switchTab(it) }
+        router.register("close-tab") { closeTab(it) }
+        // Geolocation & interception are not implemented on Android yet.
+        router.register("set-geolocation") { unsupported("set-geolocation") }
+        router.register("clear-geolocation") { unsupported("clear-geolocation") }
+        router.register("set-request-interception") { unsupported("set-request-interception") }
+        router.register("get-intercepted-requests") { unsupported("get-intercepted-requests") }
+        router.register("clear-request-interception") { unsupported("clear-request-interception") }
     }
 
     private suspend fun getCookies(body: Map<String, Any?>): Map<String, Any?> {
@@ -270,6 +270,12 @@ class BrowserManagementHandler(
         )
     }
 
+    private fun unsupported(method: String): Map<String, Any?> =
+        errorResponse(
+            "PLATFORM_NOT_SUPPORTED",
+            "$method is not implemented on Android yet",
+        )
+
     private suspend fun isElementObscured(body: Map<String, Any?>): Map<String, Any?> {
         val selector = body["selector"] as? String ?: return errorResponse("MISSING_PARAM", "selector is required")
         val safe = selector.replace("'", "\\'")
@@ -376,8 +382,90 @@ class BrowserManagementHandler(
     }
 
     private suspend fun getTabs(): Map<String, Any?> {
-        val wv = ctx.webView
-        val tab = mapOf("id" to 0, "url" to (wv?.url ?: ""), "title" to (wv?.title ?: ""), "active" to true)
-        return successResponse(mapOf("tabs" to listOf(tab), "count" to 1, "activeTab" to 0))
+        val tabStore = ctx.tabStore
+        if (tabStore == null) {
+            val wv = ctx.webView
+            val tab =
+                mapOf(
+                    "id" to "0",
+                    "url" to (wv?.url ?: ""),
+                    "title" to (wv?.title ?: ""),
+                    "active" to true,
+                    "isLoading" to false,
+                )
+            return successResponse(mapOf("tabs" to listOf(tab), "count" to 1, "activeTab" to "0"))
+        }
+
+        val tabs =
+            tabStore.tabs.value.map { tab ->
+                tabInfo(tab = tab, activeTabId = tabStore.activeTabId.value)
+            }
+        return successResponse(
+            mapOf(
+                "tabs" to tabs,
+                "count" to tabs.size,
+                "activeTab" to (tabStore.activeTabId.value ?: ""),
+            ),
+        )
     }
+
+    private fun newTab(body: Map<String, Any?>): Map<String, Any?> {
+        val tabStore = ctx.tabStore ?: return errorResponse("NO_TAB_STORE", "Tab store not available")
+        val url = body["url"] as? String
+        val tab = tabStore.addTab(url)
+        return successResponse(
+            mapOf(
+                "tab" to tabInfo(tab = tab, activeTabId = tabStore.activeTabId.value),
+                "tabCount" to tabStore.tabs.value.size,
+            ),
+        )
+    }
+
+    private fun switchTab(body: Map<String, Any?>): Map<String, Any?> {
+        val tabStore = ctx.tabStore ?: return errorResponse("NO_TAB_STORE", "Tab store not available")
+        val tabId =
+            parseTabId(body)
+                ?: return errorResponse("MISSING_PARAM", "tabId (UUID string) is required")
+        val tab =
+            tabStore.tabs.value.firstOrNull { it.id == tabId }
+                ?: return errorResponse("TAB_NOT_FOUND", "No tab with id $tabId")
+        tabStore.selectTab(tabId)
+        return successResponse(
+            mapOf(
+                "tab" to tabInfo(tab = tab, activeTabId = tabStore.activeTabId.value),
+            ),
+        )
+    }
+
+    private fun closeTab(body: Map<String, Any?>): Map<String, Any?> {
+        val tabStore = ctx.tabStore ?: return errorResponse("NO_TAB_STORE", "Tab store not available")
+        val tabId =
+            parseTabId(body)
+                ?: return errorResponse("MISSING_PARAM", "tabId (UUID string) is required")
+        val exists = tabStore.tabs.value.any { it.id == tabId }
+        if (!exists) {
+            return errorResponse("TAB_NOT_FOUND", "No tab with id $tabId")
+        }
+        tabStore.closeTab(tabId)
+        return successResponse(
+            mapOf(
+                "closed" to tabId,
+                "tabCount" to tabStore.tabs.value.size,
+            ),
+        )
+    }
+
+    private fun parseTabId(body: Map<String, Any?>): String? = body["tabId"] as? String ?: body["id"] as? String
+
+    private fun tabInfo(
+        tab: com.kelpie.browser.browser.BrowserTab,
+        activeTabId: String?,
+    ): Map<String, Any?> =
+        mapOf(
+            "id" to tab.id,
+            "url" to tab.currentUrl,
+            "title" to tab.pageTitle,
+            "active" to (tab.id == activeTabId),
+            "isLoading" to tab.isLoading,
+        )
 }

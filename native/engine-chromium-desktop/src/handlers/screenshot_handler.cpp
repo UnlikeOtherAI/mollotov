@@ -1,5 +1,7 @@
 #include "screenshot_handler.h"
 
+#include "kelpie/element_selector_script.h"
+
 namespace kelpie {
 
 ScreenshotHandler::ScreenshotHandler(DesktopHandlerRuntime runtime)
@@ -37,16 +39,17 @@ nlohmann::json ScreenshotHandler::Screenshot(const nlohmann::json&, bool annotat
   }
 
   const std::string script =
-      "(() => Array.from(document.querySelectorAll('a,button,input,select,textarea,[role=button]')).map((node, index) => {"
+      "(() => {" + ElementSelectorBuilderScript() +
+      "return Array.from(document.querySelectorAll('a,button,input,select,textarea,[role=button]')).map((node, index) => {"
       "const rect = node.getBoundingClientRect();"
       "return {"
       "index: index + 1,"
       "role: node.getAttribute('role') || (node.tagName || '').toLowerCase(),"
       "name: (node.innerText || node.textContent || node.getAttribute('aria-label') || '').trim(),"
-      "selector: (node.id ? ('#' + node.id) : (node.tagName || '').toLowerCase()),"
+      "selector: kelpieBuildSelector(node),"
       "rect: {x: rect.x, y: rect.y, width: rect.width, height: rect.height}"
       "};"
-      "}));";
+      "}); })()";
   response["annotations"] = RequireHandlerContext(runtime_).EvaluateJsReturningJson(script);
   return SuccessResponse(response);
 }

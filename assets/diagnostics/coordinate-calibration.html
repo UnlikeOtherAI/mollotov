@@ -1,0 +1,647 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Kelpie Coordinate Calibration</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #06121f;
+      --panel: rgba(8, 21, 36, 0.86);
+      --panel-border: rgba(125, 188, 255, 0.18);
+      --text: #e8f2ff;
+      --muted: #92aac4;
+      --accent: #5fd1ff;
+      --accent-strong: #14b8ff;
+      --target: #16a34a;
+      --requested: #f59e0b;
+      --applied: #ef4444;
+      --manual: #f8fafc;
+      --shadow: 0 24px 60px rgba(0, 0, 0, 0.32);
+      --safe-top: max(16px, env(safe-area-inset-top));
+      --safe-bottom: max(16px, env(safe-area-inset-bottom));
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at top left, rgba(20, 184, 255, 0.16), transparent 28%),
+        radial-gradient(circle at 80% 18%, rgba(45, 212, 191, 0.12), transparent 24%),
+        linear-gradient(180deg, #081525 0%, var(--bg) 100%);
+      color: var(--text);
+      font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    body {
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      gap: 12px;
+      padding: calc(var(--safe-top) + 4px) 12px calc(var(--safe-bottom) + 4px);
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(22px);
+      -webkit-backdrop-filter: blur(22px);
+    }
+
+    #metrics {
+      padding: 14px;
+      display: grid;
+      gap: 10px;
+    }
+
+    #metrics h1 {
+      margin: 0;
+      font-size: 18px;
+      letter-spacing: 0.01em;
+    }
+
+    #metrics p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 8px;
+    }
+
+    .metric {
+      min-height: 58px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .metric-label {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .metric-value {
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    #field {
+      position: relative;
+      overflow: hidden;
+      min-height: 0;
+      padding: 18px;
+    }
+
+    #field::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+      background-size: 56px 56px;
+      opacity: 0.42;
+      pointer-events: none;
+    }
+
+    #field-inner {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      height: 100%;
+      border-radius: 18px;
+      border: 1px dashed rgba(255, 255, 255, 0.16);
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      padding: 12px;
+    }
+
+    .target {
+      position: relative;
+      min-height: 0;
+      border-radius: 16px;
+      border: 1px solid rgba(95, 209, 255, 0.16);
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.015)),
+        rgba(255, 255, 255, 0.02);
+      overflow: hidden;
+    }
+
+    .target::before,
+    .target::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+
+    .target::before {
+      width: 2px;
+      height: 56px;
+      background: rgba(255, 255, 255, 0.18);
+    }
+
+    .target::after {
+      width: 56px;
+      height: 2px;
+      background: rgba(255, 255, 255, 0.18);
+    }
+
+    .target-tag {
+      position: absolute;
+      left: 12px;
+      top: 10px;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      text-transform: uppercase;
+    }
+
+    .target-coords {
+      position: absolute;
+      left: 12px;
+      bottom: 10px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    #overlay {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 50;
+    }
+
+    .marker {
+      position: absolute;
+      width: 24px;
+      height: 24px;
+      margin-left: -12px;
+      margin-top: -12px;
+      border-radius: 999px;
+      border: 2px solid currentColor;
+      box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.08);
+    }
+
+    .marker::after {
+      content: attr(data-label);
+      position: absolute;
+      left: 50%;
+      top: calc(100% + 8px);
+      transform: translateX(-50%);
+      padding: 4px 7px;
+      border-radius: 999px;
+      background: rgba(5, 13, 24, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: var(--text);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .marker.target { color: var(--target); }
+    .marker.requested { color: var(--requested); }
+    .marker.applied { color: var(--applied); }
+    .marker.manual { color: var(--manual); }
+
+    #controls {
+      padding: 14px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 14px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .legend span::before {
+      content: "";
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      margin-right: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      vertical-align: -1px;
+    }
+
+    .legend .target { color: var(--target); }
+    .legend .requested { color: var(--requested); }
+    .legend .applied { color: var(--applied); }
+    .legend .manual { color: var(--manual); }
+
+    .control-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 10px;
+      align-items: end;
+    }
+
+    label {
+      display: grid;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    input,
+    button {
+      appearance: none;
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text);
+      min-height: 44px;
+      padding: 0 14px;
+      font: inherit;
+    }
+
+    input:focus,
+    button:focus {
+      outline: 2px solid rgba(95, 209, 255, 0.4);
+      outline-offset: 2px;
+    }
+
+    button {
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    button.primary {
+      background: linear-gradient(180deg, rgba(20, 184, 255, 0.45), rgba(20, 184, 255, 0.18));
+      border-color: rgba(95, 209, 255, 0.34);
+    }
+
+    button.subtle {
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    #status {
+      min-height: 20px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    #status.error {
+      color: #fda4af;
+    }
+
+    @media (max-width: 700px) {
+      body {
+        gap: 10px;
+        padding-left: 10px;
+        padding-right: 10px;
+      }
+
+      #field {
+        padding: 12px;
+      }
+
+      #field-inner {
+        gap: 8px;
+        padding: 8px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <section id="metrics" class="panel">
+    <div>
+      <h1>Coordinate Calibration</h1>
+      <p>Manual taps show actual viewport coordinates. Preview taps show requested versus calibrated landing points so you can set exact offsets.</p>
+    </div>
+    <div class="metric-grid">
+      <div class="metric"><span class="metric-label">Viewport</span><span class="metric-value" id="metric-viewport">-</span></div>
+      <div class="metric"><span class="metric-label">Visual Viewport</span><span class="metric-value" id="metric-visual">-</span></div>
+      <div class="metric"><span class="metric-label">Device Pixel Ratio</span><span class="metric-value" id="metric-dpr">-</span></div>
+      <div class="metric"><span class="metric-label">Saved Offsets</span><span class="metric-value" id="metric-offsets">-</span></div>
+      <div class="metric"><span class="metric-label">Last Manual Tap</span><span class="metric-value" id="metric-manual">-</span></div>
+      <div class="metric"><span class="metric-label">Last Automation</span><span class="metric-value" id="metric-automation">-</span></div>
+    </div>
+  </section>
+
+  <section id="field" class="panel">
+    <div id="field-inner"></div>
+  </section>
+
+  <section id="controls" class="panel">
+    <div class="legend">
+      <span class="target">Target</span>
+      <span class="requested">Requested</span>
+      <span class="applied">Applied</span>
+      <span class="manual">Manual tap</span>
+    </div>
+    <div class="control-grid">
+      <label>Offset X<input id="offset-x" type="number" step="1" inputmode="decimal"></label>
+      <label>Offset Y<input id="offset-y" type="number" step="1" inputmode="decimal"></label>
+      <button id="save" class="primary" type="button">Save Offsets</button>
+      <button id="reset" class="subtle" type="button">Reset To Zero</button>
+      <button id="preview" class="subtle" type="button">Preview All Targets</button>
+      <button id="copy" class="subtle" type="button">Copy State</button>
+    </div>
+    <div id="status">Loading saved calibration…</div>
+  </section>
+
+  <div id="overlay"></div>
+
+  <script>
+    const TARGET_IDS = ["A1", "A2", "A3", "B1", "B2", "B3", "C1", "C2", "C3"];
+
+    const state = {
+      offsetX: 0,
+      offsetY: 0,
+      lastManual: null,
+      lastAutomation: null,
+      lastTarget: null,
+      suppressAutomationEvents: 0,
+    };
+
+    const els = {
+      field: document.getElementById("field-inner"),
+      overlay: document.getElementById("overlay"),
+      metricViewport: document.getElementById("metric-viewport"),
+      metricVisual: document.getElementById("metric-visual"),
+      metricDpr: document.getElementById("metric-dpr"),
+      metricOffsets: document.getElementById("metric-offsets"),
+      metricManual: document.getElementById("metric-manual"),
+      metricAutomation: document.getElementById("metric-automation"),
+      offsetX: document.getElementById("offset-x"),
+      offsetY: document.getElementById("offset-y"),
+      save: document.getElementById("save"),
+      reset: document.getElementById("reset"),
+      preview: document.getElementById("preview"),
+      copy: document.getElementById("copy"),
+      status: document.getElementById("status"),
+    };
+
+    async function api(method, body) {
+      const response = await fetch(`/v1/${method}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body || {}),
+      });
+      const payload = await response.json();
+      if (!response.ok || payload.success === false) {
+        const message = payload && payload.error ? payload.error.message : `Request failed for ${method}`;
+        throw new Error(message);
+      }
+      return payload;
+    }
+
+    function formatPoint(point) {
+      if (!point) return "-";
+      return `${Math.round(point.x)}, ${Math.round(point.y)}`;
+    }
+
+    function status(message, isError) {
+      els.status.textContent = message;
+      els.status.className = isError ? "error" : "";
+    }
+
+    function renderTargets() {
+      els.field.innerHTML = TARGET_IDS.map((id) => `
+        <div class="target" data-target-id="${id}">
+          <div class="target-tag">${id}</div>
+          <div class="target-coords">-</div>
+        </div>
+      `).join("");
+      refreshTargetCoordinates();
+    }
+
+    function targetDescriptors() {
+      return Array.from(els.field.querySelectorAll(".target")).map((node) => {
+        const rect = node.getBoundingClientRect();
+        return {
+          id: node.dataset.targetId,
+          x: rect.left + rect.width / 2,
+          y: rect.top + rect.height / 2,
+          node,
+        };
+      });
+    }
+
+    function refreshTargetCoordinates() {
+      for (const descriptor of targetDescriptors()) {
+        const label = descriptor.node.querySelector(".target-coords");
+        label.textContent = `${Math.round(descriptor.x)}, ${Math.round(descriptor.y)}`;
+      }
+      syncMetrics();
+      renderMarkers();
+    }
+
+    function syncMetrics() {
+      const vv = window.visualViewport;
+      els.metricViewport.textContent = `${window.innerWidth} × ${window.innerHeight}`;
+      els.metricVisual.textContent = vv
+        ? `${Math.round(vv.width)} × ${Math.round(vv.height)} @ ${Math.round(vv.offsetLeft)}, ${Math.round(vv.offsetTop)} s${vv.scale.toFixed(2)}`
+        : "unavailable";
+      els.metricDpr.textContent = String(window.devicePixelRatio || 1);
+      els.metricOffsets.textContent = `${state.offsetX}, ${state.offsetY}`;
+      els.metricManual.textContent = formatPoint(state.lastManual);
+      els.metricAutomation.textContent = state.lastAutomation
+        ? `req ${Math.round(state.lastAutomation.requestedX)}, ${Math.round(state.lastAutomation.requestedY)} -> app ${Math.round(state.lastAutomation.appliedX)}, ${Math.round(state.lastAutomation.appliedY)}`
+        : "-";
+    }
+
+    function markerDescriptor(id, x, y, label, className) {
+      return { id, x, y, label, className };
+    }
+
+    function renderMarkers() {
+      const markers = [];
+      if (state.lastTarget) {
+        markers.push(markerDescriptor("target", state.lastTarget.x, state.lastTarget.y, `target ${state.lastTarget.id}`, "target"));
+      }
+      if (state.lastAutomation) {
+        markers.push(markerDescriptor("requested", state.lastAutomation.requestedX, state.lastAutomation.requestedY, "requested", "requested"));
+        markers.push(markerDescriptor("applied", state.lastAutomation.appliedX, state.lastAutomation.appliedY, "applied", "applied"));
+      }
+      if (state.lastManual) {
+        markers.push(markerDescriptor("manual", state.lastManual.x, state.lastManual.y, "manual", "manual"));
+      }
+      els.overlay.innerHTML = markers.map((marker) => `
+        <div class="marker ${marker.className}" data-label="${marker.label}" style="left:${marker.x}px;top:${marker.y}px"></div>
+      `).join("");
+    }
+
+    function readOffsetInputs() {
+      return {
+        offsetX: Number(els.offsetX.value || "0"),
+        offsetY: Number(els.offsetY.value || "0"),
+      };
+    }
+
+    async function loadCalibration() {
+      const payload = await api("get-tap-calibration");
+      state.offsetX = Number(payload.offsetX || 0);
+      state.offsetY = Number(payload.offsetY || 0);
+      els.offsetX.value = String(state.offsetX);
+      els.offsetY.value = String(state.offsetY);
+      syncMetrics();
+      renderMarkers();
+      status("Saved calibration loaded.", false);
+    }
+
+    async function saveCalibration() {
+      const next = readOffsetInputs();
+      const payload = await api("set-tap-calibration", next);
+      state.offsetX = Number(payload.offsetX || 0);
+      state.offsetY = Number(payload.offsetY || 0);
+      els.offsetX.value = String(state.offsetX);
+      els.offsetY.value = String(state.offsetY);
+      syncMetrics();
+      status(`Saved offsets ${state.offsetX}, ${state.offsetY}.`, false);
+    }
+
+    async function previewTargets() {
+      const targets = targetDescriptors();
+      status(`Previewing ${targets.length} targets…`, false);
+      for (const descriptor of targets) {
+        state.lastTarget = descriptor;
+        renderMarkers();
+        await api("tap", {
+          x: descriptor.x,
+          y: descriptor.y,
+          color: "#22c55e",
+        });
+        await new Promise((resolve) => setTimeout(resolve, 140));
+      }
+      status("Preview complete.", false);
+    }
+
+    async function copyState() {
+      const payload = {
+        viewport: {
+          width: window.innerWidth,
+          height: window.innerHeight,
+          devicePixelRatio: window.devicePixelRatio || 1,
+        },
+        visualViewport: window.visualViewport
+          ? {
+              width: window.visualViewport.width,
+              height: window.visualViewport.height,
+              offsetLeft: window.visualViewport.offsetLeft,
+              offsetTop: window.visualViewport.offsetTop,
+              scale: window.visualViewport.scale,
+            }
+          : null,
+        offsets: {
+          offsetX: state.offsetX,
+          offsetY: state.offsetY,
+        },
+        lastManual: state.lastManual,
+        lastAutomation: state.lastAutomation,
+        lastTarget: state.lastTarget,
+      };
+      const text = JSON.stringify(payload, null, 2);
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        status("Calibration state copied to clipboard.", false);
+        return;
+      }
+      status("Clipboard API unavailable on this page.", true);
+    }
+
+    function onPointerEvent(event) {
+      if (state.suppressAutomationEvents > 0) {
+        state.suppressAutomationEvents -= 1;
+        return;
+      }
+      state.lastManual = { x: event.clientX, y: event.clientY };
+      syncMetrics();
+      renderMarkers();
+    }
+
+    window.__kelpieTapCalibration = {
+      onAutomationTap(payload) {
+        state.lastAutomation = {
+          requestedX: Number(payload.requestedX),
+          requestedY: Number(payload.requestedY),
+          appliedX: Number(payload.appliedX),
+          appliedY: Number(payload.appliedY),
+          offsetX: Number(payload.offsetX),
+          offsetY: Number(payload.offsetY),
+        };
+        state.suppressAutomationEvents = 2;
+        syncMetrics();
+        renderMarkers();
+      },
+    };
+
+    els.save.addEventListener("click", async () => {
+      try {
+        await saveCalibration();
+      } catch (error) {
+        status(error.message || "Failed to save calibration.", true);
+      }
+    });
+
+    els.reset.addEventListener("click", async () => {
+      els.offsetX.value = "0";
+      els.offsetY.value = "0";
+      try {
+        await saveCalibration();
+      } catch (error) {
+        status(error.message || "Failed to reset calibration.", true);
+      }
+    });
+
+    els.preview.addEventListener("click", async () => {
+      try {
+        await previewTargets();
+      } catch (error) {
+        status(error.message || "Failed to preview taps.", true);
+      }
+    });
+
+    els.copy.addEventListener("click", async () => {
+      try {
+        await copyState();
+      } catch (error) {
+        status(error.message || "Failed to copy calibration state.", true);
+      }
+    });
+
+    els.offsetX.addEventListener("input", syncMetrics);
+    els.offsetY.addEventListener("input", syncMetrics);
+    document.addEventListener("pointerdown", onPointerEvent, true);
+    document.addEventListener("mousedown", onPointerEvent, true);
+    window.addEventListener("resize", refreshTargetCoordinates);
+    window.addEventListener("scroll", refreshTargetCoordinates, true);
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", refreshTargetCoordinates);
+      window.visualViewport.addEventListener("scroll", refreshTargetCoordinates);
+    }
+
+    renderTargets();
+    loadCalibration().catch((error) => {
+      status(error.message || "Failed to load saved calibration.", true);
+    });
+  </script>
+</body>
+</html>

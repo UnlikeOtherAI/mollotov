@@ -3,9 +3,9 @@
 #include <string>
 
 #include "linux_app.h"
-#include "kelpie/cef_app_factory.h"
 
 #if KELPIE_LINUX_HAS_CEF
+#include "kelpie/cef_app_factory.h"
 #include "include/cef_app.h"
 #endif
 

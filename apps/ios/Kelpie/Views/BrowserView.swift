@@ -128,8 +128,6 @@ struct BrowserView: View {
     @State private var isIn3DInspector = false
     @State private var inspectorMode = "rotate"
     @State private var bottomBarCollapsed = false
-    @State private var showRestoreDialog = false
-    @State private var restorationTabCount = 0
     private let safariAuth = SafariAuthHelper()
     private let debugTimer = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
 
@@ -291,28 +289,12 @@ struct BrowserView: View {
         }
         .onReceive(debugTimer) { _ in if debugOverlayEnabled { updateDebug() } }
         .onChange(of: debugOverlayEnabled) { enabled in if enabled { updateDebug() } }
-        .onAppear {
-            migrateLegacyTabletViewportSelectionIfNeeded()
-            if let pending = tabStore.pendingRestorationURLs {
-                restorationTabCount = pending.count
-                showRestoreDialog = true
-            }
-        }
-        .alert("Restore Previous Session?", isPresented: $showRestoreDialog) {
-            Button("Restore") { tabStore.restoreSession() }
-            Button("New Session", role: .cancel) { tabStore.discardPendingSession() }
-        } message: {
-            Text("\(restorationTabCount) \(restorationTabCount == 1 ? "tab" : "tabs") from your last session.")
-        }
+        .onAppear { migrateLegacyTabletViewportSelectionIfNeeded() }
         .ignoresSafeArea(.container, edges: serverState.isScriptRecording ? [.top, .bottom] : .bottom)
         .ignoresSafeArea(.keyboard)
         .statusBarHidden(serverState.isScriptRecording)
-        .onChange(of: browserState.currentURL) { newURL in
-            HistoryStore.shared.record(url: newURL, title: browserState.pageTitle)
+        .onChange(of: browserState.currentURL) { _ in
             externalDisplayManager.triggerSyncPass()
-        }
-        .onChange(of: browserState.pageTitle) { newTitle in
-            HistoryStore.shared.updateLatestTitle(for: browserState.currentURL, title: newTitle)
         }
         .onChange(of: browserState.isLoading) { isLoading in
             guard isLoading else { return }

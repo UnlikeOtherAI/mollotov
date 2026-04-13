@@ -1,19 +1,26 @@
 package com.kelpie.browser.handlers
 
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.os.Handler
 import android.os.Looper
 import android.webkit.WebView
 import com.kelpie.browser.browser.DialogState
 import com.kelpie.browser.browser.KeyboardObserver
+import com.kelpie.browser.browser.TabStore
 import com.kelpie.browser.nativecore.AiManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.jsonObject
+import java.io.ByteArrayOutputStream
+import java.util.Base64
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
+import kotlin.math.max
+import kotlin.math.roundToInt
 
 private val json =
     Json {
@@ -28,13 +35,19 @@ class HandlerContext {
     }
 
     var webView: WebView? = null
+    var tabStore: TabStore? = null
     var keyboardObserver: KeyboardObserver? = null
     var scriptPlaybackState: ScriptPlaybackState? = null
+    var annotationSessionId: String? = null
+    var annotationPageURL: String? = null
+    var annotationElementCount: Int? = null
     var aiManager: AiManager? = null
+    val consoleMessages = mutableListOf<Map<String, Any?>>()
     val dialogState = DialogState()
     val chromeAuth =
         com.kelpie.browser.browser
             .ChromeAuthHelper()
+    private val consoleMessagesLock = Any()
 
     private val _activePanel = MutableStateFlow<String?>(null)
     private val _isIn3DInspector = MutableStateFlow(false)
@@ -58,6 +71,27 @@ class HandlerContext {
     fun mark3DInspectorInactive() {
         isIn3DInspector = false
     }
+
+    fun appendConsoleMessage(message: Map<String, Any?>) {
+        synchronized(consoleMessagesLock) {
+            consoleMessages.add(message)
+            if (consoleMessages.size > 5000) {
+                consoleMessages.removeFirst()
+            }
+        }
+    }
+
+    fun snapshotConsoleMessages(): List<Map<String, Any?>> =
+        synchronized(consoleMessagesLock) {
+            consoleMessages.toList()
+        }
+
+    fun clearConsoleMessages(): Int =
+        synchronized(consoleMessagesLock) {
+            val cleared = consoleMessages.size
+            consoleMessages.clear()
+            cleared
+        }
 
     suspend fun evaluateJS(script: String): String =
         suspendCoroutine { cont ->
@@ -214,6 +248,84 @@ class HandlerContext {
             evaluateJS(js)
         } catch (_: Exception) {
         }
+    }
+
+    suspend fun captureScreenshotPayload(
+        format: String = "png",
+        quality: Int = 80,
+        resolution: ScreenshotResolution = ScreenshotResolution.NATIVE,
+    ): Map<String, Any?>? {
+        val wv = webView ?: return null
+        val normalizedFormat = if (format == "jpeg") "jpeg" else "png"
+        val viewport = viewportMetrics()
+        val bitmap =
+            suspendCoroutine<Bitmap?> { cont ->
+                mainHandler.post {
+                    try {
+                        val bmp = Bitmap.createBitmap(wv.width, wv.height, Bitmap.Config.ARGB_8888)
+                        val canvas = Canvas(bmp)
+                        wv.draw(canvas)
+                        cont.resume(bmp)
+                    } catch (_: Exception) {
+                        cont.resume(null)
+                    }
+                }
+            } ?: return null
+        val rendered =
+            if (resolution == ScreenshotResolution.VIEWPORT) {
+                val targetWidth = max((bitmap.width / max(viewport.devicePixelRatio, 1.0)).roundToInt(), 1)
+                val targetHeight = max((bitmap.height / max(viewport.devicePixelRatio, 1.0)).roundToInt(), 1)
+                if (targetWidth == bitmap.width && targetHeight == bitmap.height) {
+                    bitmap
+                } else {
+                    Bitmap.createScaledBitmap(bitmap, targetWidth, targetHeight, true)
+                }
+            } else {
+                bitmap
+            }
+
+        return try {
+            val stream = ByteArrayOutputStream()
+            val compressFormat =
+                if (normalizedFormat == "jpeg") {
+                    Bitmap.CompressFormat.JPEG
+                } else {
+                    Bitmap.CompressFormat.PNG
+                }
+            rendered.compress(compressFormat, quality, stream)
+            mapOf("image" to Base64.getEncoder().encodeToString(stream.toByteArray())) +
+                viewport.metadata(
+                    imageWidth = rendered.width,
+                    imageHeight = rendered.height,
+                    format = normalizedFormat,
+                    resolution = resolution,
+                )
+        } finally {
+            if (rendered !== bitmap) {
+                rendered.recycle()
+            }
+            bitmap.recycle()
+        }
+    }
+
+    suspend fun viewportMetrics(): ScreenshotViewportMetrics {
+        val result =
+            evaluateJSReturningJSON(
+                """
+                (function() {
+                    return {
+                        viewportWidth: Math.max(window.innerWidth || 0, 1),
+                        viewportHeight: Math.max(window.innerHeight || 0, 1),
+                        devicePixelRatio: window.devicePixelRatio || 1
+                    };
+                })()
+                """.trimIndent(),
+            )
+        return ScreenshotViewportMetrics(
+            viewportWidth = (result["viewportWidth"] as? Number)?.toInt() ?: 1,
+            viewportHeight = (result["viewportHeight"] as? Number)?.toInt() ?: 1,
+            devicePixelRatio = (result["devicePixelRatio"] as? Number)?.toDouble() ?: 1.0,
+        )
     }
 
     private fun jsonElementToAny(element: JsonElement): Any? =

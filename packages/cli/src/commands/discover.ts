@@ -1,5 +1,6 @@
 import type { Command } from "commander";
 import { scanForDevices } from "../discovery/scanner.js";
+import { enrichDevicesWithCapabilities } from "../discovery/capabilities.js";
 import { addDevices } from "../discovery/registry.js";
 import { print } from "../output/formatter.js";
 import type { GlobalOptions } from "../types.js";
@@ -12,7 +13,7 @@ export function registerDiscover(program: Command): void {
     .action(async (opts: { scanTimeout: string }) => {
       const globals = program.opts<GlobalOptions>();
       const duration = Number(opts.scanTimeout);
-      const devices = await scanForDevices(duration);
+      const devices = await enrichDevicesWithCapabilities(await scanForDevices(duration));
       addDevices(devices);
       print({ devices, count: devices.length }, globals.format);
     });

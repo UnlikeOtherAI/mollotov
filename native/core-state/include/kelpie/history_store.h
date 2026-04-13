@@ -20,6 +20,7 @@ class HistoryStore {
   void Clear();
   bool RemoveById(const std::string& id);
   void UpdateLatestTitle(const std::string& url, const std::string& title);
+  std::string BestUrlCompletion(const std::string& query) const;
   void LoadJson(const std::string& json);
   std::string ToJson() const;
   std::int32_t Count() const;

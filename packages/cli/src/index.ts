@@ -14,6 +14,7 @@ program
   .option("--timeout <ms>", "Command timeout in milliseconds", "10000")
   .option("--port <port>", "Override default port", String(DEFAULT_PORT))
   .option("--llm-help", "Show detailed LLM-oriented help with schemas and examples");
+program.addHelpText("after", "\nFeedback: Report issues and unexpected automation failures at https://github.com/UnlikeOtherAI/kelpie/issues");
 
 registerAllCommands(program);
 

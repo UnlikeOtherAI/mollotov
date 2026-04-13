@@ -11,8 +11,8 @@ All methods are available via three interfaces:
 |---|---|
 | [core.md](core.md) | Navigation, screenshots, DOM access, interaction, scrolling, viewport/device info, wait/sync |
 | [llm.md](llm.md) | LLM-optimized methods — accessibility tree, annotated screenshots, visible elements, page text, form state, smart queries |
-| [devtools.md](devtools.md) | Console/JS errors, network log, resource timeline, mutation observation, shadow DOM, request interception |
-| [browser.md](browser.md) | Dialogs/alerts, tabs, iframes, cookies/storage, clipboard, geolocation, JS evaluation, renderer management |
+| [devtools.md](devtools.md) | Console/JS errors, network log, network inspector, resource timeline, WebSocket monitoring, mutation observation, shadow DOM, request interception |
+| [browser.md](browser.md) | Dialogs/alerts, tabs, iframes, cookies/storage, clipboard, geolocation, JS evaluation, bookmarks, history, fullscreen, renderer management |
 | [ai.md](ai.md) | Local inference backends, model switching, inference, and audio recording endpoints |
 
 ---
@@ -41,6 +41,7 @@ Not all methods have identical implementations on Android, iOS, and macOS. Andro
 | Console messages | CDP `Runtime.consoleAPICalled` | Bridge | Renderer-dependent | macOS uses a WebKit bridge on the WKWebView path and native callbacks on the CEF path |
 | Network log | CDP `Network.*` | Partial | Partial | iOS: top-level nav via `WKNavigationDelegate`; macOS support depends on the active renderer, but the API surface stays the same |
 | Resource timeline | CDP `Performance.*` | Partial | Partial | iOS is limited to `WKNavigationDelegate` events + `PerformanceObserver`; macOS mirrors the active renderer's capabilities |
+| WebSocket monitoring (`get-websockets`, `get-websocket-messages`) | Bridge | Bridge | Renderer-dependent | Implemented by wrapping `window.WebSocket` at document start; macOS requires the WebKit renderer |
 | Request interception | CDP `Fetch.*` | Not supported | Not supported | iOS `WKURLSchemeHandler` only works for custom schemes, not HTTP/HTTPS |
 | Mutation observation | CDP `DOM.*` | Bridge | Renderer-dependent | iOS requires `MutationObserver` bridge script |
 | Accessibility tree | CDP `Accessibility.*` | Bridge | Renderer-dependent | iOS requires DOM traversal bridge script querying ARIA attributes |
@@ -160,6 +161,14 @@ The CLI exit code is `0` if all succeeded, `1` if any failed.
 
 When exposed via MCP, methods use the `kelpie_` prefix:
 
+Internal HTTP-only debug surfaces are not exposed as MCP tools:
+
+| HTTP Endpoint | Purpose |
+|---|---|
+| `/debug/coordinate-calibration` | Bundled local page for measuring manual taps and previewing calibrated raw taps |
+| `/v1/get-tap-calibration` | Read saved raw-tap X/Y offsets |
+| `/v1/set-tap-calibration` | Save raw-tap X/Y offsets |
+
 | HTTP Endpoint | MCP Tool Name |
 |---|---|
 | `/v1/navigate` | `kelpie_navigate` |
@@ -167,6 +176,8 @@ When exposed via MCP, methods use the `kelpie_` prefix:
 | `/v1/forward` | `kelpie_forward` |
 | `/v1/reload` | `kelpie_reload` |
 | `/v1/get-current-url` | `kelpie_get_current_url` |
+| `/v1/set-home` | `kelpie_set_home` |
+| `/v1/get-home` | `kelpie_get_home` |
 | `/v1/set-renderer` | `kelpie_set_renderer` |
 | `/v1/get-renderer` | `kelpie_get_renderer` |
 | `/v1/screenshot` | `kelpie_screenshot` |
@@ -209,7 +220,14 @@ When exposed via MCP, methods use the `kelpie_` prefix:
 | `/v1/get-console-messages` | `kelpie_get_console_messages` |
 | `/v1/get-js-errors` | `kelpie_get_js_errors` |
 | `/v1/get-network-log` | `kelpie_get_network_log` |
+| `/v1/network-list` | `kelpie_network_list` |
+| `/v1/network-detail` | `kelpie_network_detail` |
+| `/v1/network-current` | `kelpie_network_current` |
+| `/v1/network-clear` | `kelpie_network_clear` |
+| `/v1/network-select` | `kelpie_network_select` |
 | `/v1/get-resource-timeline` | `kelpie_get_resource_timeline` |
+| `/v1/get-websockets` | `kelpie_get_websockets` |
+| `/v1/get-websocket-messages` | `kelpie_get_websocket_messages` |
 | `/v1/clear-console` | `kelpie_clear_console` |
 | `/v1/get-accessibility-tree` | `kelpie_get_accessibility_tree` |
 | `/v1/screenshot-annotated` | `kelpie_screenshot_annotated` |
@@ -225,6 +243,12 @@ When exposed via MCP, methods use the `kelpie_` prefix:
 | `/v1/new-tab` | `kelpie_new_tab` |
 | `/v1/switch-tab` | `kelpie_switch_tab` |
 | `/v1/close-tab` | `kelpie_close_tab` |
+| `/v1/bookmarks-list` | `kelpie_bookmarks_list` |
+| `/v1/bookmarks-add` | `kelpie_bookmarks_add` |
+| `/v1/bookmarks-remove` | `kelpie_bookmarks_remove` |
+| `/v1/bookmarks-clear` | `kelpie_bookmarks_clear` |
+| `/v1/history-list` | `kelpie_history_list` |
+| `/v1/history-clear` | `kelpie_history_clear` |
 | `/v1/get-iframes` | `kelpie_get_iframes` |
 | `/v1/switch-to-iframe` | `kelpie_switch_to_iframe` |
 | `/v1/switch-to-main` | `kelpie_switch_to_main` |
@@ -250,6 +274,8 @@ When exposed via MCP, methods use the `kelpie_` prefix:
 | `/v1/show-keyboard` | `kelpie_show_keyboard` |
 | `/v1/hide-keyboard` | `kelpie_hide_keyboard` |
 | `/v1/get-keyboard-state` | `kelpie_get_keyboard_state` |
+| `/v1/set-fullscreen` | `kelpie_set_fullscreen` |
+| `/v1/get-fullscreen` | `kelpie_get_fullscreen` |
 | `/v1/resize-viewport` | `kelpie_resize_viewport` |
 | `/v1/reset-viewport` | `kelpie_reset_viewport` |
 | `/v1/set-viewport-preset` | `kelpie_set_viewport_preset` |

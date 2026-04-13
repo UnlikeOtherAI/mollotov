@@ -56,7 +56,7 @@ void TestCapacityAndLoadJson() {
 
 void TestUrlNormalizationDedup() {
   kelpie::HistoryStore store;
-  // Trailing slash variant collapses.
+  // Bare-origin slash variant collapses.
   store.Record("https://norm.test/", "One");
   store.Record("https://norm.test", "One Too");
   // Empty query collapses.
@@ -84,6 +84,16 @@ void TestUrlNormalizationDedup() {
   assert(root_entries.size() == 1);
   assert(root_entries[0]["url"] == "https://root.test");
   assert(root_entries[0]["title"] == "Root no slash");
+
+  // Resource paths keep their trailing slash because /docs and /docs/ can be
+  // different resources on real servers.
+  kelpie::HistoryStore path_store;
+  path_store.Record("https://path.test/docs/", "Docs slash");
+  path_store.Record("https://path.test/docs", "Docs no slash");
+  const json path_entries = json::parse(path_store.ToJson());
+  assert(path_entries.size() == 2);
+  assert(path_entries[0]["url"] == "https://path.test/docs");
+  assert(path_entries[1]["url"] == "https://path.test/docs/");
 }
 
 void TestCApiRoundTrip() {
@@ -107,6 +117,27 @@ void TestCApiRoundTrip() {
   kelpie_history_store_destroy(store);
 }
 
+void TestBestUrlCompletion() {
+  kelpie::HistoryStore store;
+  store.Record("https://www.deepwater.example/path", "Deep Water");
+  store.Record("https://second.example", "Second");
+
+  assert(store.BestUrlCompletion("https://www.deep") == "https://www.deepwater.example/path");
+  assert(store.BestUrlCompletion("www.deep") == "https://www.deepwater.example/path");
+  assert(store.BestUrlCompletion("deepwater") == "https://www.deepwater.example/path");
+  assert(store.BestUrlCompletion("deep water") == "https://www.deepwater.example/path");
+  assert(store.BestUrlCompletion("missing").empty());
+
+  KelpieHistoryStoreRef ffi_store = kelpie_history_store_create();
+  assert(ffi_store != nullptr);
+  kelpie_history_store_record(ffi_store, "https://www.deepwater.example/path", "Deep Water");
+  char* completion = kelpie_history_store_best_url_completion(ffi_store, "deepwater");
+  assert(completion != nullptr);
+  assert(std::string(completion) == "https://www.deepwater.example/path");
+  kelpie_free_string(completion);
+  kelpie_history_store_destroy(ffi_store);
+}
+
 }  // namespace
 
 int main() {
@@ -116,6 +147,7 @@ int main() {
     TestCapacityAndLoadJson();
     TestUrlNormalizationDedup();
     TestCApiRoundTrip();
+    TestBestUrlCompletion();
     return 0;
   } catch (const std::exception& exception) {
     std::cerr << exception.what() << '\n';

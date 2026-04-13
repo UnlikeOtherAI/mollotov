@@ -19,8 +19,9 @@ import com.kelpie.browser.browser.BrowserTab
 import com.kelpie.browser.browser.JsBridge
 import com.kelpie.browser.browser.NetworkTrafficStore
 import com.kelpie.browser.browser.TabStore
-import com.kelpie.browser.devtools.ConsoleHandler
+import com.kelpie.browser.handlers.ConsoleHandler
 import com.kelpie.browser.handlers.HandlerContext
+import com.kelpie.browser.handlers.WebSocketHandler
 
 /** Displays the active tab's WebView, handles WebView clients, and tracks scroll direction. */
 @Composable
@@ -47,7 +48,7 @@ fun TabWebViewContent(
             container.removeAllViews()
             (wv.parent as? ViewGroup)?.removeView(wv)
 
-            installTabWebViewClients(wv, tab, browserState, handlerContext)
+            installTabWebViewClients(wv, tab, tabStore, browserState, handlerContext)
 
             container.addView(
                 wv,
@@ -79,6 +80,7 @@ fun TabWebViewContent(
 private fun installTabWebViewClients(
     webView: WebView,
     tab: BrowserTab,
+    tabStore: TabStore,
     browserState: BrowserState,
     handlerContext: HandlerContext,
 ) {
@@ -94,6 +96,9 @@ private fun installTabWebViewClients(
             ) {
                 handlerContext.dialogState.dismissPending()
                 tab.currentUrl = url
+                tab.recordHistoryIfNeeded(url)
+                tab.isLoading = true
+                tabStore.persistSession()
                 browserState.updateUrl(url)
                 browserState.updateLoading(true)
                 handlerContext.mark3DInspectorInactive()
@@ -106,6 +111,9 @@ private fun installTabWebViewClients(
                 url: String,
             ) {
                 tab.currentUrl = url
+                tab.recordHistoryIfNeeded(url)
+                tab.isLoading = false
+                tabStore.persistSession()
                 browserState.updateUrl(url)
                 browserState.updateLoading(false)
                 browserState.updateCanGoBack(view.canGoBack())
@@ -113,6 +121,9 @@ private fun installTabWebViewClients(
 
                 view.evaluateJavascript(ConsoleHandler.BRIDGE_SCRIPT, null)
                 view.evaluateJavascript(JsBridge.NETWORK_BRIDGE_SCRIPT, null)
+                if (!WebSocketHandler.isDocumentStartSupported) {
+                    view.evaluateJavascript(WebSocketHandler.BRIDGE_SCRIPT, null)
+                }
 
                 if (!didCaptureDocumentForNavigation && documentNavigationUrl == url) {
                     didCaptureDocumentForNavigation = true
@@ -145,8 +156,11 @@ private fun installTabWebViewClients(
                 view: WebView,
                 title: String?,
             ) {
-                tab.pageTitle = title ?: ""
-                browserState.updateTitle(title ?: "")
+                val nextTitle = title ?: ""
+                tab.pageTitle = nextTitle
+                tab.updateHistoryTitleIfNeeded(nextTitle)
+                tabStore.persistSession()
+                browserState.updateTitle(nextTitle)
             }
 
             override fun onProgressChanged(

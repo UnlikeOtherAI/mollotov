@@ -74,6 +74,29 @@ NS_ASSUME_NONNULL_BEGIN
               expires:(NSDate * _Nullable)expires
            completion:(void (^ _Nonnull)(BOOL success))completion;
 
+/// Set a cookie via Chrome DevTools Protocol.
+- (void)setCookieViaCDP:(NSString *)name
+                  value:(NSString *)value
+                 domain:(NSString *)domain
+                   path:(NSString *)path
+               httpOnly:(BOOL)httpOnly
+                 secure:(BOOL)secure
+               sameSite:(NSString * _Nullable)sameSite
+                expires:(NSDate * _Nullable)expires
+             completion:(void (^ _Nonnull)(BOOL success))completion;
+
+/// Get cookies via Chrome DevTools Protocol.
+- (void)getAllCookiesViaCDPWithCompletion:(void (^ _Nonnull)(BOOL success, NSArray<NSDictionary *> *cookies))completion;
+
+/// Delete a cookie via Chrome DevTools Protocol.
+- (void)deleteCookieViaCDP:(NSString *)name
+                    domain:(NSString *)domain
+                      path:(NSString *)path
+                completion:(void (^ _Nonnull)(BOOL success))completion;
+
+/// Delete all current-context cookies via Chrome DevTools Protocol.
+- (void)deleteAllCookiesViaCDPWithCompletion:(void (^ _Nonnull)(BOOL success, NSInteger deleted))completion;
+
 /// Delete all cookies.
 - (void)deleteAllCookiesWithCompletion:(void (^ _Nonnull)(NSInteger deleted))completion;
 

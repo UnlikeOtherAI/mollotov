@@ -1,5 +1,6 @@
 package com.kelpie.browser.network
 
+import android.content.Context
 import android.util.Log
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -37,6 +38,7 @@ private val json =
 class HTTPServer(
     private val port: Int,
     private val router: Router,
+    private val appContext: Context,
 ) {
     private var engine: NettyApplicationEngine? = null
     var isRunning = false
@@ -52,10 +54,24 @@ class HTTPServer(
                         call.respondText("""{"status":"ok"}""", ContentType.Application.Json)
                     }
 
+                    get("/debug/coordinate-calibration") {
+                        val html =
+                            appContext.assets.open("diagnostics/coordinate-calibration.html").bufferedReader().use {
+                                it.readText()
+                            }
+                        call.respondText(html, ContentType.Text.Html)
+                    }
+
                     post("/v1/{method}") {
                         val method = call.parameters["method"] ?: ""
                         val bodyText = call.receiveText()
-                        val body = parseJsonBody(bodyText)
+                        val body =
+                            parseJsonBody(bodyText)
+                                ?: return@post call.respondText(
+                                    text = mapToJsonString(errorResponse("INVALID_JSON", "Request body is not valid JSON")),
+                                    contentType = ContentType.Application.Json,
+                                    status = HttpStatusCode.BadRequest,
+                                )
 
                         val (status, result) = router.handle(method, body)
                         val responseJson = mapToJsonString(result)
@@ -80,13 +96,13 @@ class HTTPServer(
         isRunning = false
     }
 
-    private fun parseJsonBody(text: String): Map<String, Any?> {
-        if (text.isBlank()) return emptyMap()
+    private fun parseJsonBody(text: String): Map<String, Any?>? {
+        if (text.isEmpty()) return emptyMap()
         return try {
             val element = json.parseToJsonElement(text)
             jsonObjectToMap(element.jsonObject)
         } catch (e: Exception) {
-            emptyMap()
+            null
         }
     }
 

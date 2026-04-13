@@ -14,7 +14,7 @@ No emulators, no cloud, no persistent scripts. Real browsers on real devices, fu
 
 ## Device Discovery
 
-Every running Kelpie app advertises itself via mDNS (`_kelpie._tcp`) on the local network. The CLI auto-discovers all devices and exposes their metadata: device name, model, platform, screen resolution, port, and app version. Devices can be targeted by name, ID, or IP address. Apps prefer port `8420`, but if that port is already occupied they bind the next available local port and advertise the actual port they chose.
+Every running Kelpie app advertises itself via mDNS (`_kelpie._tcp`) on the local network. The CLI auto-discovers all devices and exposes their metadata: device name, model, platform, screen resolution, port, and app version. Devices can be targeted by name, ID, or IP address. Apps prefer port `8420`, but if that port is already occupied they bind the next available local port and advertise the actual port they chose. On macOS, advertisement remains up for the lifetime of the running app instance. On iOS and Android, the app re-establishes mDNS advertisement whenever it returns to the foreground so discovery recovers after background suspension.
 
 Works identically with real devices, iOS Simulators, and Android Emulators — a developer with no phones can spin up multiple simulators at different screen sizes and control them all.
 
@@ -22,7 +22,7 @@ Works identically with real devices, iOS Simulators, and Android Emulators — a
 
 Full navigation control: go to any URL, go back/forward, reload, get the current page URL and title. The browser uses Safari's user agent on iOS, Chrome's on Android, Chromium on Linux, and on macOS can switch between Safari/WebKit and Chrome/Chromium behavior so sites behave normally — Google OAuth, banking sites, and similar services work without being blocked as a WebView.
 
-On macOS, the desktop URL bar stays synced with both API/MCP-triggered navigation and user-driven page navigation, uses compact Safari-style rounded chrome with coloured browser-brand renderer switches, supports native fullscreen toggling for the active window from the Window menu or with `Cmd+F`, and maps `Cmd+R` to a hard refresh in both WebKit and Chromium so cached desktop state can be cleared without switching renderers. On Linux, the GTK shell now uses matching rounded toolbar chrome, a Chromium brand badge in the URL field, and the same warm orange floating menu treatment as the macOS app instead of stock GTK buttons.
+On macOS, the desktop URL bar stays synced with both API/MCP-triggered navigation and user-driven page navigation, uses compact Safari-style rounded chrome with coloured browser-brand renderer switches, autocompletes previously visited URLs inline as you type, supports native fullscreen toggling for the active window from the Window menu or with `Cmd+F`, and maps `Cmd+R` to a hard refresh in both WebKit and Chromium so cached desktop state can be cleared without switching renderers. On Linux, the GTK shell now uses matching rounded toolbar chrome, a Chromium brand badge in the URL field, and the same warm orange floating menu treatment as the macOS app instead of stock GTK buttons.
 
 On Linux, the desktop shell runs in either GUI or headless mode. Both modes expose the same HTTP surface, advertise themselves over mDNS, persist profile-backed bookmarks/history/network/console state, support a persisted home page URL, and degrade cleanly when the CEF runtime is unavailable. In GUI mode, the browser window can also be toggled into fullscreen via API/MCP. Published GitHub releases now attach Linux `.tar.gz`, `.deb`, `.rpm`, and `.AppImage` artifacts automatically and refresh Debian/Ubuntu `apt` plus Fedora-compatible `dnf` package repositories on GitHub Pages from the same release event.
 
@@ -48,11 +48,11 @@ When an iPhone or iPad running Kelpie connects to an Apple TV via AirPlay, the a
 
 ## Screenshots
 
-Capture viewport or full-page screenshots on demand in PNG or JPEG. Full-page mode stitches together the entire scrollable page. Quality is adjustable for JPEG.
+Capture viewport or full-page screenshots on demand in PNG or JPEG. Full-page mode stitches together the entire scrollable page. Quality is adjustable for JPEG. Screenshot responses now include explicit viewport-mapping metadata: viewport width and height, device pixel ratio, and computed image-to-viewport scale factors. That makes the coordinate space visible to LLMs instead of forcing them to guess from image size alone.
 
 ### Annotated Screenshots
 
-Take a screenshot with numbered labels overlaid on every interactive element (buttons, links, inputs). The LLM sees both the image and a structured list of what each number corresponds to. Then it can say "click element 5" or "fill element 12 with hello@example.com" — visual-first automation without needing CSS selectors.
+Take a screenshot with numbered labels overlaid on every interactive element (buttons, links, inputs). The LLM sees both the image and a structured list of what each number corresponds to, plus an annotation session ID and validity hint. Then it can say "click element 5" or "fill element 12 with hello@example.com" — visual-first automation without needing CSS selectors. For LLM use, Kelpie prefers CSS-pixel/non-retina annotated screenshots so the image payload is smaller and the coordinate system lines up with interaction APIs more directly. Annotation indices are valid until the page URL changes; after navigation, Kelpie returns `ANNOTATION_EXPIRED` and expects a fresh annotated screenshot.
 
 ## DOM Access and Queries
 
@@ -61,6 +61,8 @@ Full read access to the page DOM. Query elements by CSS selector, get their text
 ## Element Interaction
 
 Click elements by selector or tap at specific coordinates. Fill form inputs, type text character-by-character (simulating human typing with per-character delays), select dropdown options, check/uncheck checkboxes. Every interaction shows a blue touch indicator animation on the device so you can see what happened.
+
+For LLM-driven automation, the intended order is semantic first: read the accessibility tree or use the smart find endpoints, then interact by selector. If the model needs to reason over an image after it already knows the selector, Kelpie can draw a visible highlight box/ring around that exact DOM element and then capture a screenshot, which keeps the visual target and the selector aligned. Annotated screenshots are the broader visual fallback when semantic targeting fails. Raw coordinate taps exist for edge cases and are intentionally the least-preferred option because they drift with viewport changes, scrolling, and overlays. Selector clicks and annotation clicks now dispatch coordinate-bearing pointer and mouse events at the rendered hit target instead of shortcutting through `el.click()`, so DOM-targeted automation exercises the same observable interaction path as raw taps and fails with a visibility error when the target center is obscured. When raw taps do drift, every shipped app build now includes a bundled local calibration page at `/debug/coordinate-calibration` that shows manual tap coordinates, previews requested versus applied automation taps, and persists additive X/Y offsets used by the raw `tap` endpoint.
 
 Swipe gestures are first-class too: give Kelpie start and end viewport coordinates and it renders a visible swipe trail while dispatching synthetic pointer events to JS-driven touch listeners. For native scrolling, use the scroll endpoints instead.
 
@@ -86,13 +88,15 @@ Execute arbitrary JavaScript in the page context and get the result back. Use it
 
 ## Console and Error Capture
 
-Read console output (log, warn, error, info, debug) from the page. Get JavaScript errors with full stack traces. The console bridge captures everything including unhandled promise rejections. Messages buffer up to 5,000 entries — clearable on demand.
+Read console output (log, warn, error, info, debug) from the page. Get JavaScript errors with full stack traces. The console bridge captures everything including unhandled promise rejections on iOS, macOS, and Android. Messages buffer up to 5,000 entries — clearable on demand.
 
 ## Network Monitoring
 
 Two levels of network visibility:
 
 **Performance timeline** — uses the browser's Performance API to get resource loading data: URLs, methods, status codes, MIME types, sizes, and detailed timing breakdowns (DNS, TCP, TLS, waiting, download).
+
+**WebSocket monitoring** — tracks active WebSocket connections created by the page, including URL, ready state, negotiated protocol, sent/received message counters, and a bounded recent-message buffer with timestamps and direction. The monitoring data is best-effort page observability rather than an authoritative packet trace, and on macOS it is available on the WebKit renderer path.
 
 **Network Inspector** (new) — a Charles Proxy-style traffic viewer built into the app. See below.
 
@@ -139,7 +143,7 @@ API: `bookmarks-list`, `bookmarks-add`, `bookmarks-remove`, `bookmarks-clear`.
 
 ## History
 
-Chronological log of every URL navigated to. Auto-recorded as you browse, deduplicating consecutive identical URLs. Viewable from the floating menu, clearable by the user or via API. Stores up to 500 entries, persisted across restarts. If a navigation is recorded before the page title settles, the latest history entry self-updates once the final title arrives, so rows do not stay blank or half-populated.
+Chronological log of every URL navigated to. Auto-recorded from real navigation changes inside each tab or browser surface instead of from tab selection state, so switching tabs does not create false history writes and revisiting a URL moves it back to the top cleanly. Viewable from the floating menu, clearable by the user or via API. Stores up to 500 entries, persisted across restarts. If a navigation is recorded before the page title settles, the latest history entry self-updates once the final title arrives, so rows do not stay blank or half-populated.
 
 API: `history-list` (with limit), `history-clear`.
 
@@ -156,6 +160,8 @@ Purpose-built methods that return semantic data instead of raw HTML:
 - **Page text** — reader-mode text extraction: title, content, word count, language.
 - **Form state** — snapshot of every form on the page: fields, values, validation state, which required fields are empty.
 - **Smart find** — find a button, link, input, or any element by its visible text or label. No selectors needed.
+
+When those semantic methods are not enough, Kelpie also provides an annotated screenshot workflow: the app returns a screenshot plus numbered interactive elements, and the LLM can act on those indices with `click-annotation` or `fill-annotation` instead of guessing raw coordinates.
 
 ## Local AI
 
@@ -188,17 +194,19 @@ No CSS selectors, no DOM knowledge. The LLM works from what it sees, like a huma
 
 ## Mutation Observation
 
-Watch the DOM for changes in real time. Start an observer on any element (or the whole document), specifying what to track: attributes, child nodes, subtree, text content. Retrieve accumulated mutations later. Stop when done. Useful for detecting dynamic UI updates, loading spinners, and AJAX content.
+Watch the DOM for changes in real time. Start an observer on any element (or the whole document), specifying what to track: attributes, child nodes, subtree, text content. Retrieve accumulated mutations later. Stop when done. Useful for detecting dynamic UI updates, loading spinners, and AJAX content across iOS, macOS, and Android.
 
 ## Shadow DOM
 
-Query elements inside shadow roots, even nested ones. List all shadow DOM hosts on the page. The `pierce` option recursively searches through nested shadow trees. Essential for modern web components (Lit, Stencil, etc.).
+Query elements inside shadow roots, even nested ones. List all shadow DOM hosts on the page. The `pierce` option recursively searches through nested shadow trees. Essential for modern web components (Lit, Stencil, etc.) on iOS, macOS, and Android.
 
 ## Tabs
 
 List open tabs, create new ones, switch between them, close them. Each tab tracks its URL, title, and active state. Each tab owns its own WebView instance so page state, scroll position, and history are preserved across tab switches.
 
-On iOS and Android, the URL bar and tab strip are positioned at the bottom of the screen in a Safari-style bottom bar. The bar collapses to a compact domain pill when the user scrolls down, freeing screen space for the page content, and expands back to the full URL field and navigation controls when the user scrolls up or taps the pill. When more than one tab is open, a horizontally scrollable tab strip appears above the URL field showing tab pills with titles and close buttons.
+On iOS, Android, macOS, and Linux, the current tab set is also persisted automatically while the browser is running and restored automatically on the next app launch. Restarting the browser reopens the same tabs and URLs that were active before exit instead of dropping back to a blank start state.
+
+On iOS and Android, the URL bar and tab strip are positioned at the bottom of the screen in a Safari-style bottom bar. The bar collapses to a compact domain pill when the user scrolls down, freeing screen space for the page content, and expands back to the full URL field and navigation controls when the user scrolls up or taps the pill. When more than one tab is open, a horizontally scrollable tab strip appears above the URL field showing tab pills with titles and close buttons. The mobile URL bar now also autocompletes previously visited URLs inline as you type and resolves the best history match on submit, so typing a remembered prefix like `deepwater` can reopen the prior page without retyping the full address.
 
 ## Iframes
 
@@ -265,7 +273,7 @@ All MCP tools use the `kelpie_` prefix and include JSON schemas with description
 
 ## LLM Help System
 
-Every CLI command supports `--llm-help` for machine-readable documentation. `kelpie --llm-help` outputs the complete reference. `kelpie explain <command>` gives natural-language explanations. Designed so an LLM can teach itself the tool without human guidance.
+Every CLI command supports `--llm-help` for machine-readable documentation. `kelpie --llm-help` outputs the complete reference, including guidance on reporting unexpected automation failures or missing capabilities to the GitHub issue tracker. `kelpie explain <command>` gives natural-language explanations. Designed so an LLM can teach itself the tool without human guidance.
 
 The CLI also manages local macOS browser aliases under `~/.kelpie`. `kelpie browser register <name>` creates a reusable local alias, `kelpie browser launch <name>` starts a fresh Kelpie.app instance for that alias on an explicit or auto-assigned port, and the rest of the CLI can target that launched instance via `--device <name>` without relying on network discovery alone. Auto-assigned launch ports skip reserved ports such as `8421` so AppReveal and CLI MCP do not clash with launched browser instances.
 

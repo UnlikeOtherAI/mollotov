@@ -203,6 +203,19 @@ Java_com_kelpie_browser_nativecore_NativeCore_historyStoreToJson(JNIEnv* env,
                               HandleFromJLong<HistoryStoreRef>(handle)));
 }
 
+JNIEXPORT jstring JNICALL
+Java_com_kelpie_browser_nativecore_NativeCore_historyStoreBestUrlCompletion(JNIEnv* env,
+                                                                              jobject,
+                                                                              jlong handle,
+                                                                              jstring query) {
+  const std::string native_query = JStringToUtf8(env, query);
+  return TakeOwnedCString(
+      env,
+      kelpie_history_store_best_url_completion(
+          HandleFromJLong<HistoryStoreRef>(handle),
+          native_query.c_str()));
+}
+
 JNIEXPORT jint JNICALL
 Java_com_kelpie_browser_nativecore_NativeCore_historyStoreCount(JNIEnv*,
                                                                   jobject,

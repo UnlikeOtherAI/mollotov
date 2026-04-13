@@ -13,6 +13,11 @@ final class Router: @unchecked Sendable {
         routes[method] = handler
     }
 
+    func registerIfAbsent(_ method: String, handler: @escaping RouteHandler) {
+        guard routes[method] == nil else { return }
+        routes[method] = handler
+    }
+
     func handle(
         method: String,
         body: [String: Any],
@@ -36,7 +41,7 @@ final class Router: @unchecked Sendable {
         } else if errorCode == "SCRIPT_PARTIAL_FAILURE" || errorCode == "SCRIPT_ABORTED" {
             status = 200
         } else if result["error"] != nil {
-            status = 400
+            status = statusCode(forErrorCode: errorCode)
         } else {
             status = 200
         }
@@ -49,41 +54,50 @@ final class Router: @unchecked Sendable {
         return (status, result)
     }
 
-    /// Registers stub handlers for all API methods (to be replaced in Task 11).
-    func registerStubs() {
+    func registerFallbacks() {
         let methods = [
-            "navigate", "back", "forward", "reload", "get-current-url",
-            "screenshot", "get-dom", "query-selector", "query-selector-all",
-            "get-element-text", "get-attributes", "click", "tap", "fill",
-            "type", "select-option", "check", "uncheck", "scroll", "scroll2",
-            "scroll-to-top", "scroll-to-bottom", "scroll-to-y", "get-viewport", "get-device-info",
-            "get-viewport-presets", "get-capabilities", "wait-for-element", "wait-for-navigation",
-            "find-element", "find-button", "find-link", "find-input",
-            "evaluate", "get-console-messages", "get-js-errors",
-            "get-network-log", "get-resource-timeline", "clear-console",
-            "get-accessibility-tree", "screenshot-annotated", "click-annotation",
-            "fill-annotation", "get-visible-elements", "get-page-text",
-            "get-form-state", "get-dialog", "handle-dialog",
-            "set-dialog-auto-handler", "get-tabs", "new-tab", "switch-tab",
-            "close-tab", "get-iframes", "switch-to-iframe", "switch-to-main",
-            "get-iframe-context", "get-cookies", "set-cookie", "delete-cookies",
-            "get-storage", "set-storage", "clear-storage", "watch-mutations",
-            "get-mutations", "stop-watching", "query-shadow-dom",
-            "get-shadow-roots", "get-clipboard", "set-clipboard",
             "set-geolocation", "clear-geolocation", "set-request-interception",
-            "get-intercepted-requests", "clear-request-interception",
-            "show-keyboard", "hide-keyboard", "get-keyboard-state",
-            "resize-viewport", "reset-viewport", "set-viewport-preset", "is-element-obscured",
-            "toast", "safari-auth",
-            "show-commentary", "hide-commentary", "highlight", "hide-highlight",
-            "swipe", "play-script", "abort-script", "get-script-status",
-            "ai-status", "ai-load", "ai-unload", "ai-infer", "ai-record",
-            "set-orientation", "get-orientation"
+            "get-intercepted-requests", "clear-request-interception"
         ]
-        for method in methods where routes[method] == nil {
-            register(method) { _ in
-                ["success": false, "error": ["code": "NOT_IMPLEMENTED", "message": "\(method) not yet implemented"]]
+        for method in methods {
+            let unsupported = macosUnsupportedMethods.contains(method)
+            registerIfAbsent(method) { _ in
+                [
+                    "success": false,
+                    "error": [
+                        "code": unsupported ? "PLATFORM_NOT_SUPPORTED" : "NOT_IMPLEMENTED",
+                        "message": unsupported ? "\(method) is not supported on macOS" : "\(method) not yet implemented"
+                    ]
+                ]
             }
         }
+    }
+}
+
+private let macosUnsupportedMethods: Set<String> = [
+    "debug-screens", "set-debug-overlay", "get-debug-overlay",
+    "set-geolocation", "clear-geolocation",
+    "set-request-interception", "get-intercepted-requests", "clear-request-interception",
+    "show-keyboard", "hide-keyboard", "get-keyboard-state", "is-element-obscured"
+]
+
+private func statusCode(forErrorCode code: String?) -> Int {
+    switch code {
+    case "ELEMENT_NOT_FOUND", "WATCH_NOT_FOUND":
+        return 404
+    case "TIMEOUT":
+        return 408
+    case "NAVIGATION_ERROR":
+        return 502
+    case "PLATFORM_NOT_SUPPORTED":
+        return 501
+    case "IFRAME_ACCESS_DENIED", "PERMISSION_REQUIRED", "SHADOW_ROOT_CLOSED":
+        return 403
+    case "RECORDING_IN_PROGRESS":
+        return 409
+    case "WEBVIEW_ERROR":
+        return 500
+    default:
+        return 400
     }
 }

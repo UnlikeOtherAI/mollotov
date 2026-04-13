@@ -211,8 +211,19 @@ struct DevToolsScreenshotObserver {
     int browserID;
 };
 
+struct DevToolsCookieObserver {
+    cef_dev_tools_message_observer_t observer;
+    RefCountedState ref;
+    __strong NSMutableDictionary<NSNumber *, id> *pendingCompletions;
+    std::atomic<int> nextMessageID;
+    cef_registration_t *registration;
+    int browserID;
+};
+
 static std::mutex sDevToolsScreenshotObserversMutex;
 static std::unordered_map<int, DevToolsScreenshotObserver *> sDevToolsScreenshotObservers;
+static std::mutex sDevToolsCookieObserversMutex;
+static std::unordered_map<int, DevToolsCookieObserver *> sDevToolsCookieObservers;
 
 #define DEFINE_REFCOUNTED_FUNCS(Type, field, Prefix) \
     static void Prefix##AddRef(cef_base_ref_counted_t *base) { AddRefImpl<Type>(base, offsetof(Type, field)); } \
@@ -252,6 +263,32 @@ static int DevToolsScreenshotHasOneRef(cef_base_ref_counted_t *base) {
 
 static int DevToolsScreenshotHasAtLeastOneRef(cef_base_ref_counted_t *base) {
     return HasAtLeastOneRefImpl<DevToolsScreenshotObserver>(base, offsetof(DevToolsScreenshotObserver, observer));
+}
+
+static void DevToolsCookieAddRef(cef_base_ref_counted_t *base) {
+    AddRefImpl<DevToolsCookieObserver>(base, offsetof(DevToolsCookieObserver, observer));
+}
+
+static int DevToolsCookieRelease(cef_base_ref_counted_t *base) {
+    DevToolsCookieObserver *observer = StructFromBase<DevToolsCookieObserver>(base, offsetof(DevToolsCookieObserver, observer));
+    if (observer->ref.count.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+        if (observer->registration != nullptr) {
+            observer->registration->base.release(&observer->registration->base);
+            observer->registration = nullptr;
+        }
+        observer->pendingCompletions = nil;
+        delete observer;
+        return 1;
+    }
+    return 0;
+}
+
+static int DevToolsCookieHasOneRef(cef_base_ref_counted_t *base) {
+    return HasOneRefImpl<DevToolsCookieObserver>(base, offsetof(DevToolsCookieObserver, observer));
+}
+
+static int DevToolsCookieHasAtLeastOneRef(cef_base_ref_counted_t *base) {
+    return HasAtLeastOneRefImpl<DevToolsCookieObserver>(base, offsetof(DevToolsCookieObserver, observer));
 }
 
 static cef_life_span_handler_t *GetLifeSpanHandler(cef_client_t *self) {
@@ -671,6 +708,15 @@ static NSData *PNGDataFromDevToolsResult(const void *result, size_t resultSize) 
     return [[NSData alloc] initWithBase64EncodedString:base64 options:0];
 }
 
+static NSDictionary *JSONObjectFromDevToolsResult(const void *result, size_t resultSize) {
+    if (result == nullptr || resultSize == 0) {
+        return nil;
+    }
+    NSData *jsonData = [NSData dataWithBytes:result length:resultSize];
+    id payload = [NSJSONSerialization JSONObjectWithData:jsonData options:0 error:nil];
+    return [payload isKindOfClass:[NSDictionary class]] ? payload : nil;
+}
+
 static int OnDevToolsScreenshotMessage(cef_dev_tools_message_observer_t *self,
                                        cef_browser_t *browser,
                                        const void *message,
@@ -690,6 +736,25 @@ static void OnDevToolsScreenshotAgentAttached(cef_dev_tools_message_observer_t *
                                               cef_browser_t *browser);
 static void OnDevToolsScreenshotAgentDetached(cef_dev_tools_message_observer_t *self,
                                               cef_browser_t *browser);
+static int OnDevToolsCookieMessage(cef_dev_tools_message_observer_t *self,
+                                   cef_browser_t *browser,
+                                   const void *message,
+                                   size_t messageSize);
+static void OnDevToolsCookieResult(cef_dev_tools_message_observer_t *self,
+                                   cef_browser_t *browser,
+                                   int messageID,
+                                   int success,
+                                   const void *result,
+                                   size_t resultSize);
+static void OnDevToolsCookieEvent(cef_dev_tools_message_observer_t *self,
+                                  cef_browser_t *browser,
+                                  const cef_string_t *method,
+                                  const void *params,
+                                  size_t paramsSize);
+static void OnDevToolsCookieAgentAttached(cef_dev_tools_message_observer_t *self,
+                                          cef_browser_t *browser);
+static void OnDevToolsCookieAgentDetached(cef_dev_tools_message_observer_t *self,
+                                          cef_browser_t *browser);
 
 static void CompletePendingDevToolsScreenshot(DevToolsScreenshotObserver *observer, int messageID, NSData *pngData) {
     if (observer == nullptr || messageID == 0) {
@@ -722,6 +787,42 @@ static void CompleteAllPendingDevToolsScreenshots(DevToolsScreenshotObserver *ob
     }
 }
 
+static void CompletePendingDevToolsCookieCommand(DevToolsCookieObserver *observer,
+                                                 int messageID,
+                                                 BOOL success,
+                                                 NSDictionary *result) {
+    if (observer == nullptr || messageID == 0) {
+        return;
+    }
+
+    NSNumber *key = @(messageID);
+    void (^completion)(BOOL success, NSDictionary *result) = nil;
+    id stored = observer->pendingCompletions[key];
+    if (stored != nil) {
+        completion = [stored copy];
+    }
+    [observer->pendingCompletions removeObjectForKey:key];
+
+    if (completion != nil) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            completion(success, result);
+        });
+    }
+}
+
+static void CompleteAllPendingDevToolsCookieCommands(DevToolsCookieObserver *observer,
+                                                     BOOL success,
+                                                     NSDictionary *result) {
+    if (observer == nullptr || observer->pendingCompletions.count == 0) {
+        return;
+    }
+
+    NSArray<NSNumber *> *keys = observer->pendingCompletions.allKeys;
+    for (NSNumber *key in keys) {
+        CompletePendingDevToolsCookieCommand(observer, key.intValue, success, result);
+    }
+}
+
 static DevToolsScreenshotObserver *CreateDevToolsScreenshotObserver(void) {
     DevToolsScreenshotObserver *observer = new DevToolsScreenshotObserver();
     observer->ref.count = 1;
@@ -740,6 +841,27 @@ static DevToolsScreenshotObserver *CreateDevToolsScreenshotObserver(void) {
     observer->observer.on_dev_tools_event = OnDevToolsScreenshotEvent;
     observer->observer.on_dev_tools_agent_attached = OnDevToolsScreenshotAgentAttached;
     observer->observer.on_dev_tools_agent_detached = OnDevToolsScreenshotAgentDetached;
+    return observer;
+}
+
+static DevToolsCookieObserver *CreateDevToolsCookieObserver(void) {
+    DevToolsCookieObserver *observer = new DevToolsCookieObserver();
+    observer->ref.count = 1;
+    observer->pendingCompletions = [NSMutableDictionary dictionary];
+    observer->nextMessageID = 1;
+    observer->registration = nullptr;
+    observer->browserID = 0;
+    observer->observer = {};
+    observer->observer.base.size = sizeof(observer->observer);
+    observer->observer.base.add_ref = DevToolsCookieAddRef;
+    observer->observer.base.release = DevToolsCookieRelease;
+    observer->observer.base.has_one_ref = DevToolsCookieHasOneRef;
+    observer->observer.base.has_at_least_one_ref = DevToolsCookieHasAtLeastOneRef;
+    observer->observer.on_dev_tools_message = OnDevToolsCookieMessage;
+    observer->observer.on_dev_tools_method_result = OnDevToolsCookieResult;
+    observer->observer.on_dev_tools_event = OnDevToolsCookieEvent;
+    observer->observer.on_dev_tools_agent_attached = OnDevToolsCookieAgentAttached;
+    observer->observer.on_dev_tools_agent_detached = OnDevToolsCookieAgentDetached;
     return observer;
 }
 
@@ -774,6 +896,41 @@ static DevToolsScreenshotObserver *CopyDevToolsScreenshotObserver(cef_browser_ho
     }
 
     sDevToolsScreenshotObservers.emplace(browserID, observer);
+    observer->observer.base.add_ref(&observer->observer.base);
+    return observer;
+}
+
+static DevToolsCookieObserver *CopyDevToolsCookieObserver(cef_browser_host_t *host) {
+    if (host == nullptr || host->get_browser == nullptr || host->add_dev_tools_message_observer == nullptr) {
+        return nullptr;
+    }
+
+    cef_browser_t *browser = host->get_browser(host);
+    if (browser == nullptr) {
+        return nullptr;
+    }
+
+    const int browserID = browser->get_identifier != nullptr ? browser->get_identifier(browser) : 0;
+    browser->base.release(&browser->base);
+    if (browserID == 0) {
+        return nullptr;
+    }
+
+    std::lock_guard<std::mutex> lock(sDevToolsCookieObserversMutex);
+    if (auto it = sDevToolsCookieObservers.find(browserID); it != sDevToolsCookieObservers.end()) {
+        it->second->observer.base.add_ref(&it->second->observer.base);
+        return it->second;
+    }
+
+    DevToolsCookieObserver *observer = CreateDevToolsCookieObserver();
+    observer->browserID = browserID;
+    observer->registration = host->add_dev_tools_message_observer(host, &observer->observer);
+    if (observer->registration == nullptr) {
+        observer->observer.base.release(&observer->observer.base);
+        return nullptr;
+    }
+
+    sDevToolsCookieObservers.emplace(browserID, observer);
     observer->observer.base.add_ref(&observer->observer.base);
     return observer;
 }
@@ -813,6 +970,98 @@ static void OnDevToolsScreenshotAgentAttached(cef_dev_tools_message_observer_t *
 static void OnDevToolsScreenshotAgentDetached(cef_dev_tools_message_observer_t *self, cef_browser_t *) {
     DevToolsScreenshotObserver *observer = StructFromBase<DevToolsScreenshotObserver>(&self->base, offsetof(DevToolsScreenshotObserver, observer));
     CompleteAllPendingDevToolsScreenshots(observer, nil);
+}
+
+static int OnDevToolsCookieMessage(cef_dev_tools_message_observer_t *, cef_browser_t *, const void *, size_t) {
+    return 0;
+}
+
+static void OnDevToolsCookieResult(cef_dev_tools_message_observer_t *self,
+                                   cef_browser_t *,
+                                   int messageID,
+                                   int success,
+                                   const void *result,
+                                   size_t resultSize) {
+    DevToolsCookieObserver *observer = StructFromBase<DevToolsCookieObserver>(&self->base, offsetof(DevToolsCookieObserver, observer));
+    NSDictionary *payload = JSONObjectFromDevToolsResult(result, resultSize);
+    if (!success) {
+        NSString *errorText = result != nullptr && resultSize > 0
+            ? [[NSString alloc] initWithBytes:result length:resultSize encoding:NSUTF8StringEncoding]
+            : @"<no error payload>";
+        NSLog(@"[CEFBridge] DevTools cookie command failed id=%d error=%@", messageID, errorText);
+    }
+    CompletePendingDevToolsCookieCommand(observer, messageID, success != 0, payload);
+}
+
+static void OnDevToolsCookieEvent(cef_dev_tools_message_observer_t *,
+                                  cef_browser_t *,
+                                  const cef_string_t *,
+                                  const void *,
+                                  size_t) {
+}
+
+static void OnDevToolsCookieAgentAttached(cef_dev_tools_message_observer_t *, cef_browser_t *) {
+}
+
+static void OnDevToolsCookieAgentDetached(cef_dev_tools_message_observer_t *self, cef_browser_t *) {
+    DevToolsCookieObserver *observer = StructFromBase<DevToolsCookieObserver>(&self->base, offsetof(DevToolsCookieObserver, observer));
+    CompleteAllPendingDevToolsCookieCommands(observer, NO, nil);
+}
+
+static void SendDevToolsCookieCommand(cef_browser_host_t *host,
+                                      NSString *method,
+                                      NSDictionary *params,
+                                      void (^completion)(BOOL success, NSDictionary *result)) {
+    if (host == nullptr || method.length == 0 || host->send_dev_tools_message == nullptr) {
+        if (completion != nil) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                completion(NO, nil);
+            });
+        }
+        return;
+    }
+
+    DevToolsCookieObserver *observer = CopyDevToolsCookieObserver(host);
+    if (observer == nullptr) {
+        if (completion != nil) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                completion(NO, nil);
+            });
+        }
+        return;
+    }
+
+    const int messageID = observer->nextMessageID.fetch_add(1, std::memory_order_relaxed);
+    if (completion != nil) {
+        observer->pendingCompletions[@(messageID)] = [completion copy];
+    }
+
+    NSDictionary *payload = @{
+        @"id": @(messageID),
+        @"method": method,
+        @"params": params ?: @{}
+    };
+    NSData *payloadData = [NSJSONSerialization dataWithJSONObject:payload options:0 error:nil];
+    const int submitted = payloadData != nil
+        ? host->send_dev_tools_message(host, payloadData.bytes, payloadData.length)
+        : 0;
+    if (submitted == 0) {
+        NSLog(@"[CEFBridge] DevTools cookie submit failed browserID=%d messageID=%d method=%@",
+              observer->browserID,
+              messageID,
+              method);
+        CompletePendingDevToolsCookieCommand(observer, messageID, NO, nil);
+        observer->observer.base.release(&observer->observer.base);
+        return;
+    }
+
+    observer->observer.base.add_ref(&observer->observer.base);
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        CompletePendingDevToolsCookieCommand(observer, messageID, NO, nil);
+        observer->observer.base.release(&observer->observer.base);
+    });
+
+    observer->observer.base.release(&observer->observer.base);
 }
 
 void CEFBridgeVisitAllCookies(cef_cookie_manager_t *manager, void (^completion)(NSArray<NSDictionary *> *cookies)) {
@@ -924,6 +1173,144 @@ void CEFBridgeFlushCookieStore(cef_cookie_manager_t *manager, void (^completion)
     callback->callback.base.release(&callback->callback.base);
 }
 
+void CEFBridgeSetCookieViaCDP(cef_browser_host_t *host,
+                              NSString *name,
+                              NSString *value,
+                              NSString *domain,
+                              NSString *path,
+                              BOOL httpOnly,
+                              BOOL secure,
+                              NSString *sameSite,
+                              NSDate *expires,
+                              void (^completion)(BOOL success)) {
+    NSMutableDictionary *params = [@{
+        @"name": name ?: @"",
+        @"value": value ?: @"",
+        @"domain": domain ?: @"",
+        @"path": path.length > 0 ? path : @"/",
+        @"httpOnly": @(httpOnly),
+        @"secure": @(secure),
+    } mutableCopy];
+    if (sameSite.length > 0) {
+        params[@"sameSite"] = sameSite;
+    }
+    if (expires != nil) {
+        params[@"expires"] = @(expires.timeIntervalSince1970);
+    }
+
+    SendDevToolsCookieCommand(host, @"Network.setCookie", params, ^(BOOL success, NSDictionary *result) {
+        const BOOL cookieSet = success && [result[@"success"] respondsToSelector:@selector(boolValue)]
+            ? [result[@"success"] boolValue]
+            : NO;
+        if (completion != nil) {
+            completion(cookieSet);
+        }
+    });
+}
+
+void CEFBridgeGetCookiesViaCDP(cef_browser_host_t *host,
+                               void (^completion)(BOOL success, NSArray<NSDictionary *> *cookies)) {
+    SendDevToolsCookieCommand(host, @"Network.getCookies", nil, ^(BOOL success, NSDictionary *result) {
+        NSArray<NSDictionary *> *cookies = @[];
+        id value = result[@"cookies"];
+        if ([value isKindOfClass:[NSArray class]]) {
+            NSMutableArray<NSDictionary *> *filtered = [NSMutableArray array];
+            for (id item in (NSArray *)value) {
+                if ([item isKindOfClass:[NSDictionary class]]) {
+                    [filtered addObject:item];
+                }
+            }
+            cookies = [filtered copy];
+        }
+        if (completion != nil) {
+            completion(success, cookies);
+        }
+    });
+}
+
+void CEFBridgeDeleteCookieViaCDP(cef_browser_host_t *host,
+                                 NSString *name,
+                                 NSString *domain,
+                                 NSString *path,
+                                 void (^completion)(BOOL success)) {
+    NSDictionary *params = @{
+        @"name": name ?: @"",
+        @"domain": domain ?: @"",
+        @"path": path.length > 0 ? path : @"/",
+    };
+    SendDevToolsCookieCommand(host, @"Network.deleteCookies", params, ^(BOOL success, NSDictionary *) {
+        if (completion != nil) {
+            completion(success);
+        }
+    });
+}
+
+static void DeleteCookiesViaCDPSequentially(cef_browser_host_t *host,
+                                           NSArray<NSDictionary *> *cookies,
+                                           NSUInteger index,
+                                           NSInteger deleted,
+                                           BOOL overallSuccess,
+                                           void (^completion)(BOOL success, NSInteger deleted)) {
+    if (index >= cookies.count) {
+        if (completion != nil) {
+            completion(overallSuccess, deleted);
+        }
+        return;
+    }
+
+    NSDictionary *cookie = cookies[index];
+    CEFBridgeDeleteCookieViaCDP(host,
+                                cookie[@"name"],
+                                cookie[@"domain"],
+                                cookie[@"path"],
+                                ^(BOOL success) {
+        DeleteCookiesViaCDPSequentially(host,
+                                        cookies,
+                                        index + 1,
+                                        deleted + (success ? 1 : 0),
+                                        overallSuccess && success,
+                                        completion);
+    });
+}
+
+void CEFBridgeDeleteAllCookiesViaCDP(cef_browser_host_t *host,
+                                     void (^completion)(BOOL success, NSInteger deleted)) {
+    if (host == nullptr) {
+        if (completion != nil) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                completion(NO, 0);
+            });
+        }
+        return;
+    }
+
+    host->base.add_ref(&host->base);
+    CEFBridgeGetCookiesViaCDP(host, ^(BOOL success, NSArray<NSDictionary *> *cookies) {
+        if (!success) {
+            host->base.release(&host->base);
+            if (completion != nil) {
+                completion(NO, 0);
+            }
+            return;
+        }
+
+        if (cookies.count == 0) {
+            host->base.release(&host->base);
+            if (completion != nil) {
+                completion(YES, 0);
+            }
+            return;
+        }
+
+        DeleteCookiesViaCDPSequentially(host, cookies, 0, 0, YES, ^(BOOL deleteSuccess, NSInteger deleted) {
+            host->base.release(&host->base);
+            if (completion != nil) {
+                completion(deleteSuccess, deleted);
+            }
+        });
+    });
+}
+
 void CEFBridgeCaptureScreenshot(cef_browser_host_t *host,
                                 CGSize logicalSize,
                                 void (^completion)(NSData * _Nullable pngData)) {
@@ -1011,6 +1398,36 @@ void CEFBridgeInvalidateScreenshotCapture(cef_browser_t *browser) {
         return;
     }
     CompleteAllPendingDevToolsScreenshots(observer, nil);
+    if (observer->registration != nullptr) {
+        observer->registration->base.release(&observer->registration->base);
+        observer->registration = nullptr;
+    }
+    observer->observer.base.release(&observer->observer.base);
+}
+
+void CEFBridgeInvalidateCookieObserver(cef_browser_t *browser) {
+    if (browser == nullptr || browser->get_identifier == nullptr) {
+        return;
+    }
+
+    const int browserID = browser->get_identifier(browser);
+    if (browserID == 0) {
+        return;
+    }
+
+    DevToolsCookieObserver *observer = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(sDevToolsCookieObserversMutex);
+        if (auto it = sDevToolsCookieObservers.find(browserID); it != sDevToolsCookieObservers.end()) {
+            observer = it->second;
+            sDevToolsCookieObservers.erase(it);
+        }
+    }
+
+    if (observer == nullptr) {
+        return;
+    }
+    CompleteAllPendingDevToolsCookieCommands(observer, NO, nil);
     if (observer->registration != nullptr) {
         observer->registration->base.release(&observer->registration->base);
         observer->registration = nullptr;

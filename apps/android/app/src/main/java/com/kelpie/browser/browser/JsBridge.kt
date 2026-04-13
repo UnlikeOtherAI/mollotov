@@ -1,7 +1,6 @@
 package com.kelpie.browser.browser
 
 import android.webkit.JavascriptInterface
-import com.kelpie.browser.devtools.ConsoleHandler
 import org.json.JSONObject
 
 /**
@@ -10,7 +9,6 @@ import org.json.JSONObject
  */
 class JsBridge(
     private val handlerContext: com.kelpie.browser.handlers.HandlerContext?,
-    private val consoleHandler: ConsoleHandler?,
 ) {
     @JavascriptInterface
     fun onConsoleMessage(jsonString: String) {
@@ -29,7 +27,7 @@ class JsBridge(
                         else -> obj.get(key)
                     }
             }
-            consoleHandler?.addMessage(map)
+            handlerContext?.appendConsoleMessage(map)
         } catch (_: Exception) {
         }
     }
