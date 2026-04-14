@@ -59,13 +59,7 @@ kelpie discover --timeout 5000    # custom scan duration
 }
 ```
 
-### `kelpie devices`
-List previously discovered devices (cached from last scan).
-
-```bash
-kelpie devices
-kelpie devices --refresh         # force re-scan before listing
-```
+**Alias:** `kelpie devices` is equivalent to `kelpie discover`.
 
 ### `kelpie ping [device]`
 Check if a device is reachable. Without `--device`, pings all known devices.

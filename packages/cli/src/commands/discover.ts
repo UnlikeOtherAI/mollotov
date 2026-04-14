@@ -8,6 +8,7 @@ import type { GlobalOptions } from "../types.js";
 export function registerDiscover(program: Command): void {
   program
     .command("discover")
+    .alias("devices")
     .description("Scan the local network for Kelpie browser instances")
     .option("--scan-timeout <ms>", "mDNS scan duration in milliseconds", "3000")
     .action(async (opts: { scanTimeout: string }) => {

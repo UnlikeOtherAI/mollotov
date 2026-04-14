@@ -10,18 +10,33 @@ export function getGlobals(program: Command): GlobalOptions {
 
 export async function requireDevice(program: Command): Promise<DiscoveredDevice | null> {
   const globals = getGlobals(program);
-  if (!globals.device) {
-    print({ success: false, error: { code: "MISSING_DEVICE", message: "Use --device to specify a target device" } }, globals.format);
+  if (globals.device) {
+    const device = await getDevice(globals.device);
+    if (!device) {
+      print({ success: false, error: { code: "DEVICE_NOT_FOUND", message: `No device matching "${globals.device}"` } }, globals.format);
+      process.exitCode = 4;
+      return null;
+    }
+    return device;
+  }
+
+  // No --device flag: auto-scan and pick the sole device if exactly one is found
+  const { scanForDevices } = await import("../discovery/scanner.js");
+  const { addDevices, getAllDevices } = await import("../discovery/registry.js");
+  if (getAllDevices().length === 0) {
+    addDevices(await scanForDevices(2500));
+  }
+  const all = getAllDevices();
+  if (all.length === 1) return all[0];
+  if (all.length === 0) {
+    print({ success: false, error: { code: "NO_DEVICES", message: "No Kelpie devices found on the network" } }, globals.format);
     process.exitCode = 1;
     return null;
   }
-  const device = await getDevice(globals.device);
-  if (!device) {
-    print({ success: false, error: { code: "DEVICE_NOT_FOUND", message: `No device matching "${globals.device}"` } }, globals.format);
-    process.exitCode = 4;
-    return null;
-  }
-  return device;
+  const names = all.map((d) => `  ${d.id}  ${d.name} (${d.platform})`).join("\n");
+  print({ success: false, error: { code: "MULTIPLE_DEVICES", message: `Multiple devices found. Use --device to pick one:\n${names}` } }, globals.format);
+  process.exitCode = 1;
+  return null;
 }
 
 export async function deviceCommand(

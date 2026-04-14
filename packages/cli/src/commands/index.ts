@@ -1,6 +1,6 @@
 import type { Command } from "commander";
 import { registerDiscover } from "./discover.js";
-import { registerDevices } from "./devices.js";
+
 import { registerPing } from "./ping.js";
 import { registerNavigate } from "./navigate.js";
 import { registerScreenshot } from "./screenshot.js";
@@ -48,7 +48,6 @@ import { registerFeedback } from "./feedback.js";
 export function registerAllCommands(program: Command): void {
   // Discovery
   registerDiscover(program);
-  registerDevices(program);
   registerPing(program);
   registerBrowser(program);
   registerFeedback(program);
