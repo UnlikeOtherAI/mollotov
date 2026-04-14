@@ -186,8 +186,8 @@ export const browserTools: BrowserToolDef[] = [
   // Tabs
   { name: "kelpie_get_tabs", description: "Get all open tabs", method: "getTabs", schema: { device }, bodyFromArgs: passthrough },
   { name: "kelpie_new_tab", description: "Open a new tab", method: "newTab", schema: { device, url: url.optional().describe("URL to open in new tab") }, bodyFromArgs: passthrough },
-  { name: "kelpie_switch_tab", description: "Switch to a specific tab", method: "switchTab", schema: { device, tabId: z.number().describe("Tab ID to switch to") }, bodyFromArgs: passthrough },
-  { name: "kelpie_close_tab", description: "Close a tab", method: "closeTab", schema: { device, tabId: z.number().describe("Tab ID to close") }, bodyFromArgs: passthrough },
+  { name: "kelpie_switch_tab", description: "Switch to a specific tab", method: "switchTab", schema: { device, tabId: z.string().describe("Tab UUID to switch to") }, bodyFromArgs: passthrough },
+  { name: "kelpie_close_tab", description: "Close a tab", method: "closeTab", schema: { device, tabId: z.string().describe("Tab UUID to close") }, bodyFromArgs: passthrough },
 
   // Iframes
   { name: "kelpie_get_iframes", description: "Get all iframes on the page", method: "getIframes", schema: { device, tabId }, bodyFromArgs: passthrough },

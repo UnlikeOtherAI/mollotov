@@ -24,13 +24,13 @@ export function registerTabs(program: Command): void {
     .command("switch <id>")
     .description("Switch to a tab by ID")
     .action(async (id: string) => {
-      await deviceCommand(program, "switchTab", { tabId: Number(id) });
+      await deviceCommand(program, "switchTab", { tabId: id });
     });
 
   tab
     .command("close <id>")
     .description("Close a tab by ID")
     .action(async (id: string) => {
-      await deviceCommand(program, "closeTab", { tabId: Number(id) });
+      await deviceCommand(program, "closeTab", { tabId: id });
     });
 }
