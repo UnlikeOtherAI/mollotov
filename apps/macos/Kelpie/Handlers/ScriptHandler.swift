@@ -215,7 +215,8 @@ struct ScriptHandler {
                 return {tag: el.tagName.toLowerCase(), classes: Array.from(el.classList), visible: visible};
             })()
             """
-            if let result = try? await context.evaluateJSReturningJSON(js), !result.isEmpty {
+            let tabId = HandlerContext.tabId(from: body)
+            if let result = try? await context.evaluateJSReturningJSON(js, tabId: tabId), !result.isEmpty {
                 let visible = result["visible"] as? Bool ?? false
                 let matches = state == "attached" || (state == "visible" && visible) || (state == "hidden" && !visible)
                 if matches {

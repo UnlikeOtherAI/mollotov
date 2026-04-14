@@ -52,7 +52,7 @@ final class HandlerContext {
     }
 
     /// Extract tabId from a request body dict.
-    static func tabId(from body: [String: Any]) -> String? {
+    nonisolated static func tabId(from body: [String: Any]) -> String? {
         body["tabId"] as? String
     }
 

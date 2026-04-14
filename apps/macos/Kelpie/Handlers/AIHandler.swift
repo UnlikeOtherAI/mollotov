@@ -170,6 +170,7 @@ struct AIHandler {
             return errorResponse(code: "NO_MODEL_LOADED", message: "Load a model first with ai-load")
         }
 
+        let tabId = HandlerContext.tabId(from: body)
         let maxTokens = body["maxTokens"] as? Int ?? 512
         let temperature = body["temperature"] as? Double ?? 0.7
         let prompt = body["prompt"] as? String ?? ""
@@ -190,7 +191,7 @@ struct AIHandler {
             }
 
             do {
-                let image = contextMode == "screenshot" ? try await screenshotData() : nil
+                let image = contextMode == "screenshot" ? try await screenshotData(tabId: tabId) : nil
                 let result: InferenceEngine.InferenceResult
                 if let messages {
                     result = try await inferWithOllamaAgentLoop(
@@ -201,7 +202,7 @@ struct AIHandler {
                         image: image
                     )
                 } else {
-                    let fallbackContext = await preloadedContext(mode: contextMode)
+                    let fallbackContext = await preloadedContext(mode: contextMode, tabId: tabId)
                     result = try await inferWithOllama(
                         endpoint: backendState.ollamaEndpoint ?? defaultOllamaEndpoint,
                         model: model,
@@ -231,7 +232,7 @@ struct AIHandler {
 
         if contextMode == "screenshot" {
             do {
-                let image = try await screenshotData()
+                let image = try await screenshotData(tabId: tabId)
                 let nativePrompt = buildNativeSingleShotPrompt(prompt: prompt, extraContext: nil)
                 let result = try await engine.infer(
                     prompt: nativePrompt,
@@ -258,7 +259,7 @@ struct AIHandler {
         }
 
         do {
-            let fallbackContext = await preloadedContext(mode: contextMode)
+            let fallbackContext = await preloadedContext(mode: contextMode, tabId: tabId)
             let preloaded = explicitText ?? fallbackContext
             let harness = InferenceHarness(context: context)
             let result = try await harness.run(prompt: prompt, audio: audio, preloadedContext: preloaded)
@@ -374,7 +375,7 @@ struct AIHandler {
     }
 
     @MainActor
-    private func preloadedContext(mode: String?) async -> String? {
+    private func preloadedContext(mode: String?, tabId: String?) async -> String? {
         switch mode {
         case nil:
             return nil
@@ -392,7 +393,7 @@ struct AIHandler {
                         wordCount: text ? text.split(/\\s+/).length : 0
                     };
                 })())
-                """
+                """, tabId: tabId
             )) ?? ""
 
         case "dom":
@@ -402,7 +403,7 @@ struct AIHandler {
                     var el = document.body || document.documentElement;
                     return { html: el ? el.outerHTML : '', selector: 'body' };
                 })())
-                """
+                """, tabId: tabId
             )) ?? ""
 
         case "accessibility":
@@ -425,7 +426,7 @@ struct AIHandler {
                     }
                     return walk(document.body, 0);
                 })())
-                """
+                """, tabId: tabId
             )) ?? ""
 
         case "screenshot":
@@ -437,8 +438,8 @@ struct AIHandler {
     }
 
     @MainActor
-    private func screenshotData() async throws -> Data {
-        let image = try await context.takeSnapshot()
+    private func screenshotData(tabId: String?) async throws -> Data {
+        let image = try await context.takeSnapshot(tabId: tabId)
         guard let tiff = image.tiffRepresentation,
               let bitmap = NSBitmapImageRep(data: tiff),
               let png = bitmap.representation(using: .png, properties: [:]) else {
