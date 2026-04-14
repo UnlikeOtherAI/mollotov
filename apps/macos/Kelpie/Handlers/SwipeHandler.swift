@@ -9,6 +9,7 @@ struct SwipeHandler {
 
     @MainActor
     private func swipe(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         guard let from = body["from"] as? [String: Any],
               let to = body["to"] as? [String: Any],
               let fx = double(from["x"]),
@@ -30,9 +31,11 @@ struct SwipeHandler {
                     ty: ty,
                     durationMs: durationMs,
                     color: color
-                )
+                ),
+                tabId: tabId
             )
         } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
             return errorResponse(code: "WEBVIEW_ERROR", message: error.localizedDescription)
         }
 
@@ -49,9 +52,11 @@ struct SwipeHandler {
                         totalSteps: steps,
                         x: currentX,
                         y: currentY
-                    )
+                    ),
+                    tabId: tabId
                 )
             } catch {
+                if let tabError = tabErrorResponse(from: error) { return tabError }
                 return errorResponse(code: "WEBVIEW_ERROR", message: error.localizedDescription)
             }
             if step < steps {

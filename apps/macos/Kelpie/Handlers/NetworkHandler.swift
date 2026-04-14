@@ -7,11 +7,12 @@ struct NetworkHandler {
 
     func register(on router: Router) {
         router.register("get-network-log") { body in await getNetworkLog(body) }
-        router.register("get-resource-timeline") { _ in await getResourceTimeline() }
+        router.register("get-resource-timeline") { body in await getResourceTimeline(body) }
     }
 
     @MainActor
     private func getNetworkLog(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         let typeFilter = body["type"] as? String
         let limit = body["limit"] as? Int ?? 200
         let js = """
@@ -53,7 +54,7 @@ struct NetworkHandler {
         })()
         """
         do {
-            let jsonString = try await context.evaluateJSReturningString("JSON.stringify(\(js))")
+            let jsonString = try await context.evaluateJSReturningString("JSON.stringify(\(js))", tabId: tabId)
             guard let data = jsonString.data(using: .utf8),
                   let array = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
                 return successResponse(["entries": [] as [Any], "count": 0, "hasMore": false, "summary": emptySummary()])
@@ -70,12 +71,14 @@ struct NetworkHandler {
                 "summary": buildSummary(filtered)
             ])
         } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
         }
     }
 
     @MainActor
-    private func getResourceTimeline() async -> [String: Any] {
+    private func getResourceTimeline(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         let js = """
         (function(){
             var nav = performance.getEntriesByType('navigation')[0] || {};
@@ -105,9 +108,10 @@ struct NetworkHandler {
         })()
         """
         do {
-            let result = try await context.evaluateJSReturningJSON(js)
+            let result = try await context.evaluateJSReturningJSON(js, tabId: tabId)
             return successResponse(result)
         } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
         }
     }

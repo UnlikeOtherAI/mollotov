@@ -12,19 +12,22 @@ struct EvaluateHandler {
 
     @MainActor
     private func evaluate(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         guard let expression = body["expression"] as? String else {
             return errorResponse(code: "MISSING_PARAM", message: "expression is required")
         }
         do {
-            let result = try await context.evaluateJS(expression)
+            let result = try await context.evaluateJS(expression, tabId: tabId)
             return successResponse(["result": result ?? NSNull()])
         } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
         }
     }
 
     @MainActor
     private func waitForElement(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         guard let selector = body["selector"] as? String else {
             return errorResponse(code: "MISSING_PARAM", message: "selector is required")
         }
@@ -43,13 +46,18 @@ struct EvaluateHandler {
                 return {tag: el.tagName.toLowerCase(), classes: Array.from(el.classList), visible: visible};
             })()
             """
-            if let result = try? await context.evaluateJSReturningJSON(js), !result.isEmpty {
-                let visible = result["visible"] as? Bool ?? false
-                let matches = (state == "attached") || (state == "visible" && visible) || (state == "hidden" && !visible)
-                if matches {
-                    let waitTime = Int((CFAbsoluteTimeGetCurrent() - start) * 1000)
-                    return successResponse(["element": result, "waitTime": waitTime])
+            do {
+                let result = try await context.evaluateJSReturningJSON(js, tabId: tabId)
+                if !result.isEmpty {
+                    let visible = result["visible"] as? Bool ?? false
+                    let matches = (state == "attached") || (state == "visible" && visible) || (state == "hidden" && !visible)
+                    if matches {
+                        let waitTime = Int((CFAbsoluteTimeGetCurrent() - start) * 1000)
+                        return successResponse(["element": result, "waitTime": waitTime])
+                    }
                 }
+            } catch {
+                if let tabError = tabErrorResponse(from: error) { return tabError }
             }
             try? await Task.sleep(nanoseconds: 100_000_000)
         }
@@ -58,16 +66,25 @@ struct EvaluateHandler {
 
     @MainActor
     private func waitForNavigation(_ body: [String: Any]) async -> [String: Any] {
-        guard context.renderer != nil else { return errorResponse(code: "NO_WEBVIEW", message: "No WebView") }
+        let tabId = HandlerContext.tabId(from: body)
         let timeout = body["timeout"] as? Int ?? 10000
         let start = CFAbsoluteTimeGetCurrent()
-
-        for _ in 0..<(timeout / 100) {
-            try? await Task.sleep(nanoseconds: 100_000_000)
-            if !context.isLoadingPage {
-                let loadTime = Int((CFAbsoluteTimeGetCurrent() - start) * 1000)
-                return successResponse(["url": context.currentURL?.absoluteString ?? "", "title": context.currentTitle, "loadTime": loadTime])
+        do {
+            let renderer = try context.resolveRenderer(tabId: tabId)
+            for _ in 0..<(timeout / 100) {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                if !renderer.isLoading {
+                    let loadTime = Int((CFAbsoluteTimeGetCurrent() - start) * 1000)
+                    return successResponse([
+                        "url": renderer.currentURL?.absoluteString ?? "",
+                        "title": renderer.currentTitle,
+                        "loadTime": loadTime
+                    ])
+                }
             }
+        } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
+            return errorResponse(code: "NO_WEBVIEW", message: error.localizedDescription)
         }
         return errorResponse(code: "TIMEOUT", message: "Navigation did not complete within \(timeout)ms")
     }

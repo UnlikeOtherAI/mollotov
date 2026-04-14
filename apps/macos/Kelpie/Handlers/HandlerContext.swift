@@ -19,11 +19,183 @@ final class HandlerContext {
     var onSwitchTab: ((UUID) -> Void)?
     var onCloseTab: ((UUID) -> Void)?
     var onWillLoad: (() -> Void)?
-    private var sharedCookiePoller: Timer?
-    private var lastSharedCookieSignature: String = ""
-    private var lastSharedCookieModifiedAt: Date?
+    var sharedCookiePoller: Timer?
+    var lastSharedCookieSignature: String = ""
+    var lastSharedCookieModifiedAt: Date?
 
     init() {}
+
+    // MARK: - Per-tab renderer resolution
+
+    /// Resolves the renderer for a specific tab, or falls back to the active tab.
+    /// When multiple tabs exist and no tabId is provided, returns an error
+    /// so LLMs are forced to be explicit about which tab they target.
+    func resolveRenderer(tabId: String?) throws -> any RendererEngine {
+        guard let tabId else {
+            // No tabId: auto-select if exactly one tab, otherwise require it
+            if let store = tabStore, store.tabs.count > 1 {
+                let listing = store.tabs.map { tab in
+                    "\(tab.id.uuidString)  \(tab.title)  \(tab.currentURL)"
+                }.joined(separator: "\n")
+                throw HandlerError.tabRequired(listing)
+            }
+            guard let renderer else { throw HandlerError.noWebView }
+            return renderer
+        }
+        guard let uuid = UUID(uuidString: tabId) else {
+            throw HandlerError.tabNotFound(tabId)
+        }
+        guard let tab = tabStore?.tabs.first(where: { $0.id == uuid }) else {
+            throw HandlerError.tabNotFound(tabId)
+        }
+        return tab.renderer
+    }
+
+    /// Extract tabId from a request body dict.
+    static func tabId(from body: [String: Any]) -> String? {
+        body["tabId"] as? String
+    }
+
+    /// Convenience: evaluate JS on a specific tab.
+    func evaluateJS(_ script: String, tabId: String?) async throws -> Any? {
+        let target = try resolveRenderer(tabId: tabId)
+        return try await target.evaluateJS(script)
+    }
+
+    func evaluateJSReturningString(_ script: String, tabId: String?) async throws -> String {
+        let result = try await evaluateJS(script, tabId: tabId)
+        return result as? String ?? String(describing: result ?? "null")
+    }
+
+    func evaluateJSReturningJSON(_ script: String, tabId: String?) async throws -> [String: Any] {
+        let wrapped = "JSON.stringify((\(script)))"
+        let jsonString = try await evaluateJSReturningString(wrapped, tabId: tabId)
+        guard let data = jsonString.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return [:]
+        }
+        return json
+    }
+
+    func evaluateJSReturningArray(_ script: String, tabId: String?) async throws -> [[String: Any]] {
+        let wrapped = "JSON.stringify((\(script)))"
+        let jsonString = try await evaluateJSReturningString(wrapped, tabId: tabId)
+        guard let data = jsonString.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+            return []
+        }
+        return json
+    }
+
+    func takeSnapshot(tabId: String?) async throws -> NSImage {
+        let target = try resolveRenderer(tabId: tabId)
+        return try await target.takeSnapshot()
+    }
+
+    func showTouchIndicator(x: Double, y: Double, color: String = defaultOverlayRGB, tabId: String?) async {
+        let js = """
+        (function() {
+            var dot = document.createElement('div');
+            dot.style.cssText = 'position:fixed;left:\(x)px;top:\(y)px;width:36px;height:36px;' +
+                'margin-left:-18px;margin-top:-18px;border-radius:50%;' +
+                'background:rgba(\(JSEscape.string(color)),0.7);pointer-events:none;z-index:2147483647;' +
+                'transition:transform 0.5s ease-out, opacity 0.5s ease-out;transform:scale(1);opacity:1;';
+            document.body.appendChild(dot);
+            var ripple = document.createElement('div');
+            ripple.style.cssText = 'position:fixed;left:\(x)px;top:\(y)px;width:36px;height:36px;' +
+                'margin-left:-18px;margin-top:-18px;border-radius:50%;' +
+                'border:2px solid rgba(\(JSEscape.string(color)),0.7);pointer-events:none;z-index:2147483647;' +
+                'transition:transform 0.6s ease-out, opacity 0.6s ease-out;transform:scale(1);opacity:1;';
+            document.body.appendChild(ripple);
+            requestAnimationFrame(function() {
+                ripple.style.transform = 'scale(3)';
+                ripple.style.opacity = '0';
+            });
+            setTimeout(function() {
+                dot.style.transform = 'scale(0.5)';
+                dot.style.opacity = '0';
+            }, 550);
+            setTimeout(function() {
+                dot.remove();
+                ripple.remove();
+            }, 1100);
+        })();
+        """
+        _ = try? await evaluateJS(js, tabId: tabId)
+    }
+
+    func showTouchIndicatorForElement(
+        _ selector: String,
+        color: String = defaultOverlayRGB,
+        tabId: String?
+    ) async {
+        let js = """
+        (function() {
+            var el = document.querySelector('\(JSEscape.string(selector))');
+            if (!el) return JSON.stringify(null);
+            var r = el.getBoundingClientRect();
+            return JSON.stringify({x: r.left + r.width/2, y: r.top + r.height/2});
+        })()
+        """
+        if let result = try? await evaluateJSReturningString(js, tabId: tabId),
+           let data = result.data(using: .utf8),
+           let pos = try? JSONSerialization.jsonObject(with: data) as? [String: Double],
+           let x = pos["x"], let y = pos["y"] {
+            await showTouchIndicator(x: x, y: y, color: color, tabId: tabId)
+        }
+    }
+
+    func screenshotViewportMetrics(tabId: String?) async throws -> ScreenshotViewportMetrics {
+        let result = try await evaluateJSReturningJSON("""
+        (function() {
+            return {
+                viewportWidth: Math.max(window.innerWidth || 0, 1),
+                viewportHeight: Math.max(window.innerHeight || 0, 1),
+                devicePixelRatio: window.devicePixelRatio || 1
+            };
+        })()
+        """, tabId: tabId)
+        return ScreenshotViewportMetrics(
+            viewportWidth: (result["viewportWidth"] as? NSNumber)?.intValue ?? 1,
+            viewportHeight: (result["viewportHeight"] as? NSNumber)?.intValue ?? 1,
+            devicePixelRatio: (result["devicePixelRatio"] as? NSNumber)?.doubleValue ?? 1
+        )
+    }
+
+    func screenshotPayload(
+        from image: NSImage,
+        format: String,
+        quality: Double,
+        resolution: ScreenshotResolution,
+        tabId: String?
+    ) async throws -> [String: Any] {
+        let viewport = try await screenshotViewportMetrics(tabId: tabId)
+        let normalizedFormat = format == "jpeg" ? "jpeg" : "png"
+        guard let bitmap = scaledBitmapRepresentation(from: image, to: resolution, using: viewport) else {
+            throw HandlerError.screenshotFailed
+        }
+        let imageData: Data?
+        if normalizedFormat == "jpeg" {
+            imageData = bitmap.representation(using: .jpeg, properties: [.compressionFactor: quality])
+        } else {
+            imageData = bitmap.representation(using: .png, properties: [:])
+        }
+        guard let encoded = imageData else {
+            throw HandlerError.screenshotFailed
+        }
+        return [
+            "image": encoded.base64EncodedString()
+        ].merging(
+            viewport.metadata(
+                imageWidth: bitmap.pixelsWide,
+                imageHeight: bitmap.pixelsHigh,
+                format: normalizedFormat,
+                resolution: resolution
+            )
+        ) { _, new in new }
+    }
+
+    // MARK: - Script messages
 
     /// Called by renderers when they receive a bridge script message.
     func handleScriptMessage(name: String, body: [String: Any]) {
@@ -69,85 +241,47 @@ final class HandlerContext {
         }
     }
 
+    // MARK: - Active-tab convenience (used by UI code, not handlers)
+
     func evaluateJS(_ script: String) async throws -> Any? {
-        guard let renderer else { throw HandlerError.noWebView }
-        return try await renderer.evaluateJS(script)
+        try await evaluateJS(script, tabId: nil)
     }
 
     func evaluateJSReturningString(_ script: String) async throws -> String {
-        let result = try await evaluateJS(script)
-        return result as? String ?? String(describing: result ?? "null")
+        try await evaluateJSReturningString(script, tabId: nil)
     }
 
     func evaluateJSReturningJSON(_ script: String) async throws -> [String: Any] {
-        let wrapped = "JSON.stringify((\(script)))"
-        let jsonString = try await evaluateJSReturningString(wrapped)
-        guard let data = jsonString.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            return [:]
-        }
-        return json
+        try await evaluateJSReturningJSON(script, tabId: nil)
     }
 
     func evaluateJSReturningArray(_ script: String) async throws -> [[String: Any]] {
-        let wrapped = "JSON.stringify((\(script)))"
-        let jsonString = try await evaluateJSReturningString(wrapped)
-        guard let data = jsonString.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
-            return []
-        }
-        return json
+        try await evaluateJSReturningArray(script, tabId: nil)
     }
 
-    /// Show a touch indicator at viewport coordinates with a ripple animation.
-    func showTouchIndicator(x: Double, y: Double, color: String = HandlerContext.defaultOverlayRGB) async {
-        let js = """
-        (function() {
-            var dot = document.createElement('div');
-            dot.style.cssText = 'position:fixed;left:\(x)px;top:\(y)px;width:36px;height:36px;' +
-                'margin-left:-18px;margin-top:-18px;border-radius:50%;' +
-                'background:rgba(\(JSEscape.string(color)),0.7);pointer-events:none;z-index:2147483647;' +
-                'transition:transform 0.5s ease-out, opacity 0.5s ease-out;transform:scale(1);opacity:1;';
-            document.body.appendChild(dot);
-            var ripple = document.createElement('div');
-            ripple.style.cssText = 'position:fixed;left:\(x)px;top:\(y)px;width:36px;height:36px;' +
-                'margin-left:-18px;margin-top:-18px;border-radius:50%;' +
-                'border:2px solid rgba(\(JSEscape.string(color)),0.7);pointer-events:none;z-index:2147483647;' +
-                'transition:transform 0.6s ease-out, opacity 0.6s ease-out;transform:scale(1);opacity:1;';
-            document.body.appendChild(ripple);
-            requestAnimationFrame(function() {
-                ripple.style.transform = 'scale(3)';
-                ripple.style.opacity = '0';
-            });
-            setTimeout(function() {
-                dot.style.transform = 'scale(0.5)';
-                dot.style.opacity = '0';
-            }, 550);
-            setTimeout(function() {
-                dot.remove();
-                ripple.remove();
-            }, 1100);
-        })();
-        """
-        _ = try? await evaluateJS(js)
+    func takeSnapshot() async throws -> NSImage {
+        try await takeSnapshot(tabId: nil)
     }
 
-    /// Show touch indicator at an element's center by selector.
-    func showTouchIndicatorForElement(_ selector: String, color: String = HandlerContext.defaultOverlayRGB) async {
-        let js = """
-        (function() {
-            var el = document.querySelector('\(JSEscape.string(selector))');
-            if (!el) return JSON.stringify(null);
-            var r = el.getBoundingClientRect();
-            return JSON.stringify({x: r.left + r.width/2, y: r.top + r.height/2});
-        })()
-        """
-        if let result = try? await evaluateJSReturningString(js),
-           let data = result.data(using: .utf8),
-           let pos = try? JSONSerialization.jsonObject(with: data) as? [String: Double],
-           let x = pos["x"], let y = pos["y"] {
-            await showTouchIndicator(x: x, y: y, color: color)
-        }
+    func showTouchIndicator(x: Double, y: Double, color: String = defaultOverlayRGB) async {
+        await showTouchIndicator(x: x, y: y, color: color, tabId: nil)
+    }
+
+    func showTouchIndicatorForElement(_ selector: String, color: String = defaultOverlayRGB) async {
+        await showTouchIndicatorForElement(selector, color: color, tabId: nil)
+    }
+
+    func screenshotViewportMetrics() async throws -> ScreenshotViewportMetrics {
+        try await screenshotViewportMetrics(tabId: nil)
+    }
+
+    func screenshotPayload(
+        from image: NSImage,
+        format: String,
+        quality: Double,
+        resolution: ScreenshotResolution
+    ) async throws -> [String: Any] {
+        try await screenshotPayload(from: image, format: format, quality: quality, resolution: resolution, tabId: nil)
     }
 
     /// Show a toast message overlay at the bottom of the viewport.
@@ -231,61 +365,6 @@ final class HandlerContext {
         renderer?.hardReload()
     }
 
-    func takeSnapshot() async throws -> NSImage {
-        guard let renderer else { throw HandlerError.noWebView }
-        return try await renderer.takeSnapshot()
-    }
-
-    func screenshotViewportMetrics() async throws -> ScreenshotViewportMetrics {
-        let result = try await evaluateJSReturningJSON("""
-        (function() {
-            return {
-                viewportWidth: Math.max(window.innerWidth || 0, 1),
-                viewportHeight: Math.max(window.innerHeight || 0, 1),
-                devicePixelRatio: window.devicePixelRatio || 1
-            };
-        })()
-        """)
-        return ScreenshotViewportMetrics(
-            viewportWidth: (result["viewportWidth"] as? NSNumber)?.intValue ?? 1,
-            viewportHeight: (result["viewportHeight"] as? NSNumber)?.intValue ?? 1,
-            devicePixelRatio: (result["devicePixelRatio"] as? NSNumber)?.doubleValue ?? 1
-        )
-    }
-
-    func screenshotPayload(
-        from image: NSImage,
-        format: String,
-        quality: Double,
-        resolution: ScreenshotResolution
-    ) async throws -> [String: Any] {
-        let viewport = try await screenshotViewportMetrics()
-        let normalizedFormat = format == "jpeg" ? "jpeg" : "png"
-        guard let bitmap = scaledBitmapRepresentation(from: image, to: resolution, using: viewport) else {
-            throw HandlerError.screenshotFailed
-        }
-
-        let imageData: Data?
-        if normalizedFormat == "jpeg" {
-            imageData = bitmap.representation(using: .jpeg, properties: [.compressionFactor: quality])
-        } else {
-            imageData = bitmap.representation(using: .png, properties: [:])
-        }
-        guard let encoded = imageData else {
-            throw HandlerError.screenshotFailed
-        }
-        return [
-            "image": encoded.base64EncodedString()
-        ].merging(
-            viewport.metadata(
-                imageWidth: bitmap.pixelsWide,
-                imageHeight: bitmap.pixelsHigh,
-                format: normalizedFormat,
-                resolution: resolution
-            )
-        ) { _, new in new }
-    }
-
     func waitForViewportSize(_ size: CGSize) async {
         guard let view = renderer?.makeView() else { return }
         let expectedWidth = size.width
@@ -301,6 +380,85 @@ final class HandlerContext {
         }
     }
 
+    nonisolated static func hexToRGB(_ hex: String) -> String {
+        let normalized = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
+        guard normalized.count == 6,
+              let red = UInt8(normalized.prefix(2), radix: 16),
+              let green = UInt8(normalized.dropFirst(2).prefix(2), radix: 16),
+              let blue = UInt8(normalized.dropFirst(4).prefix(2), radix: 16) else {
+            return defaultOverlayRGB
+        }
+        return "\(red),\(green),\(blue)"
+    }
+
+    func mark3DInspectorInactive(notify: Bool) {
+        isIn3DInspector = false
+        guard notify else { return }
+        NotificationCenter.default.post(name: .snapshot3DExited, object: nil)
+    }
+
+    func exit3DInspectorIfNeeded(notify: Bool) async {
+        guard isIn3DInspector else { return }
+        _ = try? await evaluateJS(Snapshot3DBridge.exitScript)
+        mark3DInspectorInactive(notify: notify)
+    }
+
+    private func reset3DInspectorForNavigation() {
+        guard isIn3DInspector else { return }
+        mark3DInspectorInactive(notify: true)
+    }
+}
+
+extension Notification.Name {
+    static let snapshot3DExited = Notification.Name("kelpie.snapshot3DExited")
+}
+
+enum HandlerError: Error {
+    case noWebView
+    case elementNotFound(String)
+    case screenshotFailed
+    case timeout
+    case platformNotSupported(String)
+    case tabNotFound(String)
+    case tabRequired(String)
+}
+
+func tabErrorResponse(from error: Error) -> [String: Any]? {
+    guard let handlerError = error as? HandlerError else { return nil }
+    switch handlerError {
+    case .tabNotFound(let tabId):
+        return errorResponse(code: "TAB_NOT_FOUND", message: "No tab with id \"\(tabId)\"")
+    case .tabRequired(let listing):
+        return errorResponse(
+            code: "TAB_REQUIRED",
+            message: "Multiple tabs open — specify \"tabId\" in your request. Available tabs:\n\(listing)"
+        )
+    default:
+        return nil
+    }
+}
+
+func errorResponse(code: String, message: String) -> [String: Any] {
+    errorResponse(code: code, message: message, diagnostics: nil)
+}
+
+func errorResponse(code: String, message: String, diagnostics: [String: Any]?) -> [String: Any] {
+    var error: [String: Any] = ["code": code, "message": message]
+    if let diagnostics, !diagnostics.isEmpty {
+        error["diagnostics"] = diagnostics
+    }
+    return ["success": false, "error": error]
+}
+
+func successResponse(_ data: [String: Any] = [:]) -> [String: Any] {
+    var result: [String: Any] = ["success": true]
+    for (key, value) in data { result[key] = value }
+    return result
+}
+
+// MARK: - Cookie management (cross-renderer sync)
+
+extension HandlerContext {
     func allCookies() async -> [HTTPCookie] {
         guard let renderer else { return [] }
         if renderer.engineName == "chromium" {
@@ -352,17 +510,6 @@ final class HandlerContext {
         await persistRendererCookiesToSharedJar()
     }
 
-    nonisolated static func hexToRGB(_ hex: String) -> String {
-        let normalized = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
-        guard normalized.count == 6,
-              let red = UInt8(normalized.prefix(2), radix: 16),
-              let green = UInt8(normalized.dropFirst(2).prefix(2), radix: 16),
-              let blue = UInt8(normalized.dropFirst(4).prefix(2), radix: 16) else {
-            return defaultOverlayRGB
-        }
-        return "\(red),\(green),\(blue)"
-    }
-
     func deleteAllCookies() async {
         guard let renderer else { return }
         await renderer.deleteAllCookies()
@@ -406,9 +553,7 @@ final class HandlerContext {
         guard renderer.engineName != "chromium" else { return }
         let cookies = await renderer.allCookies()
         let signature = SharedCookieJar.signature(for: cookies)
-        if signature == lastSharedCookieSignature {
-            return
-        }
+        if signature == lastSharedCookieSignature { return }
 
         SharedCookieJar.save(cookies: cookies)
         let snapshot = SharedCookieJar.load()
@@ -430,51 +575,4 @@ final class HandlerContext {
         sharedCookiePoller?.invalidate()
         sharedCookiePoller = nil
     }
-
-    func mark3DInspectorInactive(notify: Bool) {
-        isIn3DInspector = false
-        guard notify else { return }
-        NotificationCenter.default.post(name: .snapshot3DExited, object: nil)
-    }
-
-    func exit3DInspectorIfNeeded(notify: Bool) async {
-        guard isIn3DInspector else { return }
-        _ = try? await evaluateJS(Snapshot3DBridge.exitScript)
-        mark3DInspectorInactive(notify: notify)
-    }
-
-    private func reset3DInspectorForNavigation() {
-        guard isIn3DInspector else { return }
-        mark3DInspectorInactive(notify: true)
-    }
-}
-
-extension Notification.Name {
-    static let snapshot3DExited = Notification.Name("kelpie.snapshot3DExited")
-}
-
-enum HandlerError: Error {
-    case noWebView
-    case elementNotFound(String)
-    case screenshotFailed
-    case timeout
-    case platformNotSupported(String)
-}
-
-func errorResponse(code: String, message: String) -> [String: Any] {
-    errorResponse(code: code, message: message, diagnostics: nil)
-}
-
-func errorResponse(code: String, message: String, diagnostics: [String: Any]?) -> [String: Any] {
-    var error: [String: Any] = ["code": code, "message": message]
-    if let diagnostics, !diagnostics.isEmpty {
-        error["diagnostics"] = diagnostics
-    }
-    return ["success": false, "error": error]
-}
-
-func successResponse(_ data: [String: Any] = [:]) -> [String: Any] {
-    var result: [String: Any] = ["success": true]
-    for (key, value) in data { result[key] = value }
-    return result
 }

@@ -170,7 +170,8 @@
 		5ED12202EA0CFC0BABED1F6D /* SharedCookieJar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedCookieJar.swift; sourceTree = "<group>"; };
 		641FDAC42DB51FD5D8F74FA3 /* CEFBridgeSupport.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CEFBridgeSupport.h; sourceTree = "<group>"; };
 		65621FCECC381EA5091A2CF6 /* InferenceHarness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceHarness.swift; sourceTree = "<group>"; };
-		68D4BCFA31A9F8B432857979 /* HandlerContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandlerContext.swift; sourceTree = "<group>"; };
+		68D4BCFA31A9F8B432857979 /* HandlerContext.swift */ = {isa = PBXFileReference;
+lastKnownFileType = sourcecode.swift; path = HandlerContext.swift; sourceTree = "<group>"; };
 		6A236E29C0E1DB1C832B07F2 /* main.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = main.mm; sourceTree = "<group>"; };
 		6C5F0ACDFF19BE0C58E578AB /* CEFBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = CEFBridge.mm; sourceTree = "<group>"; };
 		7159880B6A58D172947A7C55 /* AIManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIManager.swift; sourceTree = "<group>"; };

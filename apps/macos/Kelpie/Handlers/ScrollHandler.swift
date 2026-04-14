@@ -22,13 +22,14 @@ struct ScrollHandler {
     func register(on router: Router) {
         router.register("scroll") { body in await scroll(body) }
         router.register("scroll2") { body in await scroll2(body) }
-        router.register("scroll-to-top") { _ in await scrollTo(top: true) }
-        router.register("scroll-to-bottom") { _ in await scrollTo(top: false) }
+        router.register("scroll-to-top") { body in await scrollTo(body, top: true) }
+        router.register("scroll-to-bottom") { body in await scrollTo(body, top: false) }
         router.register("scroll-to-y") { body in await scrollToY(body) }
     }
 
     @MainActor
     private func scroll(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         let dx = body["deltaX"] as? Double ?? 0
         let dy = body["deltaY"] as? Double ?? 0
         let js = """
@@ -39,15 +40,17 @@ struct ScrollHandler {
         })()
         """
         do {
-            let result = try await context.evaluateJSReturningJSON(js)
+            let result = try await context.evaluateJSReturningJSON(js, tabId: tabId)
             return successResponse(result)
         } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
         }
     }
 
     @MainActor
     private func scroll2(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         guard let selector = body["selector"] as? String else {
             return errorResponse(code: "MISSING_PARAM", message: "selector is required")
         }
@@ -63,17 +66,19 @@ struct ScrollHandler {
         })()
         """
         do {
-            let result = try await context.evaluateJSReturningJSON(js)
+            let result = try await context.evaluateJSReturningJSON(js, tabId: tabId)
             if result.isEmpty { return errorResponse(code: "ELEMENT_NOT_FOUND", message: "Element not found: \(selector)") }
-            await context.showTouchIndicatorForElement(selector)
+            await context.showTouchIndicatorForElement(selector, tabId: tabId)
             return successResponse(result)
         } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
         }
     }
 
     @MainActor
-    private func scrollTo(top: Bool) async -> [String: Any] {
+    private func scrollTo(_ body: [String: Any], top: Bool) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         let targetY = top ? "0" : "document.documentElement.scrollHeight"
         let js = """
         (function() {
@@ -83,15 +88,17 @@ struct ScrollHandler {
         })()
         """
         do {
-            let result = try await context.evaluateJSReturningJSON(js)
+            let result = try await context.evaluateJSReturningJSON(js, tabId: tabId)
             return successResponse(result)
         } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
         }
     }
 
     @MainActor
     private func scrollToY(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         guard let y = body["y"] as? Double else {
             return errorResponse(code: "MISSING_PARAM", message: "y is required (pixel offset)")
         }
@@ -108,9 +115,10 @@ struct ScrollHandler {
         })()
         """
         do {
-            let result = try await context.evaluateJSReturningJSON(js)
+            let result = try await context.evaluateJSReturningJSON(js, tabId: tabId)
             return successResponse(result)
         } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
         }
     }

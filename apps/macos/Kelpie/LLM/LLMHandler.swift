@@ -19,111 +19,129 @@ struct LLMHandler {
         router.register("click-annotation") { body in await clickAnnotation(body) }
         router.register("fill-annotation") { body in await fillAnnotation(body) }
         router.register("query-shadow-dom") { body in await queryShadowDOM(body) }
-        router.register("get-shadow-roots") { _ in await getShadowRoots() }
+        router.register("get-shadow-roots") { body in await getShadowRoots(body) }
     }
 
     @MainActor
     private func getAccessibilityTree(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         let root = body["root"] as? String ?? "body"
         let maxDepth = body["maxDepth"] as? Int ?? 5
         let js = """
         (function(){function walk(el,depth){if(depth>"\(maxDepth)")return null;var role=el.getAttribute('role')||el.tagName.toLowerCase();var name=el.getAttribute('aria-label')||el.textContent?.trim().substring(0,50)||'';var node={role:role,name:name};if(el.getAttribute('aria-checked'))node.checked=el.getAttribute('aria-checked')==='true';if(el.disabled)node.disabled=true;if(document.activeElement===el)node.focused=true;var children=[];for(var c of el.children){var cn=walk(c,depth+1);if(cn)children.push(cn);}if(children.length)node.children=children;return node;}var root=document.querySelector('\(JSEscape.string(root))');if(!root)return{tree:{role:'none'},nodeCount:0};var tree=walk(root,0);var count=root.querySelectorAll('*').length;return{tree:tree,nodeCount:count};})()
         """
         do {
-            let result = try await context.evaluateJSReturningJSON(js)
+            let result = try await context.evaluateJSReturningJSON(js, tabId: tabId)
             return successResponse(result)
         } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
         }
     }
 
     @MainActor
     private func getVisibleElements(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         let interactableOnly = body["interactableOnly"] as? Bool ?? false
         let js = """
         (function(){var els=document.querySelectorAll('*');var visible=[];for(var el of els){var r=el.getBoundingClientRect();if(r.width>0&&r.height>0&&r.top<window.innerHeight&&r.bottom>0&&r.left<window.innerWidth&&r.right>0){var tag=el.tagName.toLowerCase();if(\(interactableOnly)&&!['a','button','input','select','textarea'].includes(tag)&&!el.onclick&&el.getAttribute('role')!=='button')continue;visible.push({tag:tag,text:(el.textContent||'').trim().substring(0,100),rect:{x:r.x,y:r.y,width:r.width,height:r.height},role:el.getAttribute('role')||undefined,interactable:['a','button','input','select','textarea'].includes(tag)});if(visible.length>=200)break;}}return{viewport:{width:window.innerWidth,height:window.innerHeight,scrollX:window.scrollX,scrollY:window.scrollY},elements:visible,count:visible.length};})()
         """
         do {
-            let result = try await context.evaluateJSReturningJSON(js)
+            let result = try await context.evaluateJSReturningJSON(js, tabId: tabId)
             return successResponse(result)
         } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
         }
     }
 
     @MainActor
     private func getPageText(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         let selector = body["selector"] as? String ?? "body"
         let js = """
         (function(){var el=document.querySelector('\(JSEscape.string(selector))');if(!el)return{title:'',content:'',wordCount:0};var text=el.innerText||el.textContent||'';return{title:document.title,byline:null,content:text.trim(),wordCount:text.trim().split(/\\s+/).length,language:document.documentElement.lang||null,excerpt:text.trim().substring(0,200)};})()
         """
         do {
-            let result = try await context.evaluateJSReturningJSON(js)
+            let result = try await context.evaluateJSReturningJSON(js, tabId: tabId)
             return successResponse(result)
         } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
         }
     }
 
     @MainActor
     private func getFormState(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         let js = """
         (function(){\(elementSelectorBuilderScript())var forms=document.querySelectorAll('form');if(!forms.length)return{forms:[],formCount:0};return{forms:Array.from(forms).map(function(f){var fields=Array.from(f.querySelectorAll('input,select,textarea')).map(function(el){return{name:el.name||'',type:el.type||'text',selector:kelpieBuildSelector(el),label:null,value:el.value||'',required:el.required,valid:el.checkValidity(),disabled:el.disabled};});var btn=f.querySelector('button[type=submit],input[type=submit]');return{selector:kelpieBuildSelector(f),action:f.action||'',method:f.method||'get',fields:fields,isValid:f.checkValidity(),emptyRequired:fields.filter(function(fl){return fl.required&&!fl.value;}).map(function(fl){return fl.name;}),submitButton:btn?{selector:kelpieBuildSelector(btn),text:btn.textContent?.trim()||btn.value||'',disabled:btn.disabled}:null};}),formCount:forms.length};})()
         """
         do {
-            let result = try await context.evaluateJSReturningJSON(js)
+            let result = try await context.evaluateJSReturningJSON(js, tabId: tabId)
             return successResponse(result)
         } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
         }
     }
 
     @MainActor
     private func findElement(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         guard let text = body["text"] as? String else {
             return errorResponse(code: "MISSING_PARAM", message: "text is required")
         }
-        return await findByText(text, filter: "true")
+        return await findByText(text, filter: "true", tabId: tabId)
     }
 
     @MainActor
     private func findButton(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         guard let text = body["text"] as? String else {
             return errorResponse(code: "MISSING_PARAM", message: "text is required")
         }
-        return await findByText(text, filter: "['BUTTON','A','INPUT'].includes(el.tagName)||el.getAttribute('role')==='button'")
+        return await findByText(
+            text,
+            filter: "['BUTTON','A','INPUT'].includes(el.tagName)||el.getAttribute('role')==='button'",
+            tabId: tabId
+        )
     }
 
     @MainActor
     private func findLink(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         guard let text = body["text"] as? String else {
             return errorResponse(code: "MISSING_PARAM", message: "text is required")
         }
-        return await findByText(text, filter: "el.tagName==='A'||el.getAttribute('role')==='link'")
+        return await findByText(text, filter: "el.tagName==='A'||el.getAttribute('role')==='link'", tabId: tabId)
     }
 
     @MainActor
     private func findInput(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         let label = body["label"] as? String ?? ""
         let js = """
         (function(){\(elementSelectorBuilderScript())var inputs=document.querySelectorAll('input,select,textarea');for(var el of inputs){var lbl=el.getAttribute('aria-label')||el.placeholder||el.name||'';if(lbl.toLowerCase().includes('\(JSEscape.string(label.lowercased()))')){var r=el.getBoundingClientRect();return{found:true,element:{tag:el.tagName.toLowerCase(),type:el.type||'text',name:el.name||'',selector:kelpieBuildSelector(el),rect:{x:r.x,y:r.y,width:r.width,height:r.height}}};}}return{found:false};})()
         """
         do {
-            let result = try await context.evaluateJSReturningJSON(js)
+            let result = try await context.evaluateJSReturningJSON(js, tabId: tabId)
             return result
         } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
         }
     }
 
     @MainActor
-    private func findByText(_ text: String, filter: String) async -> [String: Any] {
+    private func findByText(_ text: String, filter: String, tabId: String? = nil) async -> [String: Any] {
         let js = """
         (function(){\(elementSelectorBuilderScript())var all=document.querySelectorAll('*');for(var el of all){if(!(\(filter)))continue;var t=(el.textContent||'').trim();if(t.toLowerCase().includes('\(JSEscape.string(text.lowercased()))')){var r=el.getBoundingClientRect();if(r.width>0&&r.height>0)return{found:true,element:{tag:el.tagName.toLowerCase(),text:t.substring(0,100),selector:kelpieBuildSelector(el),rect:{x:r.x,y:r.y,width:r.width,height:r.height}}};}}return{found:false};})()
         """
         do {
-            return try await context.evaluateJSReturningJSON(js)
+            return try await context.evaluateJSReturningJSON(js, tabId: tabId)
         } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
         }
     }
@@ -132,24 +150,24 @@ struct LLMHandler {
 
     @MainActor
     private func screenshotAnnotated(_ body: [String: Any]) async -> [String: Any] {
-        guard context.renderer != nil else {
-            return errorResponse(code: "NO_WEBVIEW", message: "No WebView")
-        }
+        let tabId = HandlerContext.tabId(from: body)
         guard let resolution = ScreenshotResolution.parse(body["resolution"] ?? "viewport") else {
             return errorResponse(code: "INVALID_PARAMS", message: "resolution must be 'native' or 'viewport'")
         }
         do {
-            let image = try await context.takeSnapshot()
-            let annotations = try await context.evaluateJSReturningArray(annotationElementsScript())
+            let renderer = try context.resolveRenderer(tabId: tabId)
+            let image = try await context.takeSnapshot(tabId: tabId)
+            let annotations = try await context.evaluateJSReturningArray(annotationElementsScript(), tabId: tabId)
             var payload = try await context.screenshotPayload(
                 from: image,
                 format: body["format"] as? String ?? "png",
                 quality: ((body["quality"] as? NSNumber)?.doubleValue ?? 80) / 100.0,
-                resolution: resolution
+                resolution: resolution,
+                tabId: tabId
             )
             let sessionId = UUID().uuidString.lowercased()
             context.annotationSessionId = sessionId
-            context.annotationPageURL = context.currentURL?.absoluteString
+            context.annotationPageURL = renderer.currentURL?.absoluteString
             context.annotationElementCount = annotations.count
             payload["annotations"] = annotations
             payload["annotationSessionId"] = sessionId
@@ -157,20 +175,22 @@ struct LLMHandler {
             payload["hint"] = "Annotations are valid until the page URL changes. Take a fresh screenshot-annotated if you navigate."
             return successResponse(payload)
         } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
             return errorResponse(code: "SCREENSHOT_FAILED", message: error.localizedDescription)
         }
     }
 
     @MainActor
     private func clickAnnotation(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         guard let index = body["index"] as? Int else {
             return errorResponse(code: "MISSING_PARAM", message: "index is required")
         }
-        if let expired = annotationExpiredError() {
+        if let expired = annotationExpiredError(tabId: tabId) {
             return expired
         }
         do {
-            let result = try await context.evaluateJSReturningJSON(annotationActivationScript(index: index))
+            let result = try await context.evaluateJSReturningJSON(annotationActivationScript(index: index), tabId: tabId)
             let diagnostics = result["diagnostics"] as? [String: Any]
             if result.isEmpty || result["error"] as? String == "not_found" {
                 return errorResponse(
@@ -188,20 +208,22 @@ struct LLMHandler {
             }
             return successResponse(["element": result])
         } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
         }
     }
 
     @MainActor
     private func fillAnnotation(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         guard let index = body["index"] as? Int, let value = body["value"] as? String else {
             return errorResponse(code: "MISSING_PARAM", message: "index and value are required")
         }
-        if let expired = annotationExpiredError() {
+        if let expired = annotationExpiredError(tabId: tabId) {
             return expired
         }
         do {
-            let result = try await context.evaluateJSReturningJSON(fillAnnotationScript(index: index, value: value))
+            let result = try await context.evaluateJSReturningJSON(fillAnnotationScript(index: index, value: value), tabId: tabId)
             let diagnostics = result["diagnostics"] as? [String: Any]
             if result.isEmpty || result["error"] as? String == "not_found" {
                 return errorResponse(
@@ -219,12 +241,14 @@ struct LLMHandler {
             }
             return successResponse(["element": result, "value": value])
         } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
         }
     }
 
     @MainActor
     private func queryShadowDOM(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         guard let hostSelector = body["hostSelector"] as? String else {
             return errorResponse(code: "MISSING_PARAM", message: "hostSelector is required")
         }
@@ -234,30 +258,38 @@ struct LLMHandler {
         (function(){function f(h,s,r){if(!h||!h.shadowRoot)return null;var el=h.shadowRoot.querySelector(s);if(el)return el;if(r){var a=h.shadowRoot.querySelectorAll('*');for(var i=0;i<a.length;i++){if(a[i].shadowRoot){var found=f(a[i],s,true);if(found)return found;}}}return null;}var host=document.querySelector('\(JSEscape.string(hostSelector))');if(!host)return{found:false,error:'Host not found'};var el=f(host,'\(JSEscape.string(shadowSelector))',\(pierce ? "true" : "false"));if(!el)return{found:false};var r=el.getBoundingClientRect();var tag=el.tagName.toLowerCase();return{found:true,element:{tag:tag,text:(el.textContent||'').trim().substring(0,100),shadowHost:'\(JSEscape.string(hostSelector))',rect:{x:r.x,y:r.y,width:r.width,height:r.height},visible:r.width>0&&r.height>0,interactable:['a','button','input','select','textarea'].includes(tag)}};})()
         """
         do {
-            let result = try await context.evaluateJSReturningJSON(js)
+            let result = try await context.evaluateJSReturningJSON(js, tabId: tabId)
             return successResponse(result)
         } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
         }
     }
 
     @MainActor
-    private func getShadowRoots() async -> [String: Any] {
+    private func getShadowRoots(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         let js = """
         (function(){\(elementSelectorBuilderScript())var hosts=[];var all=document.querySelectorAll('*');for(var i=0;i<all.length;i++){var el=all[i];if(el.shadowRoot){var tag=el.tagName.toLowerCase();hosts.push({selector:kelpieBuildSelector(el),tag:tag,mode:'open',childCount:el.shadowRoot.childElementCount});}}return{hosts:hosts,count:hosts.length};})()
         """
         do {
-            let result = try await context.evaluateJSReturningJSON(js)
+            let result = try await context.evaluateJSReturningJSON(js, tabId: tabId)
             return successResponse(result)
         } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
         }
     }
 
     @MainActor
-    private func annotationExpiredError() -> [String: Any]? {
+    private func annotationExpiredError(tabId: String?) -> [String: Any]? {
         guard let annotationPageURL = context.annotationPageURL else { return nil }
-        let currentPageURL = context.currentURL?.absoluteString
+        let currentPageURL: String?
+        if let renderer = try? context.resolveRenderer(tabId: tabId) {
+            currentPageURL = renderer.currentURL?.absoluteString
+        } else {
+            currentPageURL = nil
+        }
         guard currentPageURL != annotationPageURL else { return nil }
         return errorResponse(
             code: "ANNOTATION_EXPIRED",

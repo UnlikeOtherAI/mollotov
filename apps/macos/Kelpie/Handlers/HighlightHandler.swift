@@ -5,11 +5,12 @@ struct HighlightHandler {
 
     func register(on router: Router) {
         router.register("highlight") { body in await highlight(body) }
-        router.register("hide-highlight") { _ in await hideHighlight() }
+        router.register("hide-highlight") { body in await hideHighlight(body) }
     }
 
     @MainActor
     private func highlight(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         guard let selector = body["selector"] as? String, !selector.isEmpty else {
             return errorResponse(code: "MISSING_PARAM", message: "selector is required")
         }
@@ -28,7 +29,8 @@ struct HighlightHandler {
                     padding: padding,
                     animation: animation,
                     durationMs: durationMs
-                )
+                ),
+                tabId: tabId
             )
             guard let data = result.data(using: .utf8),
                   let parsed = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
@@ -36,12 +38,14 @@ struct HighlightHandler {
             }
             return successResponse(parsed)
         } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
         }
     }
 
     @MainActor
-    private func hideHighlight() async -> [String: Any] {
+    private func hideHighlight(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         let js = """
         (function() {
             var el = document.getElementById('__kelpie_highlight');
@@ -50,7 +54,7 @@ struct HighlightHandler {
             setTimeout(function() { el.remove(); }, 250);
         })();
         """
-        _ = try? await context.evaluateJS(js)
+        _ = try? await context.evaluateJS(js, tabId: tabId)
         return successResponse()
     }
 

@@ -107,27 +107,27 @@ struct ScreenshotHandler {
 
     @MainActor
     private func screenshot(_ body: [String: Any]) async -> [String: Any] {
-        guard context.renderer != nil else {
-            return errorResponse(code: "NO_WEBVIEW", message: "No WebView")
-        }
-
+        let tabId = HandlerContext.tabId(from: body)
         let format = body["format"] as? String ?? "png"
         guard let resolution = ScreenshotResolution.parse(body["resolution"]) else {
             return errorResponse(code: "INVALID_PARAMS", message: "resolution must be 'native' or 'viewport'")
         }
 
         do {
-            let image = try await context.takeSnapshot()
+            _ = try context.resolveRenderer(tabId: tabId)
+            let image = try await context.takeSnapshot(tabId: tabId)
             let quality = ((body["quality"] as? NSNumber)?.doubleValue ?? 80) / 100.0
             return successResponse(
                 try await context.screenshotPayload(
                     from: image,
                     format: format,
                     quality: quality,
-                    resolution: resolution
+                    resolution: resolution,
+                    tabId: tabId
                 )
             )
         } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
             return errorResponse(code: "SCREENSHOT_FAILED", message: error.localizedDescription)
         }
     }

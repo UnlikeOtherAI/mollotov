@@ -28,6 +28,37 @@ All methods are available via three interfaces:
 
 ---
 
+## Per-Tab Targeting (macOS only)
+
+On macOS, every command that touches web content accepts an optional `tabId` parameter. This lets multiple LLMs control different tabs independently without switching the visible tab.
+
+**How it works:**
+1. Call `get-tabs` to list all open tabs with their IDs, URLs, and titles
+2. Include `"tabId": "<uuid>"` in every subsequent command to target that specific tab
+3. If only one tab is open and `tabId` is omitted, the command targets that tab automatically
+4. If multiple tabs are open and `tabId` is omitted, the server returns a `TAB_REQUIRED` error listing available tabs
+
+**Example:**
+```json
+POST /v1/get-tabs
+Response: {
+  "success": true,
+  "tabs": [
+    {"id": "A1B2...", "url": "https://google.com", "title": "Google", "active": true, "isLoading": false},
+    {"id": "C3D4...", "url": "https://github.com", "title": "GitHub", "active": false, "isLoading": false}
+  ]
+}
+
+POST /v1/click
+{"tabId": "C3D4...", "selector": "#login-button"}
+```
+
+**Background tabs:** Commands execute on the target tab's WebView directly — no tab switching occurs. The visible tab stays unchanged. This enables concurrent control by multiple agents.
+
+**Platform availability:** Per-tab targeting is currently macOS only. iOS and Android operate on the active tab implicitly and do not accept `tabId`.
+
+---
+
 ## Platform Support Matrix
 
 Not all methods have identical implementations on Android, iOS, and macOS. Android has CDP (Chrome DevTools Protocol) which gives deep access. iOS relies on WKWebView native APIs + ephemeral bridge scripts for features WebKit doesn't expose. macOS uses the same handler surface over two renderers: WKWebView for Safari/WebKit behavior and CEF for Chrome/Chromium behavior.

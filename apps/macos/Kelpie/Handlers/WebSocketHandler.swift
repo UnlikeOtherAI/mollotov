@@ -4,43 +4,50 @@ struct WebSocketHandler {
     let context: HandlerContext
 
     func register(on router: Router) {
-        router.register("get-websockets") { _ in await getWebSockets() }
+        router.register("get-websockets") { body in await getWebSockets(body) }
         router.register("get-websocket-messages") { body in await getWebSocketMessages(body) }
     }
 
     @MainActor
-    private func getWebSockets() async -> [String: Any] {
-        if context.renderer?.engineName == "chromium" {
-            return context.cefUnsupportedError(feature: "WebSocket monitoring")
-        }
-
+    private func getWebSockets(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         do {
-            let connections = try await context.evaluateJSReturningArray(webSocketsScript())
+            let renderer = try context.resolveRenderer(tabId: tabId)
+            if renderer.engineName == "chromium" {
+                return context.cefUnsupportedError(feature: "WebSocket monitoring")
+            }
+            let connections = try await context.evaluateJSReturningArray(webSocketsScript(), tabId: tabId)
             return successResponse([
                 "connections": connections,
                 "count": connections.count
             ])
         } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
         }
     }
 
     @MainActor
     private func getWebSocketMessages(_ body: [String: Any]) async -> [String: Any] {
-        if context.renderer?.engineName == "chromium" {
-            return context.cefUnsupportedError(feature: "WebSocket monitoring")
-        }
-
+        let tabId = HandlerContext.tabId(from: body)
         let connectionIndex = body["connectionIndex"] as? Int
         let limit = min(max(body["limit"] as? Int ?? 100, 1), 500)
 
         do {
-            let messages = try await context.evaluateJSReturningArray(webSocketMessagesScript(connectionIndex: connectionIndex, limit: limit))
+            let renderer = try context.resolveRenderer(tabId: tabId)
+            if renderer.engineName == "chromium" {
+                return context.cefUnsupportedError(feature: "WebSocket monitoring")
+            }
+            let messages = try await context.evaluateJSReturningArray(
+                webSocketMessagesScript(connectionIndex: connectionIndex, limit: limit),
+                tabId: tabId
+            )
             return successResponse([
                 "messages": messages,
                 "count": messages.count
             ])
         } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
         }
     }

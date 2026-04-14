@@ -5,11 +5,12 @@ struct CommentaryHandler {
 
     func register(on router: Router) {
         router.register("show-commentary") { body in await showCommentary(body) }
-        router.register("hide-commentary") { _ in await hideCommentary() }
+        router.register("hide-commentary") { body in await hideCommentary(body) }
     }
 
     @MainActor
     private func showCommentary(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         guard let text = body["text"] as? String, !text.isEmpty else {
             return errorResponse(code: "MISSING_PARAM", message: "text is required")
         }
@@ -52,19 +53,21 @@ struct CommentaryHandler {
         })();
         """
         do {
-            _ = try await context.evaluateJS(js)
+            _ = try await context.evaluateJS(js, tabId: tabId)
             return successResponse([
                 "text": text,
                 "position": position,
                 "durationMs": durationMs
             ])
         } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
         }
     }
 
     @MainActor
-    private func hideCommentary() async -> [String: Any] {
+    private func hideCommentary(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         let js = """
         (function() {
             var el = document.getElementById('__kelpie_commentary');
@@ -73,7 +76,7 @@ struct CommentaryHandler {
             setTimeout(function() { el.remove(); }, 300);
         })();
         """
-        _ = try? await context.evaluateJS(js)
+        _ = try? await context.evaluateJS(js, tabId: tabId)
         return successResponse()
     }
 }

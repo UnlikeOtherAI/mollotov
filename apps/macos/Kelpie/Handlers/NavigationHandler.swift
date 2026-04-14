@@ -6,81 +6,127 @@ struct NavigationHandler {
 
     func register(on router: Router) {
         router.register("navigate") { body in await navigate(body) }
-        router.register("back") { _ in await back() }
-        router.register("forward") { _ in await forward() }
-        router.register("reload") { _ in await reload() }
-        router.register("get-current-url") { _ in await getCurrentUrl() }
+        router.register("back") { body in await back(body) }
+        router.register("forward") { body in await forward(body) }
+        router.register("reload") { body in await reload(body) }
+        router.register("get-current-url") { body in await getCurrentUrl(body) }
         router.register("set-home") { body in setHome(body) }
         router.register("get-home") { _ in getHome() }
     }
 
     @MainActor
     private func navigate(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         guard let urlString = body["url"] as? String,
               let url = URL(string: urlString),
               let scheme = url.scheme?.lowercased(),
-              scheme == "http" || scheme == "https",
-              context.renderer != nil else {
+              scheme == "http" || scheme == "https" else {
             return errorResponse(code: "INVALID_URL", message: "Missing or invalid URL")
         }
-        let start = CFAbsoluteTimeGetCurrent()
-        context.load(url: url)
+        do {
+            let renderer = try context.resolveRenderer(tabId: tabId)
+            let start = CFAbsoluteTimeGetCurrent()
+            if tabId == nil {
+                context.load(url: url)
+            } else {
+                renderer.load(url: url)
+            }
 
-        for _ in 0..<100 {
-            try? await Task.sleep(nanoseconds: 100_000_000)
-            if !context.isLoadingPage { break }
+            for _ in 0..<100 {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                if !renderer.isLoading { break }
+            }
+
+            let loadTime = Int((CFAbsoluteTimeGetCurrent() - start) * 1000)
+            return successResponse([
+                "url": renderer.currentURL?.absoluteString ?? urlString,
+                "title": renderer.currentTitle,
+                "loadTime": loadTime
+            ])
+        } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
+            return errorResponse(code: "NO_WEBVIEW", message: error.localizedDescription)
         }
-
-        let loadTime = Int((CFAbsoluteTimeGetCurrent() - start) * 1000)
-        await context.persistRendererCookiesToSharedJar()
-        return successResponse([
-            "url": context.currentURL?.absoluteString ?? urlString,
-            "title": context.currentTitle,
-            "loadTime": loadTime
-        ])
     }
 
     @MainActor
-    private func back() async -> [String: Any] {
-        guard context.renderer != nil else { return errorResponse(code: "NO_WEBVIEW", message: "No WebView") }
-        context.goBack()
-        try? await Task.sleep(nanoseconds: 500_000_000)
-        await context.persistRendererCookiesToSharedJar()
-        return successResponse(["url": context.currentURL?.absoluteString ?? "", "title": context.currentTitle])
-    }
-
-    @MainActor
-    private func forward() async -> [String: Any] {
-        guard context.renderer != nil else { return errorResponse(code: "NO_WEBVIEW", message: "No WebView") }
-        context.goForward()
-        try? await Task.sleep(nanoseconds: 500_000_000)
-        await context.persistRendererCookiesToSharedJar()
-        return successResponse(["url": context.currentURL?.absoluteString ?? "", "title": context.currentTitle])
-    }
-
-    @MainActor
-    private func reload() async -> [String: Any] {
-        guard context.renderer != nil else { return errorResponse(code: "NO_WEBVIEW", message: "No WebView") }
-        let start = CFAbsoluteTimeGetCurrent()
-        context.reloadPage()
-        for _ in 0..<100 {
-            try? await Task.sleep(nanoseconds: 100_000_000)
-            if !context.isLoadingPage { break }
+    private func back(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
+        do {
+            let renderer = try context.resolveRenderer(tabId: tabId)
+            if tabId == nil {
+                context.goBack()
+            } else {
+                renderer.goBack()
+            }
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            return successResponse(["url": renderer.currentURL?.absoluteString ?? "", "title": renderer.currentTitle])
+        } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
+            return errorResponse(code: "NO_WEBVIEW", message: error.localizedDescription)
         }
-        let loadTime = Int((CFAbsoluteTimeGetCurrent() - start) * 1000)
-        await context.persistRendererCookiesToSharedJar()
-        return successResponse(["url": context.currentURL?.absoluteString ?? "", "title": context.currentTitle, "loadTime": loadTime])
     }
 
     @MainActor
-    private func getCurrentUrl() async -> [String: Any] {
+    private func forward(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
+        do {
+            let renderer = try context.resolveRenderer(tabId: tabId)
+            if tabId == nil {
+                context.goForward()
+            } else {
+                renderer.goForward()
+            }
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            return successResponse(["url": renderer.currentURL?.absoluteString ?? "", "title": renderer.currentTitle])
+        } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
+            return errorResponse(code: "NO_WEBVIEW", message: error.localizedDescription)
+        }
+    }
+
+    @MainActor
+    private func reload(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
+        do {
+            let renderer = try context.resolveRenderer(tabId: tabId)
+            let start = CFAbsoluteTimeGetCurrent()
+            if tabId == nil {
+                context.reloadPage()
+            } else {
+                renderer.reload()
+            }
+            for _ in 0..<100 {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                if !renderer.isLoading { break }
+            }
+            let loadTime = Int((CFAbsoluteTimeGetCurrent() - start) * 1000)
+            return successResponse([
+                "url": renderer.currentURL?.absoluteString ?? "",
+                "title": renderer.currentTitle,
+                "loadTime": loadTime
+            ])
+        } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
+            return errorResponse(code: "NO_WEBVIEW", message: error.localizedDescription)
+        }
+    }
+
+    @MainActor
+    private func getCurrentUrl(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         // Prefer the active tab's own stored state — context.renderer may lag
         // behind tab switches, returning a stale inactive tab's URL (issue #17).
-        if let tab = context.tabStore?.activeTab {
+        if tabId == nil, let tab = context.tabStore?.activeTab {
             return ["url": tab.currentURL, "title": tab.title]
         }
-        guard context.renderer != nil else { return errorResponse(code: "NO_WEBVIEW", message: "No WebView") }
-        return ["url": context.currentURL?.absoluteString ?? "", "title": context.currentTitle]
+        do {
+            let renderer = try context.resolveRenderer(tabId: tabId)
+            return ["url": renderer.currentURL?.absoluteString ?? "", "title": renderer.currentTitle]
+        } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
+            return errorResponse(code: "NO_WEBVIEW", message: error.localizedDescription)
+        }
     }
 
     private func setHome(_ body: [String: Any]) -> [String: Any] {

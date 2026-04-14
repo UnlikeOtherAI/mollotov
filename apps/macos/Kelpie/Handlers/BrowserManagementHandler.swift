@@ -25,12 +25,12 @@ struct BrowserManagementHandler {
 
         // Keyboard & Viewport
         router.register("show-keyboard") { body in await showKeyboard(body) }
-        router.register("hide-keyboard") { _ in await hideKeyboard() }
-        router.register("get-keyboard-state") { _ in await getKeyboardState() }
+        router.register("hide-keyboard") { body in await hideKeyboard(body) }
+        router.register("get-keyboard-state") { body in await getKeyboardState(body) }
         router.register("set-fullscreen") { body in await setFullscreen(body) }
-        router.register("get-fullscreen") { _ in await getFullscreen() }
+        router.register("get-fullscreen") { body in await getFullscreen(body) }
         router.register("resize-viewport") { body in await resizeViewport(body) }
-        router.register("reset-viewport") { _ in await resetViewport() }
+        router.register("reset-viewport") { body in await resetViewport(body) }
         router.register("set-viewport-preset") { body in await setViewportPreset(body) }
         router.register("is-element-obscured") { body in await isElementObscured(body) }
 
@@ -42,7 +42,7 @@ struct BrowserManagementHandler {
         }
 
         // Iframes
-        router.register("get-iframes") { _ in await getIframes() }
+        router.register("get-iframes") { body in await getIframes(body) }
         router.register("switch-to-iframe") { body in await switchToIframe(body) }
         router.register("switch-to-main") { _ in successResponse(["context": "main"]) }
         router.register("get-iframe-context") { _ in successResponse(["context": "main"]) }
@@ -67,57 +67,97 @@ struct BrowserManagementHandler {
 
     @MainActor
     private func getCookies(_ body: [String: Any]) async -> [String: Any] {
-        guard context.renderer != nil else { return errorResponse(code: "NO_WEBVIEW", message: "No WebView") }
-        let cookies = await context.allCookies()
-        let name = body["name"] as? String
-        let filtered = name != nil ? cookies.filter { $0.name == name } : cookies
-        let cookieList = filtered.map { cookie -> [String: Any] in
-            ["name": cookie.name, "value": cookie.value, "domain": cookie.domain, "path": cookie.path,
-             "expires": cookie.expiresDate?.description ?? NSNull(), "httpOnly": cookie.isHTTPOnly,
-             "secure": cookie.isSecure, "sameSite": cookie.sameSitePolicy?.rawValue ?? ""]
+        let tabId = HandlerContext.tabId(from: body)
+        do {
+            let renderer = try context.resolveRenderer(tabId: tabId)
+            let cookies: [HTTPCookie]
+            if tabId == nil {
+                cookies = await context.allCookies()
+            } else {
+                cookies = await renderer.allCookies()
+            }
+            let name = body["name"] as? String
+            let filtered = name != nil ? cookies.filter { $0.name == name } : cookies
+            let cookieList = filtered.map { cookie -> [String: Any] in
+                ["name": cookie.name, "value": cookie.value, "domain": cookie.domain, "path": cookie.path,
+                 "expires": cookie.expiresDate?.description ?? NSNull(), "httpOnly": cookie.isHTTPOnly,
+                 "secure": cookie.isSecure, "sameSite": cookie.sameSitePolicy?.rawValue ?? ""]
+            }
+            return successResponse(["cookies": cookieList, "count": cookieList.count])
+        } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
+            return errorResponse(code: "NO_WEBVIEW", message: error.localizedDescription)
         }
-        return successResponse(["cookies": cookieList, "count": cookieList.count])
     }
 
     @MainActor
     private func setCookie(_ body: [String: Any]) async -> [String: Any] {
-        guard context.renderer != nil,
-              let name = body["name"] as? String,
+        let tabId = HandlerContext.tabId(from: body)
+        guard let name = body["name"] as? String,
               let value = body["value"] as? String else {
             return errorResponse(code: "MISSING_PARAM", message: "name and value required")
         }
-        var props: [HTTPCookiePropertyKey: Any] = [.name: name, .value: value, .path: body["path"] as? String ?? "/"]
-        if let domain = body["domain"] as? String { props[.domain] = domain } else { props[.domain] = context.currentURL?.host ?? "localhost" }
-        if let cookie = HTTPCookie(properties: props) {
-            await context.setCookie(cookie)
-            return successResponse()
+        do {
+            let renderer = try context.resolveRenderer(tabId: tabId)
+            var props: [HTTPCookiePropertyKey: Any] = [.name: name, .value: value, .path: body["path"] as? String ?? "/"]
+            if let domain = body["domain"] as? String {
+                props[.domain] = domain
+            } else {
+                props[.domain] = renderer.currentURL?.host ?? "localhost"
+            }
+            if let cookie = HTTPCookie(properties: props) {
+                if tabId == nil {
+                    await context.setCookie(cookie)
+                } else {
+                    await renderer.setCookies([cookie])
+                }
+                return successResponse()
+            }
+            return errorResponse(code: "COOKIE_ERROR", message: "Failed to create cookie")
+        } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
+            return errorResponse(code: "NO_WEBVIEW", message: error.localizedDescription)
         }
-        return errorResponse(code: "COOKIE_ERROR", message: "Failed to create cookie")
     }
 
     @MainActor
     private func deleteCookies(_ body: [String: Any]) async -> [String: Any] {
-        guard context.renderer != nil else { return errorResponse(code: "NO_WEBVIEW", message: "No WebView") }
-        let all = await context.allCookies()
-        let deleteAll = body["deleteAll"] as? Bool ?? false
-        let name = body["name"] as? String
-        var deleted = 0
-        if deleteAll {
-            deleted = all.count
-            await context.deleteAllCookies()
+        let tabId = HandlerContext.tabId(from: body)
+        do {
+            let renderer = try context.resolveRenderer(tabId: tabId)
+            let all = await renderer.allCookies()
+            let deleteAll = body["deleteAll"] as? Bool ?? false
+            let name = body["name"] as? String
+            var deleted = 0
+            if deleteAll {
+                deleted = all.count
+                if tabId == nil {
+                    await context.deleteAllCookies()
+                } else {
+                    await renderer.deleteAllCookies()
+                }
+                return successResponse(["deleted": deleted])
+            }
+            for cookie in all where cookie.name == name {
+                if tabId == nil {
+                    await context.deleteCookie(cookie)
+                } else {
+                    await renderer.deleteCookie(cookie)
+                }
+                deleted += 1
+            }
             return successResponse(["deleted": deleted])
+        } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
+            return errorResponse(code: "NO_WEBVIEW", message: error.localizedDescription)
         }
-        for cookie in all where cookie.name == name {
-            await context.deleteCookie(cookie)
-            deleted += 1
-        }
-        return successResponse(["deleted": deleted])
     }
 
     // MARK: - Storage
 
     @MainActor
     private func getStorage(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         let type = body["type"] as? String ?? "local"
         let key = body["key"] as? String
         let storage = type == "session" ? "sessionStorage" : "localStorage"
@@ -128,29 +168,32 @@ struct BrowserManagementHandler {
             js = "(function(){var e={};for(var i=0;i<\(storage).length;i++){var k=\(storage).key(i);e[k]=\(storage).getItem(k);}return {entries:e,count:\(storage).length,type:'\(type)'};})()"
         }
         do {
-            let result = try await context.evaluateJSReturningJSON(js)
+            let result = try await context.evaluateJSReturningJSON(js, tabId: tabId)
             return successResponse(result)
         } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
         }
     }
 
     @MainActor
     private func setStorage(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         guard let key = body["key"] as? String, let value = body["value"] as? String else {
             return errorResponse(code: "MISSING_PARAM", message: "key and value required")
         }
         let type = body["type"] as? String ?? "local"
         let storage = type == "session" ? "sessionStorage" : "localStorage"
-        _ = try? await context.evaluateJS("\(storage).setItem('\(key)','\(value)')")
+        _ = try? await context.evaluateJS("\(storage).setItem('\(key)','\(value)')", tabId: tabId)
         return successResponse()
     }
 
     @MainActor
     private func clearStorage(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         let type = body["type"] as? String ?? "both"
-        if type == "local" || type == "both" { _ = try? await context.evaluateJS("localStorage.clear()") }
-        if type == "session" || type == "both" { _ = try? await context.evaluateJS("sessionStorage.clear()") }
+        if type == "local" || type == "both" { _ = try? await context.evaluateJS("localStorage.clear()", tabId: tabId) }
+        if type == "session" || type == "both" { _ = try? await context.evaluateJS("sessionStorage.clear()", tabId: tabId) }
         return successResponse(["cleared": type])
     }
 
@@ -179,12 +222,12 @@ struct BrowserManagementHandler {
     }
 
     @MainActor
-    private func hideKeyboard() async -> [String: Any] {
+    private func hideKeyboard(_ body: [String: Any]) async -> [String: Any] {
         errorResponse(code: "PLATFORM_NOT_SUPPORTED", message: "hide-keyboard is not supported on macOS")
     }
 
     @MainActor
-    private func getKeyboardState() async -> [String: Any] {
+    private func getKeyboardState(_ body: [String: Any]) async -> [String: Any] {
         errorResponse(code: "PLATFORM_NOT_SUPPORTED", message: "get-keyboard-state is not supported on macOS")
     }
 
@@ -202,7 +245,7 @@ struct BrowserManagementHandler {
     }
 
     @MainActor
-    private func getFullscreen() async -> [String: Any] {
+    private func getFullscreen(_ body: [String: Any]) async -> [String: Any] {
         guard let window = NSApplication.shared.keyWindow else {
             return errorResponse(code: "NO_WINDOW", message: "No active window")
         }
@@ -213,11 +256,18 @@ struct BrowserManagementHandler {
 
     @MainActor
     private func resizeViewport(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         let viewport = viewportState.resizeViewport(
             width: body["width"] as? Int,
             height: body["height"] as? Int
         )
-        await context.waitForViewportSize(viewport)
+        do {
+            let renderer = try context.resolveRenderer(tabId: tabId)
+            await waitForViewportSize(viewport, renderer: renderer)
+        } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
+            return errorResponse(code: "NO_WEBVIEW", message: error.localizedDescription)
+        }
         let stage = viewportState.fullStageDimensions
 
         return successResponse([
@@ -228,9 +278,16 @@ struct BrowserManagementHandler {
     }
 
     @MainActor
-    private func resetViewport() async -> [String: Any] {
+    private func resetViewport(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         let viewport = viewportState.resetViewport()
-        await context.waitForViewportSize(viewport)
+        do {
+            let renderer = try context.resolveRenderer(tabId: tabId)
+            await waitForViewportSize(viewport, renderer: renderer)
+        } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
+            return errorResponse(code: "NO_WEBVIEW", message: error.localizedDescription)
+        }
         return successResponse([
             "viewport": ["width": Int(viewport.width), "height": Int(viewport.height)],
             "activePresetId": NSNull()
@@ -239,6 +296,7 @@ struct BrowserManagementHandler {
 
     @MainActor
     private func setViewportPreset(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         guard let presetID = body["presetId"] as? String, !presetID.isEmpty else {
             return errorResponse(code: "MISSING_PARAM", message: "presetId is required")
         }
@@ -258,7 +316,13 @@ struct BrowserManagementHandler {
         guard let viewport = viewportState.selectPreset(presetID) else {
             return errorResponse(code: "INVALID_PARAM", message: "Viewport preset \(presetID) could not be selected")
         }
-        await context.waitForViewportSize(viewport)
+        do {
+            let renderer = try context.resolveRenderer(tabId: tabId)
+            await waitForViewportSize(viewport, renderer: renderer)
+        } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
+            return errorResponse(code: "NO_WEBVIEW", message: error.localizedDescription)
+        }
 
         return successResponse([
             "activePresetId": preset.id,
@@ -277,6 +341,7 @@ struct BrowserManagementHandler {
 
     @MainActor
     private func isElementObscured(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         guard let selector = body["selector"] as? String else {
             return errorResponse(code: "MISSING_PARAM", message: "selector is required")
         }
@@ -284,10 +349,11 @@ struct BrowserManagementHandler {
         (function(){var el=document.querySelector('\(JSEscape.string(selector))');if(!el)return null;var r=el.getBoundingClientRect();return{element:{selector:'\(selector)',rect:{x:r.x,y:r.y,width:r.width,height:r.height}},obscured:false,reason:null,keyboardOverlap:null,suggestion:null};})()
         """
         do {
-            let result = try await context.evaluateJSReturningJSON(js)
+            let result = try await context.evaluateJSReturningJSON(js, tabId: tabId)
             if result.isEmpty { return errorResponse(code: "ELEMENT_NOT_FOUND", message: "Element not found") }
             return successResponse(result)
         } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
         }
     }
@@ -295,14 +361,16 @@ struct BrowserManagementHandler {
     // MARK: - Iframes
 
     @MainActor
-    private func getIframes() async -> [String: Any] {
+    private func getIframes(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         let js = """
         (function(){var frames=document.querySelectorAll('iframe');return{iframes:Array.from(frames).map(function(f,i){var r=f.getBoundingClientRect();return{id:i,src:f.src||'',name:f.name||'',selector:'iframe:nth-of-type('+(i+1)+')',rect:{x:r.x,y:r.y,width:r.width,height:r.height},visible:r.width>0&&r.height>0,crossOrigin:false};}),count:frames.length};})()
         """
         do {
-            let result = try await context.evaluateJSReturningJSON(js)
+            let result = try await context.evaluateJSReturningJSON(js, tabId: tabId)
             return successResponse(result)
         } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
         }
     }
@@ -311,6 +379,22 @@ struct BrowserManagementHandler {
     private func switchToIframe(_ body: [String: Any]) async -> [String: Any] {
         let id = body["iframeId"] as? Int ?? 0
         return successResponse(["iframe": ["id": id, "src": ""], "context": "iframe"])
+    }
+
+    @MainActor
+    private func waitForViewportSize(_ size: CGSize, renderer: any RendererEngine) async {
+        let expectedWidth = size.width
+        let expectedHeight = size.height
+        let view = renderer.makeView()
+
+        for _ in 0..<30 {
+            let bounds = view.bounds.size
+            if abs(bounds.width - expectedWidth) < 0.75 &&
+               abs(bounds.height - expectedHeight) < 0.75 {
+                return
+            }
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
     }
 
     // MARK: - Tabs

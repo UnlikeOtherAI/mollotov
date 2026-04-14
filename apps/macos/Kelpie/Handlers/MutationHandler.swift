@@ -13,6 +13,7 @@ struct MutationHandler {
 
     @MainActor
     private func watchMutations(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         let selector = body["selector"] as? String ?? "body"
         let attributes = body["attributes"] as? Bool ?? true
         let childList = body["childList"] as? Bool ?? true
@@ -66,16 +67,18 @@ struct MutationHandler {
         })()
         """
         do {
-            let result = try await context.evaluateJSReturningJSON(js)
+            let result = try await context.evaluateJSReturningJSON(js, tabId: tabId)
             if result.isEmpty { return errorResponse(code: "ELEMENT_NOT_FOUND", message: "Target element not found: \(selector)") }
             return successResponse(result)
         } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
         }
     }
 
     @MainActor
     private func getMutations(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         guard let watchId = body["watchId"] as? String else {
             return errorResponse(code: "MISSING_PARAM", message: "watchId is required")
         }
@@ -91,16 +94,18 @@ struct MutationHandler {
         })()
         """
         do {
-            let result = try await context.evaluateJSReturningJSON(js)
+            let result = try await context.evaluateJSReturningJSON(js, tabId: tabId)
             if result.isEmpty { return errorResponse(code: "WATCH_NOT_FOUND", message: "Watch \(watchId) not found") }
             return successResponse(result)
         } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
         }
     }
 
     @MainActor
     private func stopWatching(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         guard let watchId = body["watchId"] as? String else {
             return errorResponse(code: "MISSING_PARAM", message: "watchId is required")
         }
@@ -116,10 +121,11 @@ struct MutationHandler {
         })()
         """
         do {
-            let result = try await context.evaluateJSReturningJSON(js)
+            let result = try await context.evaluateJSReturningJSON(js, tabId: tabId)
             if result.isEmpty { return errorResponse(code: "WATCH_NOT_FOUND", message: "Watch \(watchId) not found") }
             return successResponse(result)
         } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
         }
     }

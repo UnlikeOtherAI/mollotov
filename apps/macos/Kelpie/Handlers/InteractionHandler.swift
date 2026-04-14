@@ -36,12 +36,13 @@ struct InteractionHandler {
 
     @MainActor
     private func click(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         guard let selector = body["selector"] as? String else {
             return errorResponse(code: "MISSING_PARAM", message: "selector is required")
         }
         let color = overlayColor(from: body)
         do {
-            let result = try await context.evaluateJSReturningJSON(selectorActivationScript(selector))
+            let result = try await context.evaluateJSReturningJSON(selectorActivationScript(selector), tabId: tabId)
             let diagnostics = result["diagnostics"] as? [String: Any]
             if result.isEmpty || result["error"] as? String == "not_found" {
                 return errorResponse(
@@ -59,18 +60,20 @@ struct InteractionHandler {
             }
             if let center = result["center"] as? [String: Any],
                let x = double(center["x"]), let y = double(center["y"]) {
-                await context.showTouchIndicator(x: x, y: y, color: color)
+                await context.showTouchIndicator(x: x, y: y, color: color, tabId: tabId)
             } else {
-                await context.showTouchIndicatorForElement(selector, color: color)
+                await context.showTouchIndicatorForElement(selector, color: color, tabId: tabId)
             }
             return successResponse(["element": result])
         } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
         }
     }
 
     @MainActor
     private func tap(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         guard var requestedX = double(body["x"]), var requestedY = double(body["y"]) else {
             return errorResponse(code: "MISSING_PARAM", message: "x and y are required")
         }
@@ -81,11 +84,12 @@ struct InteractionHandler {
         let coordinateSpace = (body["coordinateSpace"] as? String ?? "viewport").lowercased()
         if coordinateSpace == "screenshot" {
             do {
-                let metrics = try await context.screenshotViewportMetrics()
+                let metrics = try await context.screenshotViewportMetrics(tabId: tabId)
                 let dpr = max(metrics.devicePixelRatio, 1)
                 requestedX /= dpr
                 requestedY /= dpr
             } catch {
+                if let tabError = tabErrorResponse(from: error) { return tabError }
                 return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
             }
         }
@@ -94,26 +98,31 @@ struct InteractionHandler {
             execution = try await calibratedTapExecution(
                 requestedX: requestedX,
                 requestedY: requestedY,
-                calibration: TapCalibrationStore.current()
+                calibration: TapCalibrationStore.current(),
+                tabId: tabId
             )
         } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
         }
         await context.showTouchIndicator(
             x: execution.appliedX,
             y: execution.appliedY,
-            color: overlayColor(from: body)
+            color: overlayColor(from: body),
+            tabId: tabId
         )
         do {
-            let diagnostics = try await context.evaluateJSReturningJSON(tapScript(execution: execution))
+            let diagnostics = try await context.evaluateJSReturningJSON(tapScript(execution: execution), tabId: tabId)
             return successResponse(execution.responsePayload.merging(["diagnostics": diagnostics]) { _, new in new })
         } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
         }
     }
 
     @MainActor
     private func fill(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         guard let selector = body["selector"] as? String, let value = body["value"] as? String else {
             return errorResponse(code: "MISSING_PARAM", message: "selector and value are required")
         }
@@ -123,9 +132,12 @@ struct InteractionHandler {
 
         if mode == "typing" {
             let focusJS = "document.querySelector('\(JSEscape.string(selector))')?.focus()"
-            _ = try? await context.evaluateJS(focusJS)
+            _ = try? await context.evaluateJS(focusJS, tabId: tabId)
             do {
-                let focusResult = try await context.evaluateJSReturningJSON(fillElementScript(selector: selector, value: ""))
+                let focusResult = try await context.evaluateJSReturningJSON(
+                    fillElementScript(selector: selector, value: ""),
+                    tabId: tabId
+                )
                 let diagnostics = focusResult["diagnostics"] as? [String: Any]
                 if focusResult.isEmpty || focusResult["error"] as? String == "not_found" {
                     return errorResponse(
@@ -145,15 +157,17 @@ struct InteractionHandler {
                     "selector": selector,
                     "text": value,
                     "delay": delay,
-                    "color": body["color"] as Any
+                    "color": body["color"] as Any,
+                    "tabId": tabId as Any
                 ].compactMapValues { $0 })
             } catch {
+                if let tabError = tabErrorResponse(from: error) { return tabError }
                 return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
             }
         }
 
         do {
-            let result = try await context.evaluateJSReturningJSON(fillElementScript(selector: selector, value: value))
+            let result = try await context.evaluateJSReturningJSON(fillElementScript(selector: selector, value: value), tabId: tabId)
             let diagnostics = result["diagnostics"] as? [String: Any]
             if result.isEmpty || result["error"] as? String == "not_found" {
                 return errorResponse(
@@ -169,23 +183,25 @@ struct InteractionHandler {
                     diagnostics: diagnostics
                 )
             }
-            await context.showTouchIndicatorForElement(selector, color: color)
+            await context.showTouchIndicatorForElement(selector, color: color, tabId: tabId)
             return successResponse(result)
         } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
         }
     }
 
     @MainActor
     private func typeText(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         guard let text = body["text"] as? String else {
             return errorResponse(code: "MISSING_PARAM", message: "text is required")
         }
         let color = overlayColor(from: body)
         if let selector = body["selector"] as? String {
             let focusJS = "document.querySelector('\(JSEscape.string(selector))')?.focus()"
-            _ = try? await context.evaluateJS(focusJS)
-            await context.showTouchIndicatorForElement(selector, color: color)
+            _ = try? await context.evaluateJS(focusJS, tabId: tabId)
+            await context.showTouchIndicatorForElement(selector, color: color, tabId: tabId)
         }
         let delay = body["delay"] as? Int ?? 50
         for char in text {
@@ -203,7 +219,7 @@ struct InteractionHandler {
                 el.dispatchEvent(new KeyboardEvent('keyup', {key: '\(escapedChar)', bubbles: true}));
             })()
             """
-            _ = try? await context.evaluateJS(charJS)
+            _ = try? await context.evaluateJS(charJS, tabId: tabId)
             try? await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000)
         }
         let finalizeJS = """
@@ -214,12 +230,13 @@ struct InteractionHandler {
             kelpieDispatchFormControlChange(el);
         })()
         """
-        _ = try? await context.evaluateJS(finalizeJS)
+        _ = try? await context.evaluateJS(finalizeJS, tabId: tabId)
         return successResponse(["typed": text])
     }
 
     @MainActor
     private func selectOption(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         guard let selector = body["selector"] as? String, let value = body["value"] as? String else {
             return errorResponse(code: "MISSING_PARAM", message: "selector and value are required")
         }
@@ -234,17 +251,19 @@ struct InteractionHandler {
         })()
         """
         do {
-            let result = try await context.evaluateJSReturningJSON(js)
+            let result = try await context.evaluateJSReturningJSON(js, tabId: tabId)
             if result.isEmpty { return errorResponse(code: "ELEMENT_NOT_FOUND", message: "Element not found: \(selector)") }
-            await context.showTouchIndicatorForElement(selector, color: overlayColor(from: body))
+            await context.showTouchIndicatorForElement(selector, color: overlayColor(from: body), tabId: tabId)
             return successResponse(result)
         } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
         }
     }
 
     @MainActor
     private func setChecked(_ body: [String: Any], checked: Bool) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         guard let selector = body["selector"] as? String else {
             return errorResponse(code: "MISSING_PARAM", message: "selector is required")
         }
@@ -258,11 +277,12 @@ struct InteractionHandler {
         })()
         """
         do {
-            let result = try await context.evaluateJSReturningJSON(js)
+            let result = try await context.evaluateJSReturningJSON(js, tabId: tabId)
             if result.isEmpty { return errorResponse(code: "ELEMENT_NOT_FOUND", message: "Element not found: \(selector)") }
-            await context.showTouchIndicatorForElement(selector, color: overlayColor(from: body))
+            await context.showTouchIndicatorForElement(selector, color: overlayColor(from: body), tabId: tabId)
             return successResponse(result)
         } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
         }
     }
@@ -279,9 +299,10 @@ struct InteractionHandler {
     private func calibratedTapExecution(
         requestedX: Double,
         requestedY: Double,
-        calibration: TapCalibration
+        calibration: TapCalibration,
+        tabId: String?
     ) async throws -> TapExecution {
-        let viewport = try await viewportSize()
+        let viewport = try await viewportSize(tabId: tabId)
         let appliedX = clamp(requestedX + calibration.offsetX, min: 0, max: max(viewport.width - 1, 0))
         let appliedY = clamp(requestedY + calibration.offsetY, min: 0, max: max(viewport.height - 1, 0))
         return TapExecution(
@@ -295,7 +316,7 @@ struct InteractionHandler {
     }
 
     @MainActor
-    private func viewportSize() async throws -> (width: Double, height: Double) {
+    private func viewportSize(tabId: String?) async throws -> (width: Double, height: Double) {
         let result = try await context.evaluateJSReturningJSON("""
         (function() {
             return {
@@ -303,7 +324,7 @@ struct InteractionHandler {
                 height: Math.max(window.innerHeight || 0, 1)
             };
         })()
-        """)
+        """, tabId: tabId)
         let width = double(result["width"]) ?? 1
         let height = double(result["height"]) ?? 1
         return (width, height)

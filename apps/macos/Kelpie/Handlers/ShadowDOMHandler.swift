@@ -6,11 +6,12 @@ struct ShadowDOMHandler {
 
     func register(on router: Router) {
         router.register("query-shadow-dom") { body in await queryShadowDOM(body) }
-        router.register("get-shadow-roots") { _ in await getShadowRoots() }
+        router.register("get-shadow-roots") { body in await getShadowRoots(body) }
     }
 
     @MainActor
     private func queryShadowDOM(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         guard let hostSelector = body["hostSelector"] as? String else {
             return errorResponse(code: "MISSING_PARAM", message: "hostSelector is required")
         }
@@ -56,15 +57,17 @@ struct ShadowDOMHandler {
         })()
         """
         do {
-            let result = try await context.evaluateJSReturningJSON(js)
+            let result = try await context.evaluateJSReturningJSON(js, tabId: tabId)
             return successResponse(result)
         } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
         }
     }
 
     @MainActor
-    private func getShadowRoots() async -> [String: Any] {
+    private func getShadowRoots(_ body: [String: Any]) async -> [String: Any] {
+        let tabId = HandlerContext.tabId(from: body)
         let js = """
         (function(){
             var hosts = [];
@@ -85,9 +88,10 @@ struct ShadowDOMHandler {
         })()
         """
         do {
-            let result = try await context.evaluateJSReturningJSON(js)
+            let result = try await context.evaluateJSReturningJSON(js, tabId: tabId)
             return successResponse(result)
         } catch {
+            if let tabError = tabErrorResponse(from: error) { return tabError }
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
         }
     }
