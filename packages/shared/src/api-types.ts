@@ -701,6 +701,12 @@ export interface TabInfo {
 export interface GetTabsResponse extends SuccessResponse {
   tabs: TabInfo[];
   count: number;
+  /**
+   * Active tab ID. Empty string `""` when no tab is active (e.g. CEF window
+   * with no tabs, or transient state during a switch). Platforms have agreed
+   * to standardise on the empty-string sentinel so consumers can branch on
+   * `activeTab === ""` without null-checks.
+   */
   activeTab: string;
 }
 
@@ -900,10 +906,14 @@ export interface ResizeViewportRequest {
 export interface ResizeViewportResponse extends SuccessResponse {
   viewport: { width: number; height: number };
   originalViewport: { width: number; height: number };
+  /** macOS sets this to null after a manual resize since no named preset is active. */
+  activePresetId?: string | null;
 }
 
 export interface ResetViewportResponse extends SuccessResponse {
   viewport: { width: number; height: number };
+  /** macOS clears the active preset on reset. */
+  activePresetId?: string | null;
 }
 
 export interface IsElementObscuredRequest {
@@ -916,6 +926,112 @@ export interface IsElementObscuredResponse extends SuccessResponse {
   reason: string | null;
   keyboardOverlap: number | null;
   suggestion: string | null;
+}
+
+// --- Browser: Viewport Presets ---
+
+export interface SetViewportPresetRequest {
+  presetId: string;
+}
+
+/** Describes a named viewport preset returned by `set-viewport-preset`. */
+export interface ViewportPresetSummary {
+  id: string;
+  name: string;
+  /** Display-size label such as "13.0\"" or "iPhone 15 Pro" — purely informational. */
+  inches: string;
+  /** Pixel-resolution label such as "390 x 844" — purely informational. */
+  pixels: string;
+}
+
+export interface SetViewportPresetResponse extends SuccessResponse {
+  activePresetId: string;
+  preset: ViewportPresetSummary;
+  viewport: { width: number; height: number };
+}
+
+// --- Browser: Fullscreen (macOS + Linux) ---
+
+export interface SetFullscreenRequest {
+  enabled: boolean;
+}
+
+export interface SetFullscreenResponse extends SuccessResponse {
+  enabled: boolean;
+}
+
+export interface GetFullscreenResponse extends SuccessResponse {
+  enabled: boolean;
+}
+
+// --- Browser: Orientation (iOS, Android, macOS) ---
+
+export type OrientationMode = "portrait" | "landscape" | "auto";
+
+export interface SetOrientationRequest {
+  orientation: OrientationMode;
+}
+
+export interface GetOrientationResponse extends SuccessResponse {
+  /** Currently reported orientation. */
+  orientation: "portrait" | "landscape";
+  /**
+   * Locked orientation, or null when free rotation is allowed.
+   * On macOS this is null whenever the active viewport does not support orientation selection.
+   */
+  locked: "portrait" | "landscape" | null;
+}
+
+export interface SetOrientationResponse extends SuccessResponse {
+  orientation: "portrait" | "landscape";
+  locked: "portrait" | "landscape";
+  /** macOS reports the active viewport preset when orientation is changed. */
+  activePresetId?: string | null;
+  /** macOS reports the resulting viewport dimensions. */
+  viewport?: { width: number; height: number };
+}
+
+// --- Browser: Renderer (macOS only) ---
+
+/** @platform macos */
+export type RendererEngine = "webkit" | "chromium" | "gecko";
+
+/** @platform macos */
+export interface SetRendererRequest {
+  engine: RendererEngine;
+}
+
+/** @platform macos */
+export interface SetRendererResponse extends SuccessResponse {
+  engine: RendererEngine;
+  /** True when the active engine changed, false when the requested engine was already active. */
+  changed: boolean;
+}
+
+/** @platform macos */
+export interface GetRendererResponse extends SuccessResponse {
+  engine: RendererEngine;
+  available: RendererEngine[];
+}
+
+// --- Browser: Issue Reporting ---
+
+export interface ReportIssueRequest {
+  category: string;
+  command: string;
+  error?: string;
+  context?: string;
+  url?: string;
+  params?: Record<string, unknown>;
+  diagnostics?: Record<string, unknown>;
+  screenshotBase64?: string;
+}
+
+export interface ReportIssueResponse extends SuccessResponse {
+  reportId: string;
+  storedAt: string;
+  platform: Platform;
+  deviceId: string;
 }
 
 // --- Group Command Responses ---

@@ -42,6 +42,9 @@ importers:
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.37
+      '@unlikeotherai/kelpie-shared':
+        specifier: workspace:*
+        version: link:../shared
       tsup:
         specifier: ^8.0.0
         version: 8.5.1(postcss@8.5.8)(tsx@4.21.0)(typescript@5.9.3)
