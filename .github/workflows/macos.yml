@@ -22,6 +22,14 @@ jobs:
       - name: Install mise (tuist)
         uses: jdx/mise-action@v2
 
+      - name: Vendor AppReveal (required by Project.swift)
+        run: |
+          set -euo pipefail
+          mkdir -p vendor
+          if [ ! -d vendor/AppReveal ]; then
+            git clone --depth 1 https://github.com/UnlikeOtherAI/AppReveal.git vendor/AppReveal
+          fi
+
       - name: Install SwiftLint
         run: brew install swiftlint
 
