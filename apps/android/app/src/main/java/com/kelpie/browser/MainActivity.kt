@@ -173,7 +173,7 @@ class MainActivity : ComponentActivity() {
 
         mdnsAdvertiser =
             MDNSAdvertiser(
-                context = this,
+                appContext = applicationContext,
                 deviceInfo = deviceInfo,
             )
     }
