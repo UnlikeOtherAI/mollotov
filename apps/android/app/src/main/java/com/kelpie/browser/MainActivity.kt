@@ -195,6 +195,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         handlerContext.dialogState.dismissPending()
+        handlerContext.tabStore?.destroyAllTabs()
+        mdnsAdvertiser?.shutdown()
         super.onDestroy()
         httpServer?.stop()
     }
