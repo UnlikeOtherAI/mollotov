@@ -163,7 +163,7 @@ function describeTool(description: string, platforms?: readonly string[]): strin
     return description;
   }
   if (platforms.length === 0) {
-    return `${description} Platforms: none currently.`;
+    return `${description} Not supported on any platform yet — every native handler returns PLATFORM_NOT_SUPPORTED.`;
   }
   return `${description} Platforms: ${platforms.join(", ")}.`;
 }

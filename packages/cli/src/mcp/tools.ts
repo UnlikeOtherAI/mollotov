@@ -3,11 +3,17 @@ import { z } from "zod";
 const platforms = ["ios", "android", "macos", "linux", "windows"] as const;
 type ToolPlatform = (typeof platforms)[number];
 const allPlatforms = [...platforms] as readonly ToolPlatform[];
-const applePlatforms = ["ios", "macos"] as const;
 const mobilePlatforms = ["ios", "android"] as const;
 const viewportPresetPlatforms = ["ios", "android", "macos"] as const;
 const fullscreenPlatforms = ["macos", "linux"] as const;
 const iosOnlyPlatforms = ["ios"] as const;
+const macosOnlyPlatforms = ["macos"] as const;
+const orientationPlatforms = ["ios", "android", "macos"] as const;
+// safari-auth: iOS (SFAuthenticationSession), macOS (ASWebAuthenticationSession),
+// Android (Chrome Custom Tabs via ChromeAuthHelper).
+const safariAuthPlatforms = ["ios", "android", "macos"] as const;
+// Geolocation and request-interception have no working native implementation today —
+// every platform's handler returns PLATFORM_NOT_SUPPORTED.
 const unavailablePlatforms = [] as const;
 
 // --- Shared schema fragments ---
@@ -237,19 +243,19 @@ export const browserTools: BrowserToolDef[] = [
   { name: "kelpie_is_element_obscured", description: "Check if an element is obscured by keyboard or other elements", method: "isElementObscured", platforms: mobilePlatforms, schema: { device, selector }, bodyFromArgs: passthrough },
 
   // Orientation
-  { name: "kelpie_set_orientation", description: "Force the device into portrait, landscape, or auto orientation. Useful for testing responsive layouts and orientation-dependent features.", method: "setOrientation", platforms: ["ios", "android", "macos"], schema: { device, orientation: z.enum(["portrait", "landscape", "auto"]).describe("Target orientation. 'auto' unlocks rotation.") }, bodyFromArgs: passthrough },
-  { name: "kelpie_get_orientation", description: "Get the current device orientation and lock state", method: "getOrientation", platforms: ["ios", "android", "macos"], schema: { device }, bodyFromArgs: passthrough },
+  { name: "kelpie_set_orientation", description: "Force the device into portrait, landscape, or auto orientation. Useful for testing responsive layouts and orientation-dependent features.", method: "setOrientation", platforms: orientationPlatforms, schema: { device, orientation: z.enum(["portrait", "landscape", "auto"]).describe("Target orientation. 'auto' unlocks rotation.") }, bodyFromArgs: passthrough },
+  { name: "kelpie_get_orientation", description: "Get the current device orientation and lock state", method: "getOrientation", platforms: orientationPlatforms, schema: { device }, bodyFromArgs: passthrough },
 
-  // Safari Auth
-  { name: "kelpie_safari_auth", description: "Open the current page (or a specific URL) in a Safari-backed authentication session. This lets the user authenticate using Safari's saved passwords and cookies, then syncs the session back into the browser. Use this when a login page requires credentials the user has saved in Safari, or when OAuth providers block in-app browsers. The user will see a Safari sheet and must complete authentication manually — the tool returns once they finish or cancel.", method: "safariAuth", platforms: applePlatforms, schema: { device, url: url.optional().describe("URL to authenticate. Defaults to the current page URL."), message }, bodyFromArgs: passthrough },
+  // Safari Auth (iOS, macOS, Android via Chrome Custom Tabs)
+  { name: "kelpie_safari_auth", description: "Open the current page (or a specific URL) in a system-backed authentication session — Safari on iOS/macOS, Chrome Custom Tabs on Android. This lets the user authenticate using credentials saved in their system browser, then syncs the session back into the in-app WebView. Use this when a login page requires credentials the user has saved system-side, or when OAuth providers block embedded WebViews. The user will see a system auth sheet and must complete authentication manually — the tool returns once they finish or cancel.", method: "safariAuth", platforms: safariAuthPlatforms, schema: { device, url: url.optional().describe("URL to authenticate. Defaults to the current page URL."), message }, bodyFromArgs: passthrough },
 
   // Fullscreen (macOS only)
   { name: "kelpie_set_fullscreen", description: "Enable or disable fullscreen mode for the desktop browser window", method: "setFullscreen", platforms: fullscreenPlatforms, schema: { device, enabled: z.boolean().describe("Enable or disable fullscreen") }, bodyFromArgs: passthrough },
   { name: "kelpie_get_fullscreen", description: "Get whether the desktop browser window is currently fullscreen", method: "getFullscreen", platforms: fullscreenPlatforms, schema: { device }, bodyFromArgs: passthrough },
 
   // Renderer (macOS only)
-  { name: "kelpie_set_renderer", description: "Switch the browser rendering engine. Available engines: 'webkit' (Safari/WebKit), 'chromium' (Chrome/CEF), 'gecko' (Firefox — requires Firefox.app installed). Cookies are migrated automatically so login sessions are preserved.", method: "setRenderer", platforms: ["macos"], schema: { device, engine: z.enum(["webkit", "chromium", "gecko"]).describe("Rendering engine to activate"), message }, bodyFromArgs: passthrough },
-  { name: "kelpie_get_renderer", description: "Get the current rendering engine and available engines", method: "getRenderer", platforms: ["macos"], schema: { device }, bodyFromArgs: passthrough },
+  { name: "kelpie_set_renderer", description: "Switch the browser rendering engine. Available engines: 'webkit' (Safari/WebKit), 'chromium' (Chrome/CEF), 'gecko' (Firefox — requires Firefox.app installed). Cookies are migrated automatically so login sessions are preserved.", method: "setRenderer", platforms: macosOnlyPlatforms, schema: { device, engine: z.enum(["webkit", "chromium", "gecko"]).describe("Rendering engine to activate"), message }, bodyFromArgs: passthrough },
+  { name: "kelpie_get_renderer", description: "Get the current rendering engine and available engines", method: "getRenderer", platforms: macosOnlyPlatforms, schema: { device }, bodyFromArgs: passthrough },
 
   // AI / Local Inference
   { name: "kelpie_ai_status", description: "Get the local inference engine status — whether a model is loaded, which model, its capabilities, and memory usage", method: "ai-status", schema: { device }, bodyFromArgs: passthrough },

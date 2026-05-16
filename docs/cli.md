@@ -22,7 +22,7 @@ kelpie <command> [options]
 |---|---|
 | `--device <id\|name\|ip>` | Target a specific device by ID (most reliable), name, or IP |
 | `--format <type>` | Output format: `json` (default), `table`, `text` |
-| `--timeout <ms>` | CLI-level command timeout in milliseconds (default: 10000). Overrides per-method API defaults (typically 5000ms). |
+| `--timeout <ms>` | CLI-level command timeout for a single device request in milliseconds (default: 10000). Overrides per-method API defaults (typically 5000ms). Not the same as `--scan-timeout` on `kelpie discover`, which controls mDNS scan duration. |
 | `--port <port>` | Override default port 8420 |
 | `--help` | Show help for any command |
 | `--version` | Show CLI version |
@@ -37,8 +37,10 @@ Scan the local network for Kelpie browser instances.
 
 ```bash
 kelpie discover
-kelpie discover --timeout 5000    # custom scan duration
+kelpie discover --scan-timeout 5000    # custom mDNS scan duration in ms
 ```
+
+`--scan-timeout` controls how long the mDNS scan runs. The global `--timeout` flag, by contrast, governs the per-request timeout used by individual device commands and has no effect on `discover`.
 
 **Output:**
 ```json
@@ -218,7 +220,7 @@ kelpie attributes "#email-input" --device "My iPhone"
 
 Prefer semantic interaction over raw coordinates:
 
-1. Use `kelpie a11y`, `kelpie find-element`, `kelpie find-button`, or `kelpie find-input` to locate the target.
+1. Use `kelpie a11y`, `kelpie find-element`, `kelpie find-button`, `kelpie find-link`, or `kelpie find-input` to locate the target.
 2. Use `kelpie click` or `kelpie fill` with the returned selector.
 3. If you already know the selector but want visual confirmation, use `kelpie highlight show` and then `kelpie screenshot` or `kelpie annotate`.
 4. If semantic targeting fails, use `kelpie annotate` plus `kelpie click-annotation` / `kelpie fill-annotation`.
@@ -332,6 +334,19 @@ kelpie scroll2 "#footer" --device "My iPhone" --position center
 ```bash
 kelpie scroll-top --device "My iPhone"
 kelpie scroll-bottom --device "My iPhone"
+```
+
+### `kelpie scroll-to`
+Scroll to an absolute pixel offset. Works inside the 3D inspector on macOS.
+
+| Flag | Description |
+|---|---|
+| `--y <px>` (required) | Vertical pixel offset from top of the page |
+| `--x <px>` | Horizontal pixel offset from left (default: 0) |
+
+```bash
+kelpie scroll-to --y 1200 --device "My iPhone"
+kelpie scroll-to --y 1200 --x 300 --device "My iPhone"
 ```
 
 ---
@@ -470,11 +485,11 @@ kelpie form-state --device "My iPhone" --selector "#signup-form"
 
 ## Dialog & Alert Commands
 
-### `kelpie dialog`
+### `kelpie dialog check`
 Check if a dialog is showing.
 
 ```bash
-kelpie dialog --device "My iPhone"
+kelpie dialog check --device "My iPhone"
 ```
 
 ### `kelpie dialog accept` / `kelpie dialog dismiss`
@@ -568,12 +583,12 @@ kelpie iframe context --device "My iPhone"
 
 ## Cookie & Storage Commands
 
-### `kelpie cookies`
+### `kelpie cookies list`
 Get cookies for the current page.
 
 ```bash
-kelpie cookies --device "My iPhone"
-kelpie cookies --device "My iPhone" --name "session_id"
+kelpie cookies list --device "My iPhone"
+kelpie cookies list --device "My iPhone" --name "session_id"
 ```
 
 ### `kelpie cookies set <name> <value>`
@@ -593,13 +608,13 @@ kelpie cookies delete --domain "example.com" --device "My iPhone"
 kelpie cookies delete --all --device "My iPhone"
 ```
 
-### `kelpie storage`
+### `kelpie storage get`
 Read localStorage or sessionStorage.
 
 ```bash
-kelpie storage --device "My iPhone"                          # localStorage (default)
-kelpie storage --device "My iPhone" --type session
-kelpie storage --device "My iPhone" --key "auth_token"
+kelpie storage get --device "My iPhone"                          # localStorage (default)
+kelpie storage get --device "My iPhone" --type session
+kelpie storage get --device "My iPhone" --key "auth_token"
 ```
 
 ### `kelpie storage set <key> <value>`
@@ -623,11 +638,11 @@ kelpie storage clear --device "My iPhone" --type both
 
 ## Clipboard Commands
 
-### `kelpie clipboard`
+### `kelpie clipboard get`
 Read clipboard contents.
 
 ```bash
-kelpie clipboard --device "My iPhone"
+kelpie clipboard get --device "My iPhone"
 ```
 
 ### `kelpie clipboard set <text>`
@@ -709,11 +724,11 @@ Simulate a reduced viewport (e.g., keyboard present, toolbar visible).
 kelpie resize 390 500 --device "My iPhone"
 ```
 
-### `kelpie resize reset`
-Restore full-screen viewport.
+### `kelpie resize-reset`
+Restore full-screen viewport. Note: this is a top-level command (`resize-reset`), not a `resize reset` subcommand.
 
 ```bash
-kelpie resize reset --device "My iPhone"
+kelpie resize-reset --device "My iPhone"
 ```
 
 ### `kelpie obscured <selector>`
@@ -721,6 +736,66 @@ Check if an element is hidden by the keyboard or outside the visible viewport.
 
 ```bash
 kelpie obscured "#password-input" --device "My iPhone"
+```
+
+---
+
+## Viewport Presets
+
+Named viewport presets simulate specific device sizes (e.g. iPhone 15 Pro, iPad Air, foldable open/closed). Supported on iOS, Android, and macOS; not supported on Linux or Windows.
+
+### `kelpie viewport-preset list`
+List available viewport presets for the current device or window geometry.
+
+```bash
+kelpie viewport-preset list --device "Mac mini"
+```
+
+### `kelpie viewport-preset set <name>`
+Activate a named viewport preset. Pass the preset `id` returned by `viewport-preset list`.
+
+```bash
+kelpie viewport-preset set iphone-15-pro --device "Mac mini"
+```
+
+---
+
+## Feedback & Issue Reporting
+
+### `kelpie report-issue`
+Submit a structured automation-failure report to the local feedback store on the device, and mirror it into the CLI's local store.
+
+| Flag | Description |
+|---|---|
+| `--category <category>` (required) | Failure category (free-form string, e.g. `selector-mismatch`) |
+| `--command <command>` (required) | The CLI/MCP command that failed |
+| `--error <code>` | Error code from the failed response |
+| `--context <text>` | Human or LLM explanation of what failed and why it mattered |
+| `--url <url>` | Page URL where the failure happened |
+| `--params <json>` | JSON object containing the original command params |
+| `--diagnostics <json>` | JSON object with structured diagnostics from the failure response |
+| `--screenshot-base64 <data>` | Optional base64-encoded screenshot payload |
+
+```bash
+kelpie report-issue \
+  --category "selector-mismatch" \
+  --command "click" \
+  --error "ELEMENT_NOT_FOUND" \
+  --context "Submit button selector did not match the rendered DOM" \
+  --url "https://example.com/checkout" \
+  --device "My iPhone"
+```
+
+### `kelpie feedback-summary`
+Summarize locally stored feedback reports (the CLI's mirror, not the device store).
+
+| Flag | Description |
+|---|---|
+| `--limit <count>` | How many recent reports to include (default: 10) |
+
+```bash
+kelpie feedback-summary
+kelpie feedback-summary --limit 25
 ```
 
 ---
@@ -780,6 +855,7 @@ kelpie viewport --device "My iPhone"
 | `kelpie debug-screens` / `kelpie debug-overlay get` / `kelpie debug-overlay set <enabled>` | Inspect or toggle the screen debug overlay | iOS |
 | `kelpie safari-auth [url]` | Start a browser-backed authentication flow | Apple + Android |
 | `kelpie orientation get` / `kelpie orientation set <mode>` / `kelpie renderer get` / `kelpie renderer set <engine>` | Read or change orientation / renderer state | Orientation: iOS, Android, macOS. Renderer: macOS |
+| `kelpie fullscreen get` / `kelpie fullscreen set <enabled>` | Read or toggle desktop fullscreen for the browser window | macOS, Linux |
 
 ---
 
@@ -834,6 +910,24 @@ kelpie group find-link "Sign Up"
 ```bash
 kelpie group find-input "Email"
 ```
+
+### Diagnostic group commands
+
+These mirror the per-device diagnostic and keyboard commands and apply them to every (filtered) device in one shot.
+
+```bash
+kelpie group a11y                          # accessibility tree from every device
+kelpie group dom                           # full DOM from every device
+kelpie group console                       # console messages from every device
+kelpie group errors                        # JS errors from every device
+kelpie group form-state                    # form state from every device
+kelpie group visible                       # visible elements from every device
+kelpie group eval "document.title"         # evaluate JS on every device
+kelpie group keyboard-show --platform ios  # show keyboard on iOS devices
+kelpie group keyboard-hide --platform ios  # hide keyboard on iOS devices
+```
+
+`kelpie group eval` is useful for sanity-checking environment differences across browsers. `kelpie group keyboard-show` and `kelpie group keyboard-hide` are mobile-only — combine with `--platform ios` or `--platform android` to avoid hitting unsupported desktop devices.
 
 ### Group Filtering
 
