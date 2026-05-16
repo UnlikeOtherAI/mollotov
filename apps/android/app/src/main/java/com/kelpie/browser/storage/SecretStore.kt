@@ -12,7 +12,9 @@ import androidx.security.crypto.MasterKey
  * with the master key held in the Android Keystore. The manifest disables
  * `allowBackup`, so the encrypted file cannot be exfiltrated via `adb backup`.
  */
-class SecretStore private constructor(private val prefs: SharedPreferences) {
+class SecretStore private constructor(
+    private val prefs: SharedPreferences,
+) {
     fun get(name: String): String? = prefs.getString(name, null)?.takeIf { it.isNotEmpty() }
 
     fun set(
@@ -44,7 +46,8 @@ class SecretStore private constructor(private val prefs: SharedPreferences) {
 
         private fun open(context: Context): SharedPreferences {
             val masterKey =
-                MasterKey.Builder(context.applicationContext)
+                MasterKey
+                    .Builder(context.applicationContext)
                     .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
                     .build()
             return EncryptedSharedPreferences.create(
