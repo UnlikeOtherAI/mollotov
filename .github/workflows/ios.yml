@@ -83,7 +83,7 @@ jobs:
           xcodebuild build \
             -project apps/ios/Kelpie.xcodeproj \
             -scheme Kelpie \
-            -destination 'generic/platform=iOS Simulator,arch=arm64' \
+            -destination 'generic/platform=iOS Simulator' \
             -configuration Debug \
             -derivedDataPath apps/ios/.build \
             ARCHS=arm64 \
