@@ -17,11 +17,13 @@ enum HTTPServerError: Error, CustomStringConvertible {
 /// Uses raw NWListener since we want zero external dependencies for the server.
 final class HTTPServer: @unchecked Sendable {
     /// Maximum bytes accepted for HTTP request headers before parsing must complete.
-    /// 16 KiB matches Nginx/Apache defaults and keeps slow-loris pinning bounded.
-    static let maxHeaderBytes = 16 * 1024
-    /// Maximum request body size accepted by the server (32 MiB).
+    /// 64 KiB caps slow-loris pinning while leaving room for cookies and auth headers.
+    /// Mirrors iOS and Android.
+    static let maxHeaderBytes = 64 * 1024
+    /// Maximum request body size accepted by the server (50 MiB).
     /// Larger bodies receive `413 Payload Too Large` and the connection is closed.
-    static let maxBodyBytes = 32 * 1024 * 1024
+    /// Mirrors iOS and Android.
+    static let maxBodyBytes = 50 * 1024 * 1024
     /// Maximum lifetime of a single HTTP connection from first byte to dispatch.
     /// Prevents slow-loris clients from pinning sockets indefinitely.
     static let requestTimeoutSeconds: Double = 30
@@ -186,7 +188,7 @@ final class HTTPServer: @unchecked Sendable {
         // Enforce header byte cap before headers complete. Closing early
         // bounds slow-loris connections that drip a few bytes at a time.
         if headerSeparator == nil, accumulated.count > Self.maxHeaderBytes {
-            send413AndClose(connection: connection, message: "Request header exceeds \(Self.maxHeaderBytes) bytes")
+            send431HeaderAndClose(connection: connection)
             return
         }
 
@@ -199,7 +201,7 @@ final class HTTPServer: @unchecked Sendable {
         // Reject oversized headers even when they arrive in a single chunk —
         // the headers-complete branch above only catches drip-feed clients.
         if headerByteCount > Self.maxHeaderBytes {
-            send413AndClose(connection: connection, message: "Request header exceeds \(Self.maxHeaderBytes) bytes")
+            send431HeaderAndClose(connection: connection)
             return
         }
 
@@ -210,10 +212,14 @@ final class HTTPServer: @unchecked Sendable {
         switch parseContentLength(headerString) {
         case .valid(let contentLength):
             if contentLength > Self.maxBodyBytes {
-                send413AndClose(
-                    connection: connection,
-                    message: "Content-Length \(contentLength) exceeds limit of \(Self.maxBodyBytes) bytes"
-                )
+                send413BodyAndClose(connection: connection)
+                return
+            }
+            // Guard against clients that under-declare Content-Length and then
+            // stream more bytes — drop the connection if total exceeds either
+            // the declared length or the global cap.
+            if bodyReceived > contentLength || bodyReceived > Self.maxBodyBytes {
+                send413BodyAndClose(connection: connection)
                 return
             }
             if bodyReceived >= contentLength {
@@ -257,28 +263,59 @@ final class HTTPServer: @unchecked Sendable {
     }
 
     private func send408AndClose(connection: NWConnection) {
-        let body = Data(#"{"error":"Request timeout"}"#.utf8)
-        let response = buildHTTPResponse(statusCode: 408, body: body, contentType: "application/json")
-        connection.send(content: response, completion: .contentProcessed { _ in connection.cancel() })
+        sendErrorAndClose(
+            connection: connection,
+            statusCode: 408,
+            code: "REQUEST_TIMEOUT",
+            message: "Request timed out before completion"
+        )
     }
 
     private func send411AndClose(connection: NWConnection) {
-        let body = Data(#"{"error":"Content-Length required"}"#.utf8)
-        let response = buildHTTPResponse(statusCode: 411, body: body, contentType: "application/json")
-        connection.send(content: response, completion: .contentProcessed { _ in connection.cancel() })
+        sendErrorAndClose(
+            connection: connection,
+            statusCode: 411,
+            code: "LENGTH_REQUIRED",
+            message: "Content-Length header is required"
+        )
     }
 
-    private func send413AndClose(connection: NWConnection, message: String) {
-        let payload: [String: Any] = ["error": message]
-        let body = (try? JSONSerialization.data(withJSONObject: payload)) ?? Data(#"{"error":"Payload too large"}"#.utf8)
-        let response = buildHTTPResponse(statusCode: 413, body: body, contentType: "application/json")
-        connection.send(content: response, completion: .contentProcessed { _ in connection.cancel() })
+    private func send413BodyAndClose(connection: NWConnection) {
+        let mb = Self.maxBodyBytes / (1024 * 1024)
+        sendErrorAndClose(
+            connection: connection,
+            statusCode: 413,
+            code: "PAYLOAD_TOO_LARGE",
+            message: "Request body exceeds \(mb) MB limit"
+        )
+    }
+
+    private func send431HeaderAndClose(connection: NWConnection) {
+        let kb = Self.maxHeaderBytes / 1024
+        sendErrorAndClose(
+            connection: connection,
+            statusCode: 431,
+            code: "REQUEST_HEADER_FIELDS_TOO_LARGE",
+            message: "Request headers exceed \(kb) KB limit"
+        )
     }
 
     private func send400AndClose(connection: NWConnection, message: String) {
-        let payload: [String: Any] = ["error": message]
-        let body = (try? JSONSerialization.data(withJSONObject: payload)) ?? Data(#"{"error":"Bad request"}"#.utf8)
-        let response = buildHTTPResponse(statusCode: 400, body: body, contentType: "application/json")
+        sendErrorAndClose(
+            connection: connection,
+            statusCode: 400,
+            code: "BAD_REQUEST",
+            message: message
+        )
+    }
+
+    private func sendErrorAndClose(connection: NWConnection, statusCode: Int, code: String, message: String) {
+        let payload: [String: Any] = [
+            "success": false,
+            "error": ["code": code, "message": message]
+        ]
+        let body = (try? JSONSerialization.data(withJSONObject: payload)) ?? Data(#"{"success":false,"error":{"code":"INTERNAL","message":"error"}}"#.utf8)
+        let response = buildHTTPResponse(statusCode: statusCode, body: body, contentType: "application/json")
         connection.send(content: response, completion: .contentProcessed { _ in connection.cancel() })
     }
 
@@ -371,6 +408,7 @@ final class HTTPServer: @unchecked Sendable {
         case 408: statusText = "Request Timeout"
         case 411: statusText = "Length Required"
         case 413: statusText = "Payload Too Large"
+        case 431: statusText = "Request Header Fields Too Large"
         case 500: statusText = "Internal Server Error"
         default: statusText = "Unknown"
         }
