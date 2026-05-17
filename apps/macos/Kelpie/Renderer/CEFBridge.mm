@@ -180,7 +180,7 @@ static void FinishEval(CEFBridge *owner, NSString *identifier, NSString *result,
     // internal threads cleanly before this bridge is released. Without this,
     // releasing the browser handle leaves CEF's internal state half-alive,
     // and creating a new browser (on renderer switch) collides with it.
-    cef_browser_host_t *host = CopyBrowserHost([self activeBrowser]);
+    cef_browser_host_t *host = CEFBridgeCopyBrowserHost([self activeBrowser]);
     if (host == nullptr) { return; }
     if (host->close_browser != nullptr) {
         host->close_browser(host, 1); // force=1: skip JS unload, close immediately
@@ -194,7 +194,7 @@ static void FinishEval(CEFBridge *owner, NSString *identifier, NSString *result,
 }
 
 - (void)setHidden:(BOOL)hidden {
-    cef_browser_host_t *host = CopyBrowserHost([self activeBrowser]);
+    cef_browser_host_t *host = CEFBridgeCopyBrowserHost([self activeBrowser]);
     if (host == nullptr) { return; }
     if (host->was_hidden != nullptr) {
         host->was_hidden(host, hidden ? 1 : 0);
