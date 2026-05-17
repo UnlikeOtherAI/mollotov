@@ -5,6 +5,33 @@ import { loadBrowserStore } from "../browser/store.js";
 const devices = new Map<string, DiscoveredDevice>();
 let autoScanned = false;
 
+/**
+ * Devices that go offline rarely send mDNS goodbye packets. Without a TTL,
+ * stale entries linger in the registry forever and the CLI happily routes
+ * commands to dead targets. Evict entries whose lastSeen is older than this
+ * threshold on every read.
+ *
+ * 90s matches the upper bound used by typical mDNS announcement intervals
+ * (most stacks re-announce every 60-75s); a missing announcement for over
+ * 90s is a strong signal the device is gone.
+ */
+const MDNS_TTL_MS = 90_000;
+
+/** Exposed for tests: time-to-live for unrefreshed device entries (ms). */
+export const TTL_MS = MDNS_TTL_MS;
+
+function isExpired(device: DiscoveredDevice, now: number): boolean {
+  return now - device.lastSeen > MDNS_TTL_MS;
+}
+
+function evictExpired(now: number = Date.now()): void {
+  for (const [id, device] of devices) {
+    if (isExpired(device, now)) {
+      devices.delete(id);
+    }
+  }
+}
+
 export function addDevice(device: DiscoveredDevice): void {
   devices.set(device.id, device);
 }
@@ -18,10 +45,12 @@ export function removeDevice(id: string): void {
 }
 
 export function getAllDevices(): DiscoveredDevice[] {
+  evictExpired();
   return Array.from(devices.values());
 }
 
 export async function getDevice(query: string): Promise<DiscoveredDevice | undefined> {
+  evictExpired();
   // Auto-scan on first use so --device works without a prior `discover` call
   if (!autoScanned && devices.size === 0) {
     autoScanned = true;
@@ -102,5 +131,6 @@ export function clearDevices(): void {
 }
 
 export function deviceCount(): number {
+  evictExpired();
   return devices.size;
 }
