@@ -76,14 +76,19 @@ jobs:
         run: mise exec -- tuist generate --no-open
 
       - name: Build iOS scheme
+        # macos-15 is Apple Silicon — restrict to arm64 to match the prebuilt
+        # native .a files (also arm64 only, see CMAKE_OSX_ARCHITECTURES above).
         run: |
           set -euo pipefail
           xcodebuild build \
             -project apps/ios/Kelpie.xcodeproj \
             -scheme Kelpie \
-            -destination 'generic/platform=iOS Simulator' \
+            -destination 'generic/platform=iOS Simulator,arch=arm64' \
             -configuration Debug \
             -derivedDataPath apps/ios/.build \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
+            VALID_ARCHS=arm64 \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
