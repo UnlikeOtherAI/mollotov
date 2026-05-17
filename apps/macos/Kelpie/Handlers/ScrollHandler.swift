@@ -54,7 +54,7 @@ struct ScrollHandler {
         guard let selector = body["selector"] as? String else {
             return errorResponse(code: "MISSING_PARAM", message: "selector is required")
         }
-        let position = body["position"] as? String ?? "center"
+        let position = validScrollPosition(body["position"] as? String)
         let js = """
         (function() {
             var el = document.querySelector('\(JSEscape.string(selector))');
@@ -93,6 +93,15 @@ struct ScrollHandler {
         } catch {
             if let tabError = tabErrorResponse(from: error) { return tabError }
             return errorResponse(code: "EVAL_ERROR", message: error.localizedDescription)
+        }
+    }
+
+    /// Constrains scroll-into-view `block` value to the documented allowlist.
+    /// Anything else falls back to "center" — never interpolate raw input.
+    private func validScrollPosition(_ raw: String?) -> String {
+        switch raw {
+        case "top", "center", "bottom": return raw ?? "center"
+        default: return "center"
         }
     }
 

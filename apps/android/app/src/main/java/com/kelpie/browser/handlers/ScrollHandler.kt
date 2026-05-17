@@ -28,8 +28,8 @@ class ScrollHandler(
 
     private suspend fun scroll2(body: Map<String, Any?>): Map<String, Any?> {
         val selector = body["selector"] as? String ?: return errorResponse("MISSING_PARAM", "selector is required")
-        val position = body["position"] as? String ?: "center"
-        val safe = selector.replace("'", "\\'")
+        val position = validScrollPosition(body["position"] as? String)
+        val safe = JSEscape.string(selector)
         val js =
             "(function(){var el=document.querySelector('$safe');" +
                 "if(!el)return null;el.scrollIntoView({block:'$position',behavior:'smooth'});" +
@@ -64,6 +64,16 @@ class ScrollHandler(
             errorResponse("EVAL_ERROR", e.message ?: "Unknown error")
         }
     }
+
+    /**
+     * Constrains scroll-into-view `block` value to the documented allowlist.
+     * Anything else falls back to "center" — never interpolate raw input.
+     */
+    private fun validScrollPosition(raw: String?): String =
+        when (raw) {
+            "top", "center", "bottom" -> raw
+            else -> "center"
+        }
 
     private suspend fun scrollToY(body: Map<String, Any?>): Map<String, Any?> {
         val y =
