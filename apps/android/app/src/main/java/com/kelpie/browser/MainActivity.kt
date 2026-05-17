@@ -41,6 +41,8 @@ import com.kelpie.browser.network.KelpieNetworkService
 import com.kelpie.browser.network.MDNSAdvertiser
 import com.kelpie.browser.network.NetworkServiceStage
 import com.kelpie.browser.network.NetworkServiceState
+import com.kelpie.browser.network.PairApprovalCoordinator
+import com.kelpie.browser.network.PairingStore
 import com.kelpie.browser.network.Router
 import com.kelpie.browser.network.errorResponse
 import com.kelpie.browser.network.successResponse
@@ -53,6 +55,8 @@ class MainActivity : ComponentActivity() {
     private val scriptPlaybackState = ScriptPlaybackState()
     private var httpServer: HTTPServer? = null
     private var mdnsAdvertiser: MDNSAdvertiser? = null
+    private lateinit var pairingStore: PairingStore
+    private lateinit var pairingCoordinator: PairApprovalCoordinator
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -63,6 +67,8 @@ class MainActivity : ComponentActivity() {
         BookmarkStore.init(this)
         HistoryStore.init(this)
         TapCalibrationStore.init(this)
+        pairingStore = PairingStore.forContext(this)
+        pairingCoordinator = PairApprovalCoordinator(pairingStore)
 
         setContent {
             KelpieTheme {
@@ -74,6 +80,7 @@ class MainActivity : ComponentActivity() {
                     activity = this@MainActivity,
                     isServerRunning = httpServer?.isRunning == true,
                     isMDNSAdvertising = mdnsAdvertiser?.isRegistered == true,
+                    pairingCoordinator = pairingCoordinator,
                 )
             }
         }
@@ -172,7 +179,15 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startServer(deviceInfo: DeviceInfo) {
-        val server = HTTPServer(port = deviceInfo.port, router = router, appContext = applicationContext)
+        val server =
+            HTTPServer(
+                port = deviceInfo.port,
+                router = router,
+                appContext = applicationContext,
+                pairingStore = pairingStore,
+                deviceInfo = deviceInfo,
+                onPendingPairChanged = { pairingCoordinator.refresh() },
+            )
         val advertiser =
             MDNSAdvertiser(
                 appContext = applicationContext,
