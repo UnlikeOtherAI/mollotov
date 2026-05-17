@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -10,6 +10,7 @@ import {
   getAllDevices,
   clearDevices,
   deviceCount,
+  TTL_MS,
 } from "../../src/discovery/registry.js";
 import type { DiscoveredDevice } from "../../src/types.js";
 import { setRunningBrowser, upsertBrowserAlias } from "../../src/browser/store.js";
@@ -122,6 +123,40 @@ describe("device registry", () => {
     expect(device?.ip).toBe("127.0.0.1");
     expect(device?.port).toBe(8427);
     expect(device?.platform).toBe("macos");
+  });
+
+  it("evicts devices whose lastSeen is older than the mDNS TTL on read", async () => {
+    const now = 1_000_000_000_000;
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(now);
+      addDevice(makeDevice({ id: "fresh", name: "Fresh", lastSeen: now - (TTL_MS - 1000) }));
+      addDevice(makeDevice({ id: "stale", name: "Stale", lastSeen: now - (TTL_MS + 1000) }));
+
+      const all = getAllDevices();
+      expect(all.map((d) => d.id).sort()).toEqual(["fresh"]);
+      expect(deviceCount()).toBe(1);
+
+      // Stale device must not be resolvable by name lookup either.
+      expect(await getDevice("Stale")).toBeUndefined();
+      expect((await getDevice("Fresh"))?.id).toBe("fresh");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("re-announcement refreshes lastSeen and prevents eviction", () => {
+    const now = 1_000_000_000_000;
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(now);
+      addDevice(makeDevice({ id: "d", lastSeen: now - (TTL_MS + 1000) }));
+      // Re-announcement (same id, fresh lastSeen).
+      addDevice(makeDevice({ id: "d", lastSeen: now }));
+      expect(getAllDevices()).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("stores linux and windows devices without coercing their platform metadata", () => {
