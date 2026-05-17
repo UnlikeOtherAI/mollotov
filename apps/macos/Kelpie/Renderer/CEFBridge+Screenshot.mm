@@ -1,4 +1,5 @@
 #import "CEFBridge_Internal.h"
+#import "CEFBridge+Screenshot.h"
 
 // Screenshot capture path for CEFBridge.
 //

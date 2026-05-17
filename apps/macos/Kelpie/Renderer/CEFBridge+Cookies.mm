@@ -1,4 +1,5 @@
 #import "CEFBridge_Internal.h"
+#import "CEFBridge+Cookies.h"
 
 // Cookie operations exposed by CEFBridge. These methods forward to either
 // CEFBridgeSupport's cookie manager helpers or the Chrome DevTools Protocol
